@@ -219,7 +219,19 @@ const SCORING_PROMPT = `You are helping screen papers for a systematic literatur
 
 const PROXY_URL = 'http://localhost:3001/api/score';
 
-async function scoreOneAbstract(apiKey, title, abstract) {
+const AI_MODELS = [
+  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', desc: 'Fast & cheap, good for bulk scoring' },
+  { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', desc: 'Balanced quality & speed (recommended)' },
+  { id: 'claude-opus-4-6', name: 'Opus 4.6', desc: 'Highest accuracy, slower & costlier' },
+];
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const MODEL_KEY = 'slr-screener-model';
+
+function modelName(modelId) {
+  return AI_MODELS.find(m => m.id === modelId)?.name || modelId;
+}
+
+async function scoreOneAbstract(apiKey, title, abstract, model) {
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: {
@@ -227,7 +239,7 @@ async function scoreOneAbstract(apiKey, title, abstract) {
       'x-api-key': apiKey,
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model,
       max_tokens: 150,
       messages: [
         { role: 'user', content: `${SCORING_PROMPT}\n\nTitle: ${title}\nAbstract: ${abstract}` },
@@ -247,7 +259,7 @@ async function scoreOneAbstract(apiKey, title, abstract) {
   if (typeof parsed.score !== 'number' || !parsed.suggestion || !parsed.reason) {
     throw new Error('Unexpected response format: ' + jsonStr);
   }
-  return { score: parsed.score, suggestion: parsed.suggestion.toLowerCase(), reason: parsed.reason };
+  return { score: parsed.score, suggestion: parsed.suggestion.toLowerCase(), reason: parsed.reason, model };
 }
 
 const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
@@ -310,6 +322,10 @@ function App() {
     catch { return ''; }
   });
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [scoringModel, setScoringModel] = useState(() => {
+    try { return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL; }
+    catch { return DEFAULT_MODEL; }
+  });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
@@ -355,6 +371,11 @@ function App() {
     localStorage.setItem(SCORES_KEY, JSON.stringify(aiScores));
   }, [aiScores]);
 
+  // Save model selection
+  useEffect(() => {
+    localStorage.setItem(MODEL_KEY, scoringModel);
+  }, [scoringModel]);
+
   // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
     const indices = papers.reduce((acc, p, i) => {
@@ -363,11 +384,10 @@ function App() {
       return acc;
     }, []);
     if (sortByScore) {
-      indices.sort((a, b) => {
-        const sa = aiScores[a]?.score ?? -1;
-        const sb = aiScores[b]?.score ?? -1;
-        return sb - sa; // highest score first
-      });
+      const scored = indices.filter(i => aiScores[i] != null);
+      const unscored = indices.filter(i => aiScores[i] == null);
+      scored.sort((a, b) => (aiScores[b]?.score ?? 0) - (aiScores[a]?.score ?? 0));
+      return [...scored, ...unscored];
     }
     return indices;
   }, [papers, venueFilter, sortByScore, aiScores]);
@@ -567,7 +587,7 @@ function App() {
       const results = await Promise.allSettled(
         batch.map(async (idx) => {
           const abs = cleanAbstractText(getAbstract(idx));
-          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs);
+          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel);
           return { idx, result };
         })
       );
@@ -586,11 +606,34 @@ function App() {
     }
     // Clear progress after a short delay so user sees 100%
     setTimeout(() => setScoringProgress(null), 2000);
-  }, [apiKey, papers, aiScores, getAbstract]);
+  }, [apiKey, papers, aiScores, getAbstract, scoringModel]);
 
   const stopScoring = useCallback(() => {
     scoringAbortRef.current = true;
   }, []);
+
+  const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
+  const scoreOnePaper = useCallback(async (gIdx) => {
+    if (!apiKey) { setShowApiKeyModal(true); return; }
+    try {
+      const health = await fetch('http://localhost:3001/api/health');
+      if (!health.ok) throw new Error();
+    } catch {
+      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
+      return;
+    }
+    const abs = getAbstract(gIdx);
+    if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
+    setScoringOne(gIdx);
+    try {
+      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel);
+      setAiScores(prev => ({ ...prev, [gIdx]: result }));
+    } catch (err) {
+      console.error('[SLR] Single score error:', err);
+      alert('Scoring failed: ' + err.message);
+    }
+    setScoringOne(null);
+  }, [apiKey, papers, getAbstract, scoringModel]);
 
   const pendingScoreRef = useRef(false);
   const saveApiKey = useCallback((key) => {
@@ -737,11 +780,19 @@ function App() {
                   {decisions[globalIndex]}
                 </span>
               )}
-              {aiScores[globalIndex] && (
+              {aiScores[globalIndex] ? (
                 <span className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'}`}
-                  title={`AI suggestion: ${aiScores[globalIndex].suggestion}`}>
+                  title={`${aiScores[globalIndex].suggestion} · ${modelName(aiScores[globalIndex].model)}`}>
                   AI: {aiScores[globalIndex].score}
                 </span>
+              ) : apiKey && (
+                <button
+                  className="score-one-btn"
+                  onClick={() => scoreOnePaper(globalIndex)}
+                  disabled={scoringOne != null}
+                >
+                  {scoringOne === globalIndex ? 'Scoring...' : 'Score'}
+                </button>
               )}
             </div>
             <div className="paper-title">{paper.title}</div>
@@ -924,6 +975,19 @@ function App() {
         <div className="sidebar-header">
           <h2>AI Insights</h2>
           <button className="sidebar-close" onClick={() => setAiInsightsOpen(false)}>&times;</button>
+        </div>
+        {/* Model selector */}
+        <div className="ai-model-selector">
+          <span className="ai-insight-label" style={{ marginBottom: 4 }}>Model</span>
+          <select
+            className="ai-model-select"
+            value={scoringModel}
+            onChange={(e) => setScoringModel(e.target.value)}
+          >
+            {AI_MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.name} — {m.desc}</option>
+            ))}
+          </select>
         </div>
         {/* Current paper insight */}
         {aiScores[globalIndex] ? (

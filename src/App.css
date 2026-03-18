@@ -598,6 +598,23 @@
   border-radius: 12px;
   margin-left: auto;
 }
+/* Per-paper score button */
+.score-one-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border: 1.5px solid #a29bfe;
+  border-radius: 12px;
+  background: white;
+  color: #6c5ce7;
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s;
+}
+.score-one-btn:hover { background: #6c5ce7; color: white; }
+.score-one-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.score-one-btn:disabled:hover { background: white; color: #6c5ce7; }
+
 .score-high { background: #00b89422; color: #00b894; }
 .score-mid { background: #fdcb6e44; color: #e17055; }
 .score-low { background: #d6303122; color: #d63031; }
@@ -692,6 +709,28 @@
   font-size: 13px;
   color: #b2bec3;
 }
+/* Model selector in AI Insights */
+.ai-model-selector {
+  padding: 12px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+}
+.ai-model-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #2d3436;
+  background: white;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ai-model-select:hover, .ai-model-select:focus { border-color: #a29bfe; }
+
 .ai-insight-list-label {
   font-size: 11px;
   font-weight: 600;
