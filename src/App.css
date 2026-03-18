@@ -381,24 +381,6 @@
   border-radius: 3px;
 }
 
-/* Keyboard hint */
-.keyboard-hints {
-  text-align: center;
-  font-size: 12px;
-  color: #b2bec3;
-  margin-top: 16px;
-}
-.keyboard-hints kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: inherit;
-  margin: 0 2px;
-}
-
 /* Sidebar toggle button */
 .sidebar-toggle-btn {
   padding: 8px 18px;

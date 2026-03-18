@@ -165,6 +165,7 @@ function highlightAbstract(text) {
 const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
 const STORAGE_KEY = 'slr-screener-decisions';
 const INDEX_KEY = 'slr-screener-index';
+const VENUE_KEY = 'slr-screener-venue';
 
 function venueCls(conf) {
   if (conf.includes('ICSE')) return 'icse';
@@ -176,21 +177,35 @@ function venueCls(conf) {
 }
 
 function App() {
+  // Initialize state from localStorage synchronously to avoid race conditions
   const [papers, setPapers] = useState([]);
-  const [decisions, setDecisions] = useState({});
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [venueFilter, setVenueFilter] = useState('All');
+  const [decisions, setDecisions] = useState(() => {
+    try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  });
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    try { const s = localStorage.getItem(INDEX_KEY); return s ? parseInt(s, 10) : 0; }
+    catch { return 0; }
+  });
+  const [venueFilter, setVenueFilter] = useState(() => {
+    try {
+      const s = localStorage.getItem(VENUE_KEY);
+      return s && VENUES.includes(s) ? s : 'All';
+    } catch { return 'All'; }
+  });
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [abstractEdits, setAbstractEdits] = useState({});
+  const [abstractEdits, setAbstractEdits] = useState(() => {
+    try { const s = localStorage.getItem('slr-screener-abstracts'); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarFilter, setSidebarFilter] = useState('All');
   const [undoStack, setUndoStack] = useState([]);
 
-  // Use ref to track whether we should auto-advance after decision
-  const shouldAdvanceRef = useRef(false);
+  console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
   // Load data
   const loadData = useCallback(() => {
@@ -204,28 +219,22 @@ function App() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Load saved state
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setDecisions(JSON.parse(saved));
-      const savedIdx = localStorage.getItem(INDEX_KEY);
-      if (savedIdx) setCurrentIndex(parseInt(savedIdx, 10));
-      const savedEdits = localStorage.getItem('slr-screener-abstracts');
-      if (savedEdits) setAbstractEdits(JSON.parse(savedEdits));
-    } catch (e) { /* ignore */ }
-  }, []);
-
-  // Auto-save
+  // Auto-save decisions
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(decisions));
   }, [decisions]);
 
+  // Auto-save abstract edits
   useEffect(() => {
     if (Object.keys(abstractEdits).length > 0) {
       localStorage.setItem('slr-screener-abstracts', JSON.stringify(abstractEdits));
     }
   }, [abstractEdits]);
+
+  // Save venue filter
+  useEffect(() => {
+    localStorage.setItem(VENUE_KEY, venueFilter);
+  }, [venueFilter]);
 
   // Venue-only filtering (no decision filter in main view)
   const filteredIndices = useMemo(() => {
@@ -240,57 +249,64 @@ function App() {
   const globalIndex = filteredIndices[safeIndex];
   const paper = papers[globalIndex];
 
-  // Save index
+  // Save index (only after papers loaded to avoid overwriting with 0)
   useEffect(() => {
-    localStorage.setItem(INDEX_KEY, String(safeIndex));
-  }, [safeIndex]);
+    if (papers.length > 0) {
+      console.log('[SLR] Saving index:', currentIndex, 'venue:', venueFilter);
+      localStorage.setItem(INDEX_KEY, String(currentIndex));
+    }
+  }, [currentIndex, papers.length, venueFilter]);
 
   const getAbstract = useCallback((gIdx) => {
     if (abstractEdits[gIdx]) return abstractEdits[gIdx];
     return papers[gIdx]?.abstract || '';
   }, [papers, abstractEdits]);
 
-  // Handle auto-advance after decision state updates
-  useEffect(() => {
-    if (shouldAdvanceRef.current) {
-      shouldAdvanceRef.current = false;
-      setCurrentIndex((prev) => {
-        const maxIdx = filteredIndices.length - 1;
-        return prev < maxIdx ? prev + 1 : prev;
-      });
-    }
-  }, [decisions, filteredIndices.length]);
+  // Store undo stack in a ref so callbacks always see the latest value
+  const undoStackRef = useRef(undoStack);
+  undoStackRef.current = undoStack;
 
   const makeDecision = useCallback((d) => {
     if (globalIndex === undefined) return;
     const prevDecision = decisions[globalIndex] || null;
 
-    // Push to undo stack
-    setUndoStack((stack) => [...stack.slice(-50), { globalIndex, previousDecision: prevDecision }]);
+    // Push to undo stack (with index we came from, so undo can navigate back)
+    setUndoStack((stack) => [...stack.slice(-50), {
+      globalIndex,
+      previousDecision: prevDecision,
+      fromIndex: currentIndex,
+    }]);
+    setDecisions((prev) => ({ ...prev, [globalIndex]: d }));
 
     // Only auto-advance if this is a NEW decision (no previous decision)
     if (!prevDecision) {
-      shouldAdvanceRef.current = true;
+      setCurrentIndex((prev) => {
+        const maxIdx = filteredIndices.length - 1;
+        return prev < maxIdx ? prev + 1 : prev;
+      });
     }
-
-    setDecisions((prev) => ({ ...prev, [globalIndex]: d }));
-  }, [globalIndex, decisions]);
+  }, [globalIndex, decisions, filteredIndices.length, currentIndex]);
 
   const undoDecision = useCallback(() => {
-    setUndoStack((stack) => {
-      if (stack.length === 0) return stack;
-      const last = stack[stack.length - 1];
-      setDecisions((prev) => {
-        const next = { ...prev };
-        if (last.previousDecision) {
-          next[last.globalIndex] = last.previousDecision;
-        } else {
-          delete next[last.globalIndex];
-        }
-        return next;
-      });
-      return stack.slice(0, -1);
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const last = stack[stack.length - 1];
+
+    setUndoStack(stack.slice(0, -1));
+    setDecisions((prev) => {
+      const next = { ...prev };
+      if (last.previousDecision) {
+        next[last.globalIndex] = last.previousDecision;
+      } else {
+        delete next[last.globalIndex];
+      }
+      return next;
     });
+
+    // Navigate back to the paper where the decision was made
+    if (last.fromIndex !== undefined) {
+      setCurrentIndex(last.fromIndex);
+    }
   }, []);
 
   const jumpToPaper = useCallback((gIdx) => {
@@ -562,10 +578,6 @@ function App() {
             <button className="nav-btn" onClick={goNext} disabled={safeIndex >= filteredIndices.length - 1}>
               Next &rarr;
             </button>
-          </div>
-
-          <div className="keyboard-hints">
-            <kbd>Y</kbd> Yes &nbsp; <kbd>N</kbd> No &nbsp; <kbd>M</kbd> Maybe &nbsp; <kbd>U</kbd> Undo &nbsp; <kbd>&larr;</kbd> <kbd>&rarr;</kbd> Navigate
           </div>
         </>
       ) : (
