@@ -311,6 +311,21 @@
   color: #4f46e5;
 }
 
+/* Order dropdown */
+.order-select {
+  padding: 5px 10px;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 20px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: #636e72;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.order-select:hover, .order-select:focus { border-color: #74b9ff; }
+
 /* Decision buttons */
 .decision-section {
   display: flex;

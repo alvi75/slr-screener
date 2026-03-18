@@ -711,13 +711,17 @@ function App() {
           Highlights {highlightsOn ? 'On' : 'Off'}
         </button>
         {Object.keys(aiScores).length > 0 && (
-          <button
-            className={`highlight-toggle ${sortByScore ? 'on' : ''}`}
-            onClick={() => { setSortByScore(v => !v); setCurrentIndex(0); }}
-            title="Sort papers by AI relevance score"
-          >
-            Sort by Score {sortByScore ? 'On' : 'Off'}
-          </button>
+          <>
+            <span className="filter-label" style={{ marginLeft: 8 }}>Order:</span>
+            <select
+              className="order-select"
+              value={sortByScore ? 'score' : 'default'}
+              onChange={(e) => { setSortByScore(e.target.value === 'score'); setCurrentIndex(0); }}
+            >
+              <option value="default">Default</option>
+              <option value="score">AI Score ↓</option>
+            </select>
+          </>
         )}
       </div>
 
