@@ -1,62 +1,101 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import './App.css';
 
-// Keyword categories for highlighting
-const KEYWORDS = {
-  model: {
-    className: 'hl-model',
-    words: [
-      'LLM', 'LLMs', 'GPT', 'GPT-4', 'GPT-4o', 'GPT-3.5', 'GPT-3', 'CodeLlama', 'Code Llama',
-      'CodeBERT', 'GraphCodeBERT', 'StarCoder', 'StarCoder2', 'DeepSeek', 'DeepSeek-Coder',
-      'Codex', 'Copilot', 'GitHub Copilot', 'T5', 'CodeT5', 'CodeT5+', 'BERT', 'RoBERTa',
-      'Llama', 'Llama 2', 'Llama 3', 'Qwen', 'Gemini', 'Claude', 'ChatGPT', 'transformer',
-      'transformers', 'large language model', 'large language models'
-    ],
-  },
-  detail: {
-    className: 'hl-detail',
-    words: [
-      'parameter', 'parameters', 'billion', 'million', '7B', '13B', '34B', '70B',
-      'model size', 'fine-tuning', 'fine-tune', 'fine-tuned', 'pre-trained', 'pre-training',
-      'quantization', 'quantized', 'LoRA', 'QLoRA', 'PEFT', 'adapter', 'adapters',
-    ],
-  },
-  task: {
-    className: 'hl-task',
-    words: [
-      'code generation', 'code summarization', 'vulnerability detection', 'bug detection',
-      'code review', 'code completion', 'code search', 'code translation',
-      'defect prediction', 'program repair', 'test generation', 'automated program repair',
-      'code clone detection', 'code smell', 'software vulnerability',
-    ],
-  },
-  method: {
-    className: 'hl-method',
-    words: [
-      'training', 'inference', 'evaluation', 'benchmark', 'benchmarks', 'dataset', 'datasets',
-      'deep learning', 'neural network', 'neural networks', 'machine learning',
-    ],
-  },
-};
+// ===== 3-COLOR HIGHLIGHT SYSTEM =====
+// All keywords and patterns map to 3 categories: model (blue), task (green), method (purple)
+// Each entry carries a sublabel shown on hover tooltip
+
+const KEYWORDS = [
+  // Model-related (blue) — model names
+  ...['LLM', 'LLMs', 'GPT', 'GPT-4', 'GPT-4o', 'GPT-3.5', 'GPT-3', 'CodeLlama', 'Code Llama',
+    'CodeBERT', 'GraphCodeBERT', 'StarCoder', 'StarCoder2', 'DeepSeek', 'DeepSeek-Coder',
+    'Codex', 'Copilot', 'GitHub Copilot', 'T5', 'CodeT5', 'CodeT5+', 'BERT', 'RoBERTa',
+    'Llama', 'Llama 2', 'Llama 3', 'Qwen', 'Gemini', 'Claude', 'ChatGPT', 'transformer',
+    'transformers', 'large language model', 'large language models'
+  ].map(w => ({ word: w, cls: 'hl-model', label: 'Model name' })),
+  // Model-related (blue) — model details
+  ...['parameter', 'parameters', 'billion', 'million', '7B', '13B', '34B', '70B',
+    'model size', 'fine-tuning', 'fine-tune', 'fine-tuned', 'pre-trained', 'pre-training',
+    'quantization', 'quantized', 'LoRA', 'QLoRA', 'PEFT', 'adapter', 'adapters'
+  ].map(w => ({ word: w, cls: 'hl-model', label: 'Model detail' })),
+  // SE tasks (green)
+  ...['code generation', 'code summarization', 'vulnerability detection', 'bug detection',
+    'code review', 'code completion', 'code search', 'code translation',
+    'defect prediction', 'program repair', 'test generation', 'automated program repair',
+    'code clone detection', 'code smell', 'software vulnerability'
+  ].map(w => ({ word: w, cls: 'hl-task', label: 'SE task' })),
+  // Methods (purple)
+  ...['training', 'inference', 'evaluation', 'benchmark', 'benchmarks', 'dataset', 'datasets',
+    'deep learning', 'neural network', 'neural networks', 'machine learning'
+  ].map(w => ({ word: w, cls: 'hl-method', label: 'Method' })),
+];
+
+// Sort longest first so longer phrases match before shorter substrings
+KEYWORDS.sort((a, b) => b.word.length - a.word.length);
 
 function buildHighlightRegex() {
-  const allEntries = [];
-  for (const [, cat] of Object.entries(KEYWORDS)) {
-    for (const w of cat.words) {
-      allEntries.push({ pattern: w, className: cat.className });
-    }
-  }
-  allEntries.sort((a, b) => b.pattern.length - a.pattern.length);
-  const escaped = allEntries.map((e) => e.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const escaped = KEYWORDS.map(e => e.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  // Wrap each keyword with \b word boundaries to prevent partial-word matches
+  const regex = new RegExp(`(\\b(?:${escaped.join('|')})\\b)`, 'gi');
   const lookup = {};
-  for (const e of allEntries) {
-    lookup[e.pattern.toLowerCase()] = e.className;
+  for (const e of KEYWORDS) {
+    lookup[e.word.toLowerCase()] = { cls: e.cls, label: e.label };
   }
   return { regex, lookup };
 }
 
 const { regex: hlRegex, lookup: hlLookup } = buildHighlightRegex();
+
+// Pattern-based rules — merged into the same 3 colors
+const PATTERNS = [
+  // Model size: number + B/b (e.g., 7B, 13B, 70b)
+  { regex: /\b\d+\.?\d*[Bb]\b/g, cls: 'hl-model', label: 'Model size' },
+  // billion/million parameters/params
+  { regex: /\b\d+\.?\d*\s*(?:billion|million|B|M|K)\s+(?:parameters?|params?)\b/gi, cls: 'hl-model', label: 'Model size' },
+  // Model variants: known model name followed by -base, -large, -instruct, etc.
+  { regex: /\b(?:GPT|Llama|CodeLlama|Qwen|DeepSeek|Gemma|Mistral|Phi|StarCoder|CodeT5|BERT|RoBERTa|T5|Falcon|Vicuna|WizardCoder|CodeGen|InCoder|SantaCoder|OctoCoder)[-](?:base|large|small|medium|instruct|chat|coder|plus|xl|xxl)\b/gi, cls: 'hl-model', label: 'Model variant' },
+  // Version patterns: v1, v2, v3, GPT-3.5, GPT-4o, etc.
+  { regex: /\b(?:v\d+(?:\.\d+)?|GPT-\d+(?:\.\d+)?[a-z]?)\b/gi, cls: 'hl-model', label: 'Version' },
+  // Numeric context: number + ML-specific units (parameters/layers/tokens/epochs/GPUs)
+  { regex: /\b\d+[\d,]*\.?\d*\s*(?:parameters?|layers?|tokens?|epochs?|GPUs?)\b/gi, cls: 'hl-model', label: 'Numeric context' },
+  // Action phrases → method (purple)
+  { regex: /\b(?:fine-tuned|trained|evaluated|pre-trained|finetuned)\s+on\b/gi, cls: 'hl-method', label: 'Action phrase' },
+];
+
+function buildPatternRegex() {
+  const parts = PATTERNS.map((p, i) => `(?<_p${i}>${p.regex.source})`);
+  return new RegExp(parts.join('|'), 'gi');
+}
+const patternRegex = buildPatternRegex();
+
+function applyPatterns(text, keyOffset) {
+  const result = [];
+  let lastIndex = 0;
+  let match;
+  patternRegex.lastIndex = 0;
+  while ((match = patternRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      result.push(text.slice(lastIndex, match.index));
+    }
+    let cls = 'hl-model';
+    let label = 'Model';
+    for (let i = 0; i < PATTERNS.length; i++) {
+      if (match.groups && match.groups[`_p${i}`] !== undefined) {
+        cls = PATTERNS[i].cls;
+        label = PATTERNS[i].label;
+        break;
+      }
+    }
+    result.push(
+      <span key={`p${keyOffset}-${match.index}`} className={`${cls} hl-tip`} data-tip={`${label}: ${match[0]}`}>{match[0]}</span>
+    );
+    lastIndex = patternRegex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    result.push(text.slice(lastIndex));
+  }
+  return result.length > 0 ? result : [text];
+}
 
 function cleanAbstractText(text) {
   let s = text;
@@ -152,20 +191,71 @@ function cleanAbstractText(text) {
 
 function highlightAbstract(text) {
   const clean = cleanAbstractText(text);
+  // First pass: split by keyword matches
   const parts = clean.split(hlRegex);
-  return parts.map((part, i) => {
-    const cls = hlLookup[part.toLowerCase()];
-    if (cls) {
-      return <span key={i} className={cls}>{part}</span>;
+  const result = [];
+  parts.forEach((part, i) => {
+    const entry = hlLookup[part.toLowerCase()];
+    if (entry) {
+      // Keyword match — highlight with background + hover tooltip
+      result.push(<span key={`k${i}`} className={`${entry.cls} hl-tip`} data-tip={`${entry.label}: ${part}`}>{part}</span>);
+    } else if (part) {
+      // Plain text — apply pattern-based highlights
+      const patternParts = applyPatterns(part, i);
+      patternParts.forEach((pp, j) => {
+        if (typeof pp === 'string') {
+          result.push(<React.Fragment key={`t${i}-${j}`}>{pp}</React.Fragment>);
+        } else {
+          result.push(pp);
+        }
+      });
     }
-    return part;
   });
+  return result;
+}
+
+// ===== AI SCORING =====
+const SCORING_PROMPT = `You are helping screen papers for a systematic literature review. The research goal is: identify papers that use, evaluate, or experiment with AI/ML models for software engineering tasks, especially papers that mention specific model names, model sizes, parameter counts, fine-tuning, or quantization. Rate this abstract 0-100 for relevance and suggest Yes/No/Maybe. Respond in JSON only: {"score": number, "suggestion": "yes"|"no"|"maybe", "reason": "one sentence why"}`;
+
+const PROXY_URL = 'http://localhost:3001/api/score';
+
+async function scoreOneAbstract(apiKey, title, abstract) {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 150,
+      messages: [
+        { role: 'user', content: `${SCORING_PROMPT}\n\nTitle: ${title}\nAbstract: ${abstract}` },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`API ${res.status}: ${err}`);
+  }
+  const data = await res.json();
+  const text = data.content?.[0]?.text || '';
+  // Parse JSON from response (handle markdown code blocks)
+  const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+  const parsed = JSON.parse(jsonStr);
+  // Validate expected fields
+  if (typeof parsed.score !== 'number' || !parsed.suggestion || !parsed.reason) {
+    throw new Error('Unexpected response format: ' + jsonStr);
+  }
+  return { score: parsed.score, suggestion: parsed.suggestion.toLowerCase(), reason: parsed.reason };
 }
 
 const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
 const STORAGE_KEY = 'slr-screener-decisions';
 const INDEX_KEY = 'slr-screener-index';
 const VENUE_KEY = 'slr-screener-venue';
+const SCORES_KEY = 'slr-screener-scores';
+const APIKEY_KEY = 'slr-screener-apikey';
 
 function venueCls(conf) {
   if (conf.includes('ICSE')) return 'icse';
@@ -204,6 +294,25 @@ function App() {
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarFilter, setSidebarFilter] = useState('All');
   const [undoStack, setUndoStack] = useState([]);
+  const [highlightsOn, setHighlightsOn] = useState(() => {
+    try { return localStorage.getItem('slr-screener-highlights') !== 'off'; }
+    catch { return true; }
+  });
+  const [aiInsightsOpen, setAiInsightsOpen] = useState(false);
+
+  // AI scoring state
+  const [aiScores, setAiScores] = useState(() => {
+    try { const s = localStorage.getItem(SCORES_KEY); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  });
+  const [apiKey, setApiKey] = useState(() => {
+    try { return localStorage.getItem(APIKEY_KEY) || ''; }
+    catch { return ''; }
+  });
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
+  const [sortByScore, setSortByScore] = useState(false);
+  const scoringAbortRef = useRef(false);
 
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
@@ -236,14 +345,32 @@ function App() {
     localStorage.setItem(VENUE_KEY, venueFilter);
   }, [venueFilter]);
 
-  // Venue-only filtering (no decision filter in main view)
+  // Save highlights toggle
+  useEffect(() => {
+    localStorage.setItem('slr-screener-highlights', highlightsOn ? 'on' : 'off');
+  }, [highlightsOn]);
+
+  // Save AI scores
+  useEffect(() => {
+    localStorage.setItem(SCORES_KEY, JSON.stringify(aiScores));
+  }, [aiScores]);
+
+  // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
-    return papers.reduce((acc, p, i) => {
+    const indices = papers.reduce((acc, p, i) => {
       if (venueFilter !== 'All' && p.conf !== venueFilter) return acc;
       acc.push(i);
       return acc;
     }, []);
-  }, [papers, venueFilter]);
+    if (sortByScore) {
+      indices.sort((a, b) => {
+        const sa = aiScores[a]?.score ?? -1;
+        const sb = aiScores[b]?.score ?? -1;
+        return sb - sa; // highest score first
+      });
+    }
+    return indices;
+  }, [papers, venueFilter, sortByScore, aiScores]);
 
   const safeIndex = Math.min(currentIndex, Math.max(0, filteredIndices.length - 1));
   const globalIndex = filteredIndices[safeIndex];
@@ -354,6 +481,7 @@ function App() {
         case 'n': makeDecision('No'); break;
         case 'm': makeDecision('Maybe'); break;
         case 'u': undoDecision(); break;
+        case 'h': setHighlightsOn(v => !v); break;
         case 'arrowright': goNext(); break;
         case 'arrowleft': goPrev(); break;
         default: break;
@@ -373,12 +501,15 @@ function App() {
       }
       return str;
     };
-    const header = 'conf,title,author,decision,abstract,doi,pdf_url,arxiv_id';
+    const header = 'conf,title,author,decision,ai_score,ai_suggestion,ai_reason,abstract,doi,pdf_url,arxiv_id';
     const rows = papers.map((p, i) => {
       const abs = getAbstract(i);
+      const score = aiScores[i];
       return [
         escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
-        escapeCSV(decisions[i] || ''), escapeCSV(abs),
+        escapeCSV(decisions[i] || ''),
+        escapeCSV(score?.score ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        escapeCSV(abs),
         escapeCSV(p.doi || ''), escapeCSV(p.pdf_url || ''), escapeCSV(p.arxiv_id || ''),
       ].join(',');
     });
@@ -390,7 +521,7 @@ function App() {
     a.download = 'slr_triage_results.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [papers, decisions, getAbstract]);
+  }, [papers, decisions, getAbstract, aiScores]);
 
   const clearAllDecisions = useCallback(() => {
     setDecisions({});
@@ -399,6 +530,98 @@ function App() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(INDEX_KEY);
   }, []);
+
+  // AI scoring — batch process unscored papers
+  const startScoring = useCallback(async () => {
+    if (!apiKey) { setShowApiKeyModal(true); return; }
+
+    // Check proxy is running
+    try {
+      const health = await fetch('http://localhost:3001/api/health');
+      if (!health.ok) throw new Error();
+    } catch {
+      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
+      return;
+    }
+
+    // Find unscored papers that have abstracts
+    const unscored = [];
+    for (let i = 0; i < papers.length; i++) {
+      if (aiScores[i]) continue;
+      const abs = getAbstract(i);
+      if (!abs || abs === 'not_found') continue;
+      unscored.push(i);
+    }
+    if (unscored.length === 0) { alert('All papers with abstracts have been scored.'); return; }
+
+    scoringAbortRef.current = false;
+    const total = unscored.length;
+    let done = 0;
+    let errors = 0;
+    setScoringProgress({ done: 0, total, errors: 0 });
+
+    // Process in batches of 5
+    for (let b = 0; b < unscored.length; b += 5) {
+      if (scoringAbortRef.current) break;
+      const batch = unscored.slice(b, b + 5);
+      const results = await Promise.allSettled(
+        batch.map(async (idx) => {
+          const abs = cleanAbstractText(getAbstract(idx));
+          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs);
+          return { idx, result };
+        })
+      );
+      const newScores = {};
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          newScores[r.value.idx] = r.value.result;
+        } else {
+          errors++;
+          console.error('[SLR] Scoring error:', r.reason);
+        }
+      }
+      done += batch.length;
+      setAiScores(prev => ({ ...prev, ...newScores }));
+      setScoringProgress({ done, total, errors });
+    }
+    // Clear progress after a short delay so user sees 100%
+    setTimeout(() => setScoringProgress(null), 2000);
+  }, [apiKey, papers, aiScores, getAbstract]);
+
+  const stopScoring = useCallback(() => {
+    scoringAbortRef.current = true;
+  }, []);
+
+  const pendingScoreRef = useRef(false);
+  const saveApiKey = useCallback((key) => {
+    setApiKey(key);
+    localStorage.setItem(APIKEY_KEY, key);
+    setShowApiKeyModal(false);
+    pendingScoreRef.current = true;
+  }, []);
+
+  // Auto-start scoring after API key is saved
+  useEffect(() => {
+    if (pendingScoreRef.current && apiKey) {
+      pendingScoreRef.current = false;
+      startScoring();
+    }
+  }, [apiKey, startScoring]);
+
+  const clearScores = useCallback(() => {
+    if (window.confirm('Clear all AI scores? This cannot be undone.')) {
+      setAiScores({});
+      localStorage.removeItem(SCORES_KEY);
+    }
+  }, []);
+
+  // Sorted scored papers list for AI Insights sidebar
+  const scoredPapersList = useMemo(() => {
+    return Object.entries(aiScores)
+      .map(([idx, score]) => ({ idx: Number(idx), ...score, paper: papers[Number(idx)] }))
+      .filter(item => item.paper)
+      .sort((a, b) => b.score - a.score);
+  }, [aiScores, papers]);
 
   // Progress stats
   const totalPapers = papers.length;
@@ -426,13 +649,30 @@ function App() {
           <span style={{ fontSize: 13, color: '#636e72' }}>
             {decidedCount}/{totalPapers} screened
           </span>
-          <button className="reload-btn" onClick={loadData}>Reload Data</button>
-          <button className="export-btn" onClick={exportCSV}>Export CSV</button>
-          <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen((v) => !v)}>
-            {sidebarOpen ? 'Hide Log' : 'Decision Log'}
+          <button className="header-btn" onClick={loadData}>Reload Data</button>
+          <button className="header-btn" onClick={scoringProgress ? stopScoring : startScoring}>
+            {scoringProgress
+              ? `Scoring ${scoringProgress.done}/${scoringProgress.total}${scoringProgress.errors > 0 ? ` (${scoringProgress.errors} err)` : ''}`
+              : `Score Papers${Object.keys(aiScores).length > 0 ? ` (${Object.keys(aiScores).length})` : ''}`}
           </button>
+          <button className="header-btn" onClick={exportCSV}>Export CSV</button>
+          <button className="header-btn" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
+            Decision Log
+          </button>
+          {Object.keys(aiScores).length > 0 && (
+            <button className="header-btn" onClick={() => { setAiInsightsOpen((v) => !v); setSidebarOpen(false); }}>
+              AI Insights
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Scoring progress bar */}
+      {scoringProgress && (
+        <div className="scoring-progress-track">
+          <div className="scoring-progress-fill" style={{ width: `${(scoringProgress.done / scoringProgress.total) * 100}%` }} />
+        </div>
+      )}
 
       {/* Progress */}
       <div className="progress-section">
@@ -451,7 +691,7 @@ function App() {
         </div>
       </div>
 
-      {/* Venue Filter */}
+      {/* Venue Filter + Highlights Toggle */}
       <div className="filters">
         <span className="filter-label">Venue:</span>
         {VENUES.map((v) => (
@@ -463,14 +703,22 @@ function App() {
             {v}
           </button>
         ))}
-      </div>
-
-      {/* Legend */}
-      <div className="legend">
-        <div className="legend-item"><div className="legend-swatch" style={{ background: '#ffecd2' }} /> Model names</div>
-        <div className="legend-item"><div className="legend-swatch" style={{ background: '#dfe6fd' }} /> Model details</div>
-        <div className="legend-item"><div className="legend-swatch" style={{ background: '#c8f7c5' }} /> SE tasks</div>
-        <div className="legend-item"><div className="legend-swatch" style={{ background: '#e8daef' }} /> Methods</div>
+        <button
+          className={`highlight-toggle ${highlightsOn ? 'on' : ''}`}
+          onClick={() => setHighlightsOn(v => !v)}
+          title="Toggle keyword highlights (H)"
+        >
+          Highlights {highlightsOn ? 'On' : 'Off'}
+        </button>
+        {Object.keys(aiScores).length > 0 && (
+          <button
+            className={`highlight-toggle ${sortByScore ? 'on' : ''}`}
+            onClick={() => { setSortByScore(v => !v); setCurrentIndex(0); }}
+            title="Sort papers by AI relevance score"
+          >
+            Sort by Score {sortByScore ? 'On' : 'Off'}
+          </button>
+        )}
       </div>
 
       {/* Paper */}
@@ -483,6 +731,12 @@ function App() {
               {decisions[globalIndex] && (
                 <span className={`decision-badge ${decisions[globalIndex].toLowerCase()}`}>
                   {decisions[globalIndex]}
+                </span>
+              )}
+              {aiScores[globalIndex] && (
+                <span className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'}`}
+                  title={`AI suggestion: ${aiScores[globalIndex].suggestion}`}>
+                  AI: {aiScores[globalIndex].score}
                 </span>
               )}
             </div>
@@ -535,31 +789,33 @@ function App() {
                   <span style={{ marginLeft: 4 }}> — or click Edit to paste it manually.</span>
                 </div>
               ) : (
-                <div className="abstract-text">{highlightAbstract(abstract)}</div>
+                <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract) : cleanAbstractText(abstract)}</div>
               )}
             </div>
           </div>
 
           {/* Decision buttons */}
           <div className="decision-section">
+            {(() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
             <button
-              className={`decision-btn btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''}`}
+              className={`decision-btn btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('Yes')}
             >
               Yes <span className="shortcut">Y</span>
             </button>
             <button
-              className={`decision-btn btn-maybe ${decisions[globalIndex] === 'Maybe' ? 'selected' : ''}`}
+              className={`decision-btn btn-maybe ${decisions[globalIndex] === 'Maybe' ? 'selected' : ''} ${sug === 'maybe' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('Maybe')}
             >
               Maybe <span className="shortcut">M</span>
             </button>
             <button
-              className={`decision-btn btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''}`}
+              className={`decision-btn btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''} ${sug === 'no' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('No')}
             >
               No <span className="shortcut">N</span>
             </button>
+            </>; })()}
             <button
               className="decision-btn btn-undo"
               onClick={undoDecision}
@@ -636,15 +892,106 @@ function App() {
             ))
           )}
         </div>
-        {decidedCount > 0 && (
+        {(decidedCount > 0 || Object.keys(aiScores).length > 0) && (
           <div className="sidebar-footer">
-            <button className="reset-btn full-width" onClick={() => { if (window.confirm(`Clear all ${decidedCount} decisions? This cannot be undone.`)) clearAllDecisions(); }}>
-              Reset All Decisions
-            </button>
+            {decidedCount > 0 && (
+              <button className="reset-btn full-width" onClick={() => { if (window.confirm(`Clear all ${decidedCount} decisions? This cannot be undone.`)) clearAllDecisions(); }}>
+                Reset All Decisions
+              </button>
+            )}
+            {Object.keys(aiScores).length > 0 && (
+              <button className="reset-btn full-width" style={{ marginTop: decidedCount > 0 ? 8 : 0 }} onClick={clearScores}>
+                Clear AI Scores ({Object.keys(aiScores).length})
+              </button>
+            )}
+            {apiKey && (
+              <button className="reset-btn full-width" style={{ marginTop: 8, borderColor: '#b2bec3', color: '#636e72' }}
+                onClick={() => setShowApiKeyModal(true)}>
+                Change API Key
+              </button>
+            )}
           </div>
         )}
       </div>
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
+      {/* AI Insights Sidebar */}
+      <div className={`sidebar ai-sidebar ${aiInsightsOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <h2>AI Insights</h2>
+          <button className="sidebar-close" onClick={() => setAiInsightsOpen(false)}>&times;</button>
+        </div>
+        {/* Current paper insight */}
+        {aiScores[globalIndex] ? (
+          <div className="ai-insight-current">
+            <div className="ai-insight-label">Current Paper</div>
+            <div className="ai-insight-score-row">
+              <span className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'}`}>
+                Score: {aiScores[globalIndex].score}
+              </span>
+              <span className={`sidebar-decision ${aiScores[globalIndex].suggestion}`}>
+                {aiScores[globalIndex].suggestion.charAt(0).toUpperCase() + aiScores[globalIndex].suggestion.slice(1)}
+              </span>
+            </div>
+            <div className="ai-insight-reason">{aiScores[globalIndex].reason}</div>
+          </div>
+        ) : (
+          <div className="ai-insight-current">
+            <div className="ai-insight-label">Current Paper</div>
+            <div className="ai-insight-empty">Not scored yet</div>
+          </div>
+        )}
+        {/* Scored papers list */}
+        <div className="ai-insight-list-label">All Scored Papers ({scoredPapersList.length})</div>
+        <div className="sidebar-list">
+          {scoredPapersList.map((item) => (
+            <div
+              key={item.idx}
+              className={`sidebar-item ${item.idx === globalIndex ? 'active' : ''}`}
+              onClick={() => { jumpToPaper(item.idx); }}
+            >
+              <div className="sidebar-item-top">
+                <span className={`ai-score-badge score-${item.score >= 70 ? 'high' : item.score >= 40 ? 'mid' : 'low'}`}>
+                  {item.score}
+                </span>
+                <span className={`sidebar-decision ${item.suggestion}`}>
+                  {item.suggestion.charAt(0).toUpperCase() + item.suggestion.slice(1)}
+                </span>
+              </div>
+              <div className="sidebar-item-title">
+                {item.paper.title.length > 80 ? item.paper.title.slice(0, 80) + '...' : item.paper.title}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {aiInsightsOpen && <div className="sidebar-overlay" onClick={() => setAiInsightsOpen(false)} />}
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <>
+          <div className="sidebar-overlay" onClick={() => setShowApiKeyModal(false)} />
+          <div className="api-key-modal">
+            <h3>Anthropic API Key</h3>
+            <p>Enter your API key to enable AI scoring. The key is stored only in your browser's localStorage.</p>
+            <input
+              type="password"
+              className="api-key-input"
+              placeholder="sk-ant-..."
+              defaultValue={apiKey}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveApiKey(e.target.value.trim()); }}
+              autoFocus
+            />
+            <div className="edit-actions">
+              <button className="save-btn" onClick={(e) => {
+                const input = e.target.closest('.api-key-modal').querySelector('input');
+                saveApiKey(input.value.trim());
+              }}>Save & Start Scoring</button>
+              <button className="cancel-btn" onClick={() => setShowApiKeyModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
