@@ -644,7 +644,7 @@ function App() {
     <div className="app">
       {/* Header */}
       <div className="header">
-        <h1>SLR Paper Screener</h1>
+        <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
           <span style={{ fontSize: 13, color: '#636e72' }}>
             {decidedCount}/{totalPapers} screened
