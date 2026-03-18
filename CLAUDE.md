@@ -9,13 +9,14 @@ Built for **Prof. Antonio Mastropaolo** at **William & Mary's AURA Lab**. The pl
 ## Tech Stack
 
 - **React** (Create React App) — single-page app
+- **Express** — lightweight proxy server for Claude API calls (`server.js` on port 3001)
 - **Pure CSS** — no UI framework, custom styles in `App.css`
-- **localStorage** — auto-save decisions and edited abstracts
+- **localStorage** — auto-save decisions, edited abstracts, AI scores, API key, highlight toggle
 - **CSV export** — client-side generation via Blob API
 
 ## Data File
 
-`public/enriched_papers_2025.json` — source data with metadata wrapper:
+`public/enriched_papers_2025.json` — 1100 papers with 1086 abstracts collected via OpenAlex + CrossRef + Semantic Scholar + arXiv pipeline. Metadata wrapper:
 
 ```json
 {
@@ -42,39 +43,44 @@ Fields `abstract`, `doi`, `doi_url`, `openalex_id`, `arxiv_id`, `pdf_url`, `pdf_
 ## Current Features
 
 - **Paper display**: Shows one paper at a time with title, authors, venue badge (color-coded), and abstract
-- **Keyword highlighting**: Abstract text is highlighted in 4 color categories (see below)
-- **HTML cleanup**: XML/HTML tags (e.g., `<tex>`, `<italic>`, `xmlns:mml=...`) are stripped from abstracts
+- **Keyword highlighting**: Toggleable via "Highlights" button (or `H` key). Uses 3 color categories with hover tooltips showing match type (see below)
+- **Pattern-based highlighting**: Regex rules detect model sizes (7B, 13B), model variants (Llama-instruct), version patterns (GPT-3.5), numeric context (100 tokens), and action phrases (fine-tuned on). Applied as a second pass on non-keyword text
+- **HTML/LaTeX cleanup**: XML/HTML tags, LaTeX math, Greek letters, and formatting commands are cleaned at display time
 - **Triage buttons**: Yes / No / Maybe with visual feedback (current decision highlighted)
 - **Auto-advance**: Moves to next paper after a new decision; stays on current paper when changing an existing decision
 - **Undo**: Press `U` or click Undo to revert the last decision (50-deep stack)
 - **Venue filtering**: Filter papers by ICSE 2025, FSE 2025, ASE 2025, TOSEM 2025, TSE 2025
 - **Decision Log sidebar**: Toggleable panel showing all decided papers with search, filter tabs (All/Yes/No/Maybe with counts), and click-to-jump navigation
-- **Reset All Decisions**: Button in sidebar footer to clear all triage data from localStorage
-- **CSV export**: Downloads `slr_triage_results.csv` with columns: conf, title, author, decision, abstract, doi, pdf_url, arxiv_id
-- **Auto-save**: Decisions and edited abstracts persist in localStorage across browser sessions
-- **Keyboard shortcuts**: `Y` Yes, `N` No, `M` Maybe, `U` Undo, `←` Previous, `→` Next
-- **Inline abstract editing**: Edit button to paste missing abstracts manually; saved to localStorage
+- **AI Scoring** (optional): Uses Claude API to score each abstract 0–100 for relevance, with a Yes/No/Maybe suggestion and one-sentence explanation. Requires an Anthropic API key (stored in localStorage) and the proxy server running
+- **AI Insights sidebar**: Toggleable panel showing the current paper's AI score, suggestion, and reason, plus a sorted list of all scored papers (highest score first) with click-to-jump
+- **Sort by Score toggle**: When AI scores exist, papers can be sorted by relevance score instead of default order
+- **Reset All Decisions**: Button in Decision Log sidebar footer to clear all triage data from localStorage
+- **CSV export**: Downloads `slr_triage_results.csv` with columns: conf, title, author, decision, ai_score, ai_suggestion, ai_reason, abstract, doi, pdf_url, arxiv_id
+- **Auto-save**: Decisions, edited abstracts, AI scores, and settings persist in localStorage across browser sessions
+- **Keyboard shortcuts**: `Y` Yes, `N` No, `M` Maybe, `U` Undo, `H` Toggle highlights, `←` Previous, `→` Next
+- **Inline abstract editing**: Edit button to paste missing abstracts manually; saved to localStorage. Edited abstracts are used for AI scoring
 - **Google Scholar link**: Papers with missing/not_found abstracts show a warning with a search link
 - **Paper links**: Clickable PDF, DOI, arXiv, and OpenAlex links when available
 - **Progress bar**: Segmented bar showing Yes (green), Maybe (yellow), No (red) counts
 
-## Keyword Highlight Categories
+## Keyword Highlight Categories (3-color system)
 
-| Category | Color | Examples |
-|----------|-------|---------|
-| **Model names** | Orange | LLM, GPT-4, CodeLlama, CodeBERT, StarCoder, DeepSeek, Copilot, ChatGPT, transformer |
-| **Model details** | Blue | parameter, billion, 7B, 13B, fine-tuning, pre-trained, quantization, LoRA, QLoRA, PEFT |
-| **SE tasks** | Green | code generation, vulnerability detection, code review, program repair, test generation |
-| **Methods** | Purple | training, inference, benchmark, dataset, deep learning, neural network, machine learning |
+Highlights are toggled on/off via the "Highlights" button or `H` key. Hovering any highlighted word shows a tooltip with category and matched term.
 
-Keywords are matched case-insensitively. Longer phrases match first to avoid partial highlights.
+| Category | Color | Includes |
+|----------|-------|----------|
+| **Model info** | Blue (`hl-model`) | Model names (LLM, GPT-4, CodeLlama, ChatGPT, transformer), model details (parameter, fine-tuning, LoRA, quantization), size patterns (7B, 70B), model variants, version patterns, numeric context |
+| **SE tasks** | Green (`hl-task`) | code generation, vulnerability detection, code review, program repair, test generation, code completion, defect prediction |
+| **Methods** | Purple (`hl-method`) | training, inference, benchmark, dataset, deep learning, neural network, machine learning, action phrases (fine-tuned on, trained on, evaluated on) |
+
+Keywords use `\b` word boundaries to prevent partial-word matches. Longer phrases match first.
 
 ## Project Structure
 
 ```
 slr-screener/
 ├── public/
-│   ├── enriched_papers_2025.json   # Paper data (1100 papers)
+│   ├── enriched_papers_2025.json   # Paper data (1100 papers, 1086 abstracts)
 │   ├── favicon.svg                 # Document + checkmark icon
 │   └── index.html
 ├── src/
@@ -82,15 +88,19 @@ slr-screener/
 │   ├── App.css                     # All styles
 │   ├── index.js                    # Entry point
 │   └── index.css                   # Base/reset styles
+├── server.js                       # Express proxy for Claude API (port 3001)
 └── CLAUDE.md
 ```
 
 ## Running
 
 ```bash
-npm start        # Dev server at http://localhost:3000
+npm start        # React dev server at http://localhost:3000
+npm run proxy    # Claude API proxy at http://localhost:3001 (run in separate terminal)
 npm run build    # Production build
 ```
+
+The proxy server (`server.js`) must be running for AI scoring to work. It forwards requests to `api.anthropic.com` with the user's API key.
 
 ## Planned Features
 

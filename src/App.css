@@ -371,20 +371,26 @@
   color: #b2bec3;
 }
 
-/* Uniform header buttons */
+/* Header buttons — shared base */
 .header-btn {
   padding: 8px 18px;
-  background: white;
-  color: #636e72;
-  border: 1.5px solid #dfe6e9;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  transition: all 0.15s;
+  transition: opacity 0.15s;
   white-space: nowrap;
+  color: white;
 }
-.header-btn:hover { border-color: #0984e3; color: #0984e3; }
+.header-btn:hover { opacity: 0.85; }
+/* Per-button colors */
+.header-btn.btn-reload { background: white; color: #636e72; border: 1.5px solid #dfe6e9; }
+.header-btn.btn-reload:hover { border-color: #0984e3; color: #0984e3; opacity: 1; }
+.header-btn.btn-score { background: #fdcb6e; color: #2d3436; }
+.header-btn.btn-export { background: #00b894; }
+.header-btn.btn-log { background: #0984e3; }
+.header-btn.btn-insights { background: #6c5ce7; }
 .reset-btn {
   padding: 8px 18px;
   background: white;

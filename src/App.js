@@ -649,18 +649,18 @@ function App() {
           <span style={{ fontSize: 13, color: '#636e72' }}>
             {decidedCount}/{totalPapers} screened
           </span>
-          <button className="header-btn" onClick={loadData}>Reload Data</button>
-          <button className="header-btn" onClick={scoringProgress ? stopScoring : startScoring}>
+          <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
+          <button className="header-btn btn-score" onClick={scoringProgress ? stopScoring : startScoring}>
             {scoringProgress
               ? `Scoring ${scoringProgress.done}/${scoringProgress.total}${scoringProgress.errors > 0 ? ` (${scoringProgress.errors} err)` : ''}`
               : `Score Papers${Object.keys(aiScores).length > 0 ? ` (${Object.keys(aiScores).length})` : ''}`}
           </button>
-          <button className="header-btn" onClick={exportCSV}>Export CSV</button>
-          <button className="header-btn" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
+          <button className="header-btn btn-export" onClick={exportCSV}>Export CSV</button>
+          <button className="header-btn btn-log" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
             Decision Log
           </button>
           {Object.keys(aiScores).length > 0 && (
-            <button className="header-btn" onClick={() => { setAiInsightsOpen((v) => !v); setSidebarOpen(false); }}>
+            <button className="header-btn btn-insights" onClick={() => { setAiInsightsOpen((v) => !v); setSidebarOpen(false); }}>
               AI Insights
             </button>
           )}
