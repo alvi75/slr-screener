@@ -147,18 +147,25 @@
 }
 .paper-links {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
-.paper-link {
+.link-btn {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 6px;
   font-size: 13px;
-  color: #0984e3;
+  font-weight: 600;
   text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  color: white;
+  transition: opacity 0.15s;
 }
-.paper-link:hover { text-decoration: underline; }
+.link-btn:hover { opacity: 0.85; }
+.link-pdf { background: #00b894; }
+.link-publisher { background: #0984e3; }
+.link-scholar { background: #e17055; }
+.link-arxiv { background: #d63031; }
 
 /* Abstract */
 .abstract-section {
@@ -329,6 +336,18 @@
   transition: background 0.15s;
 }
 .export-btn:hover { background: #00a381; }
+.reload-btn {
+  padding: 8px 18px;
+  background: white;
+  color: #636e72;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.reload-btn:hover { border-color: #0984e3; color: #0984e3; }
 .reset-btn {
   padding: 8px 18px;
   background: white;

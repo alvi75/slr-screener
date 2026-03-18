@@ -106,14 +106,16 @@ function App() {
   const shouldAdvanceRef = useRef(false);
 
   // Load data
-  useEffect(() => {
-    fetch(process.env.PUBLIC_URL + '/enriched_papers_2025.json')
+  const loadData = useCallback(() => {
+    fetch(process.env.PUBLIC_URL + '/enriched_papers_2025.json?t=' + Date.now())
       .then((r) => r.json())
       .then((data) => {
         setPapers(data.papers);
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   // Load saved state
   useEffect(() => {
@@ -321,6 +323,7 @@ function App() {
           <span style={{ fontSize: 13, color: '#636e72' }}>
             {decidedCount}/{totalPapers} screened
           </span>
+          <button className="reload-btn" onClick={loadData}>Reload Data</button>
           <button className="export-btn" onClick={exportCSV}>Export CSV</button>
           <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen((v) => !v)}>
             {sidebarOpen ? 'Hide Log' : 'Decision Log'}
@@ -386,16 +389,14 @@ function App() {
             {/* Links */}
             <div className="paper-links">
               {paper.pdf_url && (
-                <a className="paper-link" href={paper.pdf_url} target="_blank" rel="noreferrer">PDF</a>
+                <a className="link-btn link-pdf" href={paper.pdf_url} target="_blank" rel="noreferrer">PDF</a>
               )}
-              {paper.doi_url && (
-                <a className="paper-link" href={paper.doi_url} target="_blank" rel="noreferrer">DOI</a>
+              {paper.doi && (
+                <a className="link-btn link-publisher" href={`https://doi.org/${paper.doi}`} target="_blank" rel="noreferrer">Publisher</a>
               )}
+              <a className="link-btn link-scholar" href={`https://scholar.google.com/scholar?q=${encodeURIComponent(paper.title)}`} target="_blank" rel="noreferrer">Google Scholar</a>
               {paper.arxiv_id && (
-                <a className="paper-link" href={`https://arxiv.org/abs/${paper.arxiv_id}`} target="_blank" rel="noreferrer">arXiv</a>
-              )}
-              {paper.openalex_id && (
-                <a className="paper-link" href={paper.openalex_id} target="_blank" rel="noreferrer">OpenAlex</a>
+                <a className="link-btn link-arxiv" href={`https://arxiv.org/abs/${paper.arxiv_id}`} target="_blank" rel="noreferrer">arXiv</a>
               )}
             </div>
 
