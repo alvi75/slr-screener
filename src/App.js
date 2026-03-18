@@ -58,13 +58,100 @@ function buildHighlightRegex() {
 
 const { regex: hlRegex, lookup: hlLookup } = buildHighlightRegex();
 
-function stripHtml(text) {
-  // Remove XML/HTML tags and attributes like <tex xmlns:mml="...">, <italic>, <i>, etc.
-  return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+function cleanAbstractText(text) {
+  let s = text;
+  // Remove HTML/XML tags
+  s = s.replace(/<[^>]*>/g, '');
+  // Remove LaTeX math delimiters: $...$, $$...$$, \(...\), \[...\]
+  s = s.replace(/\$\$(.*?)\$\$/g, '$1');
+  s = s.replace(/\$(.*?)\$/g, '$1');
+  s = s.replace(/\\\((.*?)\\\)/g, '$1');
+  s = s.replace(/\\\[(.*?)\\\]/g, '$1');
+  // \operatorname{X}, \mathrm{X}, \textbf{X}, \textit{X}, \text{X}, etc.
+  s = s.replace(/\\(?:operatorname|mathrm|textbf|textit|text|mathcal|mathbb|emph|textrm|mathit|boldsymbol|mbox|hbox)\{([^}]*)\}/g, '$1');
+  // \frac{a}{b} -> a/b
+  s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2');
+  // \sqrt{x} -> sqrt(x)
+  s = s.replace(/\\sqrt\{([^}]*)\}/g, 'sqrt($1)');
+  // Greek letters -> Unicode symbols
+  const greekMap = {
+    alpha: '\u03B1', beta: '\u03B2', gamma: '\u03B3', delta: '\u03B4', epsilon: '\u03B5',
+    varepsilon: '\u03B5', zeta: '\u03B6', eta: '\u03B7', theta: '\u03B8', vartheta: '\u03B8',
+    iota: '\u03B9', kappa: '\u03BA', lambda: '\u03BB', mu: '\u03BC', nu: '\u03BD',
+    xi: '\u03BE', pi: '\u03C0', rho: '\u03C1', sigma: '\u03C3', tau: '\u03C4',
+    upsilon: '\u03C5', phi: '\u03C6', varphi: '\u03C6', chi: '\u03C7', psi: '\u03C8',
+    omega: '\u03C9',
+    Gamma: '\u0393', Delta: '\u0394', Theta: '\u0398', Lambda: '\u039B', Xi: '\u039E',
+    Pi: '\u03A0', Sigma: '\u03A3', Phi: '\u03A6', Psi: '\u03A8', Omega: '\u03A9',
+  };
+  for (const [cmd, sym] of Object.entries(greekMap)) {
+    s = s.replace(new RegExp('\\\\' + cmd + '(?![a-zA-Z])', 'g'), sym);
+  }
+  // Common LaTeX symbols -> Unicode/readable
+  s = s.replace(/\\%/g, '%');
+  s = s.replace(/\\&/g, '&');
+  s = s.replace(/\\#/g, '#');
+  s = s.replace(/\\\$/g, '$');
+  s = s.replace(/\\times(?![a-zA-Z])/g, '\u00D7');
+  s = s.replace(/\\cdot(?![a-zA-Z])/g, '\u00B7');
+  s = s.replace(/\\ldots|\\dots|\\cdots/g, '\u2026');
+  s = s.replace(/\\leq(?![a-zA-Z])|\\le(?![a-zA-Z])/g, '\u2264');
+  s = s.replace(/\\geq(?![a-zA-Z])|\\ge(?![a-zA-Z])/g, '\u2265');
+  s = s.replace(/\\neq(?![a-zA-Z])|\\ne(?![a-zA-Z])/g, '\u2260');
+  s = s.replace(/\\approx(?![a-zA-Z])/g, '\u2248');
+  s = s.replace(/\\pm(?![a-zA-Z])/g, '\u00B1');
+  s = s.replace(/\\infty(?![a-zA-Z])/g, '\u221E');
+  s = s.replace(/\\rightarrow(?![a-zA-Z])|\\to(?![a-zA-Z])/g, '\u2192');
+  s = s.replace(/\\leftarrow(?![a-zA-Z])/g, '\u2190');
+  s = s.replace(/\\leftrightarrow(?![a-zA-Z])/g, '\u2194');
+  s = s.replace(/\\in(?![a-zA-Z])/g, '\u2208');
+  s = s.replace(/\\notin(?![a-zA-Z])/g, '\u2209');
+  s = s.replace(/\\subset(?![a-zA-Z])/g, '\u2282');
+  s = s.replace(/\\cup(?![a-zA-Z])/g, '\u222A');
+  s = s.replace(/\\cap(?![a-zA-Z])/g, '\u2229');
+  s = s.replace(/\\sim(?![a-zA-Z])/g, '~');
+  s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+  s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
+  s = s.replace(/\\min(?![a-zA-Z])/g, 'min');
+  s = s.replace(/\\max(?![a-zA-Z])/g, 'max');
+  s = s.replace(/\\sum(?![a-zA-Z])/g, '\u2211');
+  s = s.replace(/\\prod(?![a-zA-Z])/g, '\u220F');
+  s = s.replace(/\\forall(?![a-zA-Z])/g, '\u2200');
+  s = s.replace(/\\exists(?![a-zA-Z])/g, '\u2203');
+  s = s.replace(/\\neg(?![a-zA-Z])/g, '\u00AC');
+  s = s.replace(/\\land(?![a-zA-Z])/g, '\u2227');
+  s = s.replace(/\\lor(?![a-zA-Z])/g, '\u2228');
+  s = s.replace(/\\emptyset(?![a-zA-Z])/g, '\u2205');
+  s = s.replace(/\\ell(?![a-zA-Z])/g, '\u2113');
+  // Superscript/subscript: remove ^ and _ with braces
+  s = s.replace(/[_^]\{([^}]*)\}/g, '$1');
+  s = s.replace(/[_^](.)/g, '$1');
+  // Remove remaining \command (unknown commands)
+  s = s.replace(/\\[a-zA-Z]+/g, '');
+  // Remove leftover braces
+  s = s.replace(/[{}]/g, '');
+  // Fix "number %" -> "number%"
+  s = s.replace(/(\d)\s+%/g, '$1%');
+  // Fix "number x" multiplication when it's clearly numeric context
+  s = s.replace(/(\d)\s*\u00D7\s*(\d)/g, '$1\u00D7$2');
+  // Clean up empty parentheses/brackets from stripped content
+  s = s.replace(/\(\s*,\s*\)/g, '');
+  s = s.replace(/\(\s*\)/g, '');
+  s = s.replace(/\[\s*\]/g, '');
+  // Clean up orphaned commas in parentheses: (a, , b) -> (a, b)
+  s = s.replace(/,\s*,/g, ',');
+  // Clean up leading/trailing commas in parentheses: (, x) -> (x) and (x, ) -> (x)
+  s = s.replace(/\(\s*,\s*/g, '(');
+  s = s.replace(/\s*,\s*\)/g, ')');
+  // Remove space before punctuation
+  s = s.replace(/\s+([.,;:!?])/g, '$1');
+  // Collapse whitespace
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
 }
 
 function highlightAbstract(text) {
-  const clean = stripHtml(text);
+  const clean = cleanAbstractText(text);
   const parts = clean.split(hlRegex);
   return parts.map((part, i) => {
     const cls = hlLookup[part.toLowerCase()];
