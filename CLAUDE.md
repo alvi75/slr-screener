@@ -42,26 +42,40 @@ Fields `abstract`, `doi`, `doi_url`, `openalex_id`, `arxiv_id`, `pdf_url`, `pdf_
 
 ## Current Features
 
-- **Paper display**: Shows one paper at a time with title, authors, venue badge (color-coded), and abstract
-- **Keyword highlighting**: Toggleable via "Highlights" button (or `H` key). Uses 3 color categories with hover tooltips showing match type (see below)
-- **Pattern-based highlighting**: Regex rules detect model sizes (7B, 13B), model variants (Llama-instruct), version patterns (GPT-3.5), numeric context (100 tokens), and action phrases (fine-tuned on). Applied as a second pass on non-keyword text
-- **HTML/LaTeX cleanup**: XML/HTML tags, LaTeX math, Greek letters, and formatting commands are cleaned at display time
-- **Triage buttons**: Yes / No / Maybe with visual feedback (current decision highlighted)
-- **Auto-advance**: Moves to next paper after a new decision; stays on current paper when changing an existing decision
-- **Undo**: Press `U` or click Undo to revert the last decision (50-deep stack)
+### Paper Display & Navigation
+- **Paper card**: Shows one paper at a time with title, authors, venue badge (color-coded by conference), and abstract
+- **Paper links**: Clickable PDF, Publisher (DOI), Google Scholar, and arXiv buttons when available
 - **Venue filtering**: Filter papers by ICSE 2025, FSE 2025, ASE 2025, TOSEM 2025, TSE 2025
-- **Decision Log sidebar**: Toggleable panel showing all decided papers with search, filter tabs (All/Yes/No/Maybe with counts), and click-to-jump navigation
-- **AI Scoring** (optional): Uses Claude API to score each abstract 0–100 for relevance, with a Yes/No/Maybe suggestion and one-sentence explanation. Requires an Anthropic API key (stored in localStorage) and the proxy server running
-- **AI Insights sidebar**: Toggleable panel showing the current paper's AI score, suggestion, and reason, plus a sorted list of all scored papers (highest score first) with click-to-jump
-- **Sort by Score toggle**: When AI scores exist, papers can be sorted by relevance score instead of default order
-- **Reset All Decisions**: Button in Decision Log sidebar footer to clear all triage data from localStorage
-- **CSV export**: Downloads `slr_triage_results.csv` with columns: conf, title, author, decision, ai_score, ai_suggestion, ai_reason, abstract, doi, pdf_url, arxiv_id
-- **Auto-save**: Decisions, edited abstracts, AI scores, and settings persist in localStorage across browser sessions
-- **Keyboard shortcuts**: `Y` Yes, `N` No, `M` Maybe, `U` Undo, `H` Toggle highlights, `←` Previous, `→` Next
+- **Runtime JSON loading**: Papers loaded at runtime with cache-busting (`?t=Date.now()`). "Reload Data" button to refresh without page reload
+- **Position persistence**: Current paper index, venue filter, and all settings restored from localStorage on refresh
+
+### Abstract Display
+- **Keyword highlighting**: Toggleable via "Highlights" button (or `H` key). Uses 3 color categories with hover tooltips showing match type and matched term (see below)
+- **Pattern-based highlighting**: Second-pass regex rules detect model sizes (7B, 13B), model variants (Llama-instruct), version patterns (GPT-3.5), numeric context (100 tokens), and action phrases (fine-tuned on)
+- **HTML/LaTeX cleanup**: Strips XML/HTML tags, converts LaTeX math delimiters, Greek letters to Unicode, formatting commands, superscripts/subscripts, and cleans up artifacts
 - **Inline abstract editing**: Edit button to paste missing abstracts manually; saved to localStorage. Edited abstracts are used for AI scoring
 - **Google Scholar link**: Papers with missing/not_found abstracts show a warning with a search link
-- **Paper links**: Clickable PDF, DOI, arXiv, and OpenAlex links when available
-- **Progress bar**: Segmented bar showing Yes (green), Maybe (yellow), No (red) counts
+
+### Triage & Decisions
+- **Triage buttons**: Yes / No / Maybe with visual feedback (current decision highlighted)
+- **Auto-advance**: Moves to next paper after a new decision; stays on current paper when changing an existing decision
+- **Undo**: Press `U` or click Undo to revert the last decision (50-deep stack with position restore)
+- **Keyboard shortcuts**: `Y` Yes, `N` No, `M` Maybe, `U` Undo, `H` Toggle highlights, `←` Previous, `→` Next
+- **Decision Log sidebar**: Toggleable panel showing all decided papers with search, filter tabs (All/Yes/No/Maybe with counts), and click-to-jump navigation
+- **Reset All Decisions**: Button in Decision Log sidebar footer to clear all triage data
+
+### AI Scoring (Optional)
+- **Claude API integration**: Scores each abstract 0–100 for relevance with a Yes/No/Maybe suggestion and one-sentence explanation. Uses Claude Sonnet via Express proxy server. Batched in groups of 5 with `Promise.allSettled`
+- **AI score badge**: Shown on paper card meta row, color-coded (green ≥70, yellow ≥40, red <40) with hover tooltip showing suggestion
+- **AI suggestion glow**: Decision buttons get a subtle purple glow when they match the AI suggestion
+- **AI Insights sidebar**: Toggleable panel showing the current paper's score, suggestion, and reason, plus a sorted list of all scored papers (highest first) with click-to-jump
+- **Sort by Score toggle**: When AI scores exist, papers can be sorted by relevance score instead of default order
+- **API key management**: Stored in localStorage, configurable via modal. Proxy health check before scoring starts
+
+### Export & Progress
+- **CSV export**: Downloads `slr_triage_results.csv` with columns: conf, title, author, decision, ai_score, ai_suggestion, ai_reason, abstract, doi, pdf_url, arxiv_id
+- **Progress bar**: Segmented bar showing Yes (green), Maybe (yellow), No (red) counts with remaining count
+- **Auto-save**: Decisions, edited abstracts, AI scores, highlight toggle, and venue filter persist in localStorage
 
 ## Keyword Highlight Categories (3-color system)
 
