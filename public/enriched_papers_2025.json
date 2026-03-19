@@ -6887,7 +6887,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "An Empirical Study on the Relationship between Defects and Source Code&apos;s Unnaturalness.",
+      "title": "An Empirical Study on the Relationship between Defects and Source Code's Unnaturalness.",
       "author": "Yanjie Jiang, Hui Liu 0003, Jinyan Liu, Yuxia Zhang, Weixing Ji, Hao Zhong 0001, Lu Zhang 0023",
       "abstract": "Natural languages are “natural” in that texts in natural languages are repetitive and predictable. Recent research indicates that programming languages share similar characteristics (naturalness), with source code displaying patterns of repetition and predictability. Notably, studies have shown that buggy code deviates from these natural patterns in that buggy code is significantly less natural than bug-free one. In this article, we conduct a large-scale and extensive empirical study to investigate whether code defects lead to unnaturalness of source code. Different from existing studies, we leverage multiple large-scale and high-quality bug repositories where bug-irrelevant changes in bug-fixing commits have been explicitly excluded. The leveraged software applications cover different programming languages, and the empirical study involves real-world software defects as well as defects injected automatically with well-known mutation operators. On the one side, our evaluation results confirm existing studies in that buggy source code lines are often less natural than bug-free ones. On the other side, our evaluation reveals some interesting new findings. First, fixing bugs does not significantly improve the naturalness of code lines and the fixed lines on average are as unnatural as buggy ones. This finding may suggest that software defects are not the root causes of source code’s unnaturalness although there does existing statistically significant correlation between software defects and source code’s naturalness. Second, defects in different programming languages have similar effect on source code’s naturalness. The conclusions (i.e., buggy code is less natural but fixing the bugs cannot improve source code’s naturalness) hold regardless of the programming languages. Third, injecting defects automatically by well-known mutation operators does not significantly reduce the naturalness of involved source code lines. This suggests that automatically injected defects may have a similar impact on the naturalness of source code as real-world defects inadvertently introduced by developers. Fourth, the detects’ impact on source code’s naturalness varies slightly among different categories of software defects. Although fixing bugs on average does not significantly improve the naturalness of involved source code, fixing “checking” related bugs does significantly improve the naturalness of source code. Finally, locating buggy code lines according to naturalness alone is inaccurate, resulting in extremely low precision (less than one percent).",
       "doi": "10.1145/3718083",
@@ -7304,7 +7304,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "Diversity&apos;s Double-Edged Sword: Analyzing Race&apos;s Effect on Remote Pair Programming Interactions.",
+      "title": "Diversity's Double-Edged Sword: Analyzing Race's Effect on Remote Pair Programming Interactions.",
       "author": "Shandler A. Mason, Sandeep Kaur Kuttal",
       "doi": "10.1145/3408877.3439681",
       "doi_url": "https://doi.org/10.1145/3408877.3439681",
@@ -7336,7 +7336,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "Assessing and Analyzing the Correctness of GitHub Copilot&apos;s Code Suggestions.",
+      "title": "Assessing and Analyzing the Correctness of GitHub Copilot's Code Suggestions.",
       "author": "Ran Mo, Dongyu Wang, Wenjing Zhan, Yingjie Jiang, Yepeng Wang, Yuqi Zhao 0001, Zengyang Li, Yutao Ma",
       "abstract": "AI programming has become a popular topic in recent years. Code suggestion, with code suggestion being a key capability of AI programming. Copilot, an “AI programmer” that provides code suggestions from natural language descriptions, has been launched by GitHub and OpenAI. By far, Copilot has been widely used by millions of developers. However, little work has systematically evaluated the correctness of Copilot’s suggestions. We conducted an empirical study on all 2,033 LeetCode problems to assess Copilot’s code generation across four mainstream languages: C, Java, JavaScript, and Python. We have found that: (1) 70.0% of problems received at least one correct suggestion, with language-specific rates of 29.7% (C), 57.7% (Java), 54.1% (JavaScript), and 41.0% (Python); (2) correctness decreases as problem difficulty increases, with acceptance rates of 89.3% (easy), 72.1% (medium), and 43.4% (hard); (3) acceptance rates vary across problem domains from 49.5% to 90.1%, while Graph problems challenge C and Python most, and Prefix Sum and Heap challenge Java and JavaScript most; (4) for the incorrect suggestions, we further summarize 17 types of error reasons accounting for their incorrectness and analyzed possible causes for why these errors occur. We believe our study can provide valuable insights into Copilot’s capabilities and limitations."
     },
@@ -7414,13 +7414,16 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "An Empirical Study on Governance in Bitcoin&apos;s Consensus Evolution.",
+      "title": "An Empirical Study on Governance in Bitcoin's Consensus Evolution.",
       "author": "Jakob Svennevik Notland, Mariusz Nowostawski, Jingyue Li"
     },
     {
       "conf": "TOSEM 2025",
-      "title": "My Fuzzers Won&apos;t Build: An Empirical Study of Fuzzing Build Failures.",
-      "author": "Olivier Nourry, Yutaro Kashiwa, Weiyi Shang, Honglin Shu, Yasutaka Kamei"
+      "title": "My Fuzzers Won't Build: An Empirical Study of Fuzzing Build Failures.",
+      "author": "Olivier Nourry, Yutaro Kashiwa, Weiyi Shang, Honglin Shu, Yasutaka Kamei",
+      "abstract": "Fuzzing is an automated software testing technique used to find software vulnerabilities that works by sending large amounts of inputs to a software system to trigger bad behaviors. In recent years, the open source software ecosystem has seen a significant increase in the adoption of fuzzing to avoid spreading vulnerabilities throughout the ecosystem. While fuzzing can uncover vulnerabilities, there is currently a lack of knowledge regarding the challenges of conducting fuzzing activities over time. Specifically, fuzzers are very complex tools to set up and build before they can be used. We set out to empirically find out how challenging is build maintenance in the context of fuzzing. We mine over 1.2 million build logs from Google’s OSS-Fuzz service to investigate fuzzing build failures. We first conduct a quantitative analysis to quantify the prevalence of fuzzing build failures. We then manually investigate 677 failing fuzzing builds logs and establish a taxonomy of 25 root causes of build failures. We finally train a machine learning model to recognize common failure patterns in failing build logs. Our taxonomy can serve as a reference for practitioners conducting fuzzing build maintenance. Our modeling experiment shows the potential of using automation to simplify the process of fuzzing.",
+      "pdf_url": "https://dl.acm.org/doi/pdf/10.1145/3688842",
+      "pdf_source": "s2_final_pass"
     },
     {
       "conf": "TOSEM 2025",
@@ -7513,7 +7516,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "You Don&apos;t Have to Say Where to Edit! jLED - Joint Learning to Localize and Edit Source Code.",
+      "title": "You Don't Have to Say Where to Edit! jLED - Joint Learning to Localize and Edit Source Code.",
       "author": "Weiguo Pian, Yinghua Li, Haoye Tian, Tiezhu Sun, Yewei Song, Xunzhu Tang, Andrew Habib, Jacques Klein, Tegawendé F. Bissyandé",
       "abstract": "Learning to edit code automatically is becoming more and more feasible. Thanks to recent advances in Neural Machine Translation (NMT), various case studies are being investigated where patches are automatically produced and assessed either automatically (using test suites) or by developers themselves. An appealing setting remains when the developer must provide a natural language input of the requirement for the code change. A recent proof of concept in the literature showed that it is indeed feasible to translate these natural language requirements into code changes. A recent advancement, MODIT, has shown promising results in code editing by leveraging natural language, code context, and location information as input. However, it struggles when location information is unavailable. While several studies have demonstrated the ability to edit source code without explicitly specifying the edit location, they still tend to generate edits with less accuracy at the line level. In this work, we address the challenge of generating code edits without precise location information, a scenario we consider crucial for the practical adoption of NMT in code development. To that end, we develop a novel joint training approach for both localization and source code editions. Building a benchmark based on over 70k commits (patches and messages), we demonstrate that our joint Localize and EDit (jLED) approach is effective. An ablation study further demonstrates the importance of our design choice in joint training."
     },
@@ -7559,7 +7562,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "From Today&apos;s Code to Tomorrow&apos;s Symphony: The AI Transformation of Developer&apos;s Routine by 2030.",
+      "title": "From Today's Code to Tomorrow's Symphony: The AI Transformation of Developer's Routine by 2030.",
       "author": "Ketai Qiu, Niccolò Puccinelli, Matteo Ciniselli, Luca Di Grazia"
     },
     {
@@ -7795,7 +7798,7 @@
     },
     {
       "conf": "TOSEM 2025",
-      "title": "Don&apos;t Complete It! Preventing Unhelpful Code Completion for Productive and Sustainable Neural Code Completion Systems.",
+      "title": "Don't Complete It! Preventing Unhelpful Code Completion for Productive and Sustainable Neural Code Completion Systems.",
       "author": "Zhensu Sun, Xiaoning Du 0001, Fu Song, Shangwen Wang, Mingze Ni, Li Li 0029, David Lo 0001",
       "abstract": "Currently, large pre-trained language models are widely applied in neural code completion systems. Though large code models significantly outperform their smaller counterparts, around 70% of displayed code completions from Copilot are not accepted by developers. Being reviewed but not accepted, their help to developer productivity is considerably limited. Even worse, considering the high cost of the large code models, it is a huge waste of computing resources and energy. To fill this significant gap, we propose an early-rejection mechanism to turn down low-return prompts by foretelling the code completion qualities without sending them to the code completion system. Furthermore, we propose a lightweight Transformer-based es-timator to demonstrate the feasibility of the mechanism. The experimental results show that the proposed estimator helps save 23.3% of computational cost measured in floating-point operations for the code completion systems, and 80.2% of rejected prompts lead to unhelpful completion.",
       "pdf_url": "https://dl.acm.org/doi/pdf/10.1145/3688831",
@@ -8703,7 +8706,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Women&apos;s Participation in Student Software Development Teams: A Cross-Sectional Study on Role Distribution.",
+      "title": "Women's Participation in Student Software Development Teams: A Cross-Sectional Study on Role Distribution.",
       "author": "Claudia Maria Cutrupi, Letizia Jaccheri, Sofia Papavlasopoulou",
       "abstract": "The underrepresentation of women in the software engineering field remains a challenge in both academia and industry. While enrollment numbers remain low, there is also limited research on how responsibilities and roles are distributed within student software development teams, particularly through a gendered lens. This study aims to address this gap by investigating the relationship between team gender composition, female leadership, and the distribution of technical roles among women in SE teams. We analyze data from 628 students—183 of whom were women—across 85 software development teams over seven years. Through predictive analysis, we test three hypotheses: (1) whether women in teams with fewer female members are less likely to assume highly specialized technical roles, (2) whether the presence of a woman in a leadership position increases the likelihood of other women taking on highly technical roles, and (3) whether the distribution of roles among women varies across different student cohorts. Our findings provide partial support for the first and third hypotheses. Women are generally less likely than men to occupy highly specialized technical roles; however, this likelihood is not significantly influenced by the gender ratio within teams. Similarly, while role diversification among women has increased over time—particularly in positions such as Scrum Master and Report Manager—this trend appears to be driven more by declining male participation in certain roles than by increased female engagement. Contrary to our second hypothesis, having a woman as team leader does not significantly impact the likelihood of women assuming highly technical roles. The insights from this study contribute to a deeper understanding of gender dynamics in SE education and highlight the importance of fostering inclusive environments that support diverse role exploration and long-term engagement for women in software engineering."
     },
@@ -8731,7 +8734,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "How Do OSS Developers Reuse Architectural Solutions From Q&amp;A Sites: An Empirical Study.",
+      "title": "How Do OSS Developers Reuse Architectural Solutions From Q&A Sites: An Empirical Study.",
       "author": "Musengamana Jean de Dieu, Peng Liang 0001, Mojtaba Shahin",
       "doi": "10.1109/tse.2025.3572027",
       "doi_url": "https://doi.org/10.1109/tse.2025.3572027",
@@ -9015,8 +9018,9 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "The &quot;Question Neighbourhood&quot; Approach for Systematic Evaluation of Code-Generating LLMs.",
-      "author": "Shahin Honarvar, Marek Rei, Alastair F. Donaldson"
+      "title": "The \"Question Neighbourhood\" Approach for Systematic Evaluation of Code-Generating LLMs.",
+      "author": "Shahin Honarvar, Marek Rei, Alastair F. Donaldson",
+      "abstract": "We present the concept of a question neighbourhood for systematically evaluating instruction-tuned large language models (LLMs) for code generation via a new benchmark, Turbulence. Turbulence consists of a large set of natural language question templates, each of which is a programming problem, parameterised so that it can be asked in many different forms. Each question template has an associated test oracle that judges whether a code solution returned by an LLM is correct. Thus, from a single question template, it is possible to ask an LLM a neighbourhood of very similar programming questions, and assess the correctness of the result returned for each question. This allows gaps in an LLM’s code generation abilities to be identified, including anomalies where the LLM correctly solves many questions in a neighbourhood but fails for particular parameter instantiations. We present experiments against 22 state-of-the-art proprietary and open-source LLMs, each at two temperature configurations. Our evaluation is based on three complementary scores: accuracy score, correctness-potential score, and consistent-correctness score. Our findings show that, across the board, Turbulence is able to reveal cases where LLMs do not behave in a correct and consistent manner, highlighting gaps in their reasoning ability. This goes beyond merely highlighting that LLMs sometimes produce wrong code (which is no surprise): by systematically identifying cases where LLMs are able to solve some problems in a neighbourhood but do not manage to generalise to solve the whole neighbourhood, our method provides detailed insight into the behavioural characteristics of current code-generating LLMs. We present data and examples that shed light on the kinds of mistakes that LLMs make when they return incorrect code results."
     },
     {
       "conf": "TSE 2025",
@@ -9136,10 +9140,11 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Reflections on McCabe&apos;s Cyclomatic Complexity.",
+      "title": "Reflections on McCabe's Cyclomatic Complexity.",
       "author": "Dennis G. Kafura",
       "doi": "10.1109/ms.2016.147",
-      "doi_url": "https://doi.org/10.1109/ms.2016.147"
+      "doi_url": "https://doi.org/10.1109/ms.2016.147",
+      "abstract": "This paper reflects on the 1976 paper by Thomas McCabe that defined the cyclomatic complexity of computer programs. The reflection first describes the context in which the paper was written and the relevance of the paper to issues of the period. Second, the cyclomatic complexity metric is described and illustrated. Third, the impact of cyclomatic complexity is reviewed: in directly related areas the impact is deep, highly visible and time-tested; in adjacent areas there is a clear influence of McCabe’s work; in software engineering as a whole there is a lasting legacy. A short interview with and a biography of Thomas McCabe are given."
     },
     {
       "conf": "TSE 2025",
@@ -9210,8 +9215,9 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Influence of the 1990 IEEE TSE Paper &quot;Automated Software Test Data Generation&quot; on Software Engineering.",
-      "author": "Bogdan Korel"
+      "title": "Influence of the 1990 IEEE TSE Paper \"Automated Software Test Data Generation\" on Software Engineering.",
+      "author": "Bogdan Korel",
+      "abstract": "Generating test data is a critical component of software testing, essential for ensuring the proper functioning of software systems. Automated test data generation, in particular, can greatly improve the efficiency and accuracy of the testing process. In 1990, the paper “Automated Software Test Data Generation,” published in IEEE Transactions on Software Engineering (Korel, 1990), introduced a novel approach to automated test data generation, focusing on actual program execution, fitness function minimization methods, and dynamic data flow analysis. This paper discusses the impact of the 1990 IEEE TSE publication (Korel, 1990) on automated test data generation and software engineering."
     },
     {
       "conf": "TSE 2025",
@@ -9586,7 +9592,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Practitioners&apos; Expectations on Log Anomaly Detection.",
+      "title": "Practitioners' Expectations on Log Anomaly Detection.",
       "author": "Xiaoxue Ma, Yishu Li, Jacky Keung, Xiao Yu 0008, Huiqi Zou, Zhen Yang 0022, Federica Sarro, Earl T. Barr",
       "abstract": "Log anomaly detection has become a common practice for software engineers to analyze software system behavior. Despite significant research efforts in log anomaly detection over the past decade, it remains unclear what are practitioners’ expectations on log anomaly detection and whether current research meets their needs. To fill this gap, we conduct an empirical study, surveying 312 practitioners from 36 countries about their expectations on log anomaly detection. In particular, we investigate various factors influencing practitioners’ willingness to adopt log anomaly detection tools. We then perform a literature review on log anomaly detection, focusing on publications in premier venues from 2015 to 2025, to compare practitioners’ needs with the current state of research. Based on this comparison, we highlight the directions for researchers to focus on to develop log anomaly detection techniques that better meet practitioners’ expectations.",
       "arxiv_id": "2412.01066",
@@ -9783,7 +9789,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Three &quot;Influential&quot; Software Design Papers.",
+      "title": "Three \"Influential\" Software Design Papers.",
       "author": "David Lorge Parnas",
       "abstract": "Although the computer field is changing rapidly, some papers on software design have retained their relevance many decades after they were published. The author of three papers that were designated influential by the editors of the IEEE Transactions on Software Engineering discusses why they were written and why they are still considered influential. It also summarizes their messages for today's software developers, software engineering educators, and researchers."
     },
@@ -9823,8 +9829,9 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "A Reflection on &quot;Advances in Software Inspections&quot;.",
-      "author": "Adam A. Porter, Harvey P. Siy, Lawrence G. Votta"
+      "title": "A Reflection on \"Advances in Software Inspections\".",
+      "author": "Adam A. Porter, Harvey P. Siy, Lawrence G. Votta",
+      "abstract": "Michael Fagan’s work on the software inspection process defined a practical approach for improving software quality that was broadly adopted throughout the software industry. This work sparked numerous follow-on efforts aimed at understanding and improving the approach. Finally, the process has flexibly evolved over roughly 50 years, incorporating new languages, tools, techniques, and new understandings of its goals and benefits."
     },
     {
       "conf": "TSE 2025",
@@ -9846,7 +9853,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Developers&apos; Views on Commercial Involvement in OSS: A Survey From Three Projects.",
+      "title": "Developers' Views on Commercial Involvement in OSS: A Survey From Three Projects.",
       "author": "Mian Qin, Yuxia Zhang, Minghui Zhou 0001, Zhe Wang, Haoyang Li 0008, Hui Liu 0003",
       "abstract": "Given the well-established merits of open source software (OSS), many profit-oriented companies actively participate in OSS communities, making significant contributions. Existing studies have predominantly focused on several advanced and specific questions regarding this phenomenon, mainly from the companies’ perspective, such as companies’ domination and withdrawal. A more basic and comprehensive understanding is missing, i.e., how OSS developers perceive such corporate engagement. Individual developers, including both volunteers and developers assigned by companies, are directly impacted by and have personal experiences with the consequences of commercial participation in OSS projects. This paper aims to bridge this gap by amplifying the voices of individual developers and providing valuable insights that have the potential to enhance companies’ participation in OSS projects. We conducted a survey involving developers from three OSS projects, i.e., Rust, OpenStack, and the Linux kernel, focusing on their attitudes and expectations regarding corporate involvement. We received 84 meaningful responses and analyzed their open-ended responses through thematic analysis. The results suggest that regardless of whether developers were paid or voluntary contributors, a prevailing attitude emerged – 67.9% of developers expressed a positive view of companies’ participation in OSS. The key idea behind their positive attitudes is perceiving commercial participation as a win-win for both the OSS community and companies. The Rust community remains more neutral when compared with the other two communities. We also surveyed and analyzed developers’ expectations of companies’ better participation, which can shed light on how OSS ecosystems can sustainably evolve with the companies involved."
     },
@@ -9916,7 +9923,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "On &quot;Prioritizing Test Cases for Regression Testing&quot;.",
+      "title": "On \"Prioritizing Test Cases for Regression Testing\".",
       "author": "Gregg Rothermel, Roland H. Untch",
       "abstract": "Test case prioritization techniques schedule test cases in an order that increases their effectiveness in meeting some performance goal. One performance goal, rate of fault detection , is a measure of how quickly faults are detected within the testing process; an improved rate of fault detection can provide faster feedback on the system under test, and let software engineers begin locating and correcting faults earlier than might otherwise be possible. In previous work, we reported the results of studies that showed that prioritization techniques can significantly improve rate of fault detection. Those studies, however, raised several additional questions: (1) can prioritization techniques be effective when aimed at specific modified versions; (2) what tradeoffs exist between fine granularity and coarse granularity prioritization techniques; (3) can the incorporation of measures of fault proneness into prioritization techniques improve their effectiveness? This paper reports the results of new experiments addressing these questions.",
       "doi": "10.1145/347636.348910",
@@ -9978,7 +9985,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "&quot;Estimating Software Project Effort Using Analogies&quot;: Reflections After 28 Years.",
+      "title": "\"Estimating Software Project Effort Using Analogies\": Reflections After 28 Years.",
       "author": "Martin J. Shepperd",
       "doi": "10.1109/32.637387",
       "doi_url": "https://doi.org/10.1109/32.637387",
@@ -10158,7 +10165,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "RECOVER: Toward Requirements Generation From Stakeholders&apos; Conversations.",
+      "title": "RECOVER: Toward Requirements Generation From Stakeholders' Conversations.",
       "author": "Gianmario Voria, Francesco Casillo, Carmine Gravino, Gemma Catolino, Fabio Palomba",
       "abstract": "Stakeholders’ conversations requirements elicitation meetings hold valuable insights into system and client needs. However, manually extracting requirements is time-consuming, labor-intensive, and prone to errors and biases. While current state-of-the-art methods assist in summarizing stakeholder conversations and classifying requirements based on their nature, there is a noticeable lack of approaches capable of both identifying requirements within these conversations and generating corresponding system requirements. These approaches would assist requirement identification, reducing engineers’ workload, time, and effort. They would also enhance accuracy and consistency in documentation, providing a reliable foundation for further analysis. To address this gap, this paper introduces RECOVER (Requirements EliCitation frOm conVERsations), a novel conversational requirements engineering approach that leverages natural language processing and large language models (LLMs) to support practitioners in automatically extracting system requirements from stakeholder interactions by analyzing individual conversation turns. The approach is evaluated using a mixed-method research design that combines statistical performance analysis with a user study involving requirements engineers, targeting two levels of granularity. First, at the conversation turn level, the evaluation measures RECOVER’s accuracy in identifying requirements-relevant dialogue and the quality of generated requirements in terms of correctness, completeness, and actionability. Second, at the entire conversation level, the evaluation assesses the overall usefulness and effectiveness of RECOVER in synthesizing comprehensive system requirements from full stakeholder discussions. Empirical evaluation of RECOVER shows promising performance, with generated requirements demonstrating satisfactory correctness, completeness, and actionability. The results also highlight the potential of automating requirements elicitation from conversations as an aid that enhances efficiency while maintaining human oversight.",
       "arxiv_id": "2411.19552",
@@ -10271,12 +10278,13 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Impact of &quot;Evaluating Software Complexity Measures&quot;.",
-      "author": "Elaine J. Weyuker"
+      "title": "Impact of \"Evaluating Software Complexity Measures\".",
+      "author": "Elaine J. Weyuker",
+      "abstract": "We investigate the impact that the paper “Evaluating Software Complexity Measures” has had over the thirty-six year period since it was first published in 1988. We look both at how the frequency of citation increased, and the ways that the research has been used. We describe how citations evolved from the initial obvious intent of assessing newly proposed complexity measures to assessing qualities other than complexity, to using them to assess complexity in entities other than software code, or restricted types of programming paradigms, to the adoption of our approach or properties in fields distinct from computing."
     },
     {
       "conf": "TSE 2025",
-      "title": "Impact of &quot;An Applicable Family of Data Flow Testing Criteria&quot;.",
+      "title": "Impact of \"An Applicable Family of Data Flow Testing Criteria\".",
       "author": "Elaine J. Weyuker",
       "doi": "10.1109/32.6194",
       "doi_url": "https://doi.org/10.1109/32.6194",
@@ -10464,7 +10472,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Wolf in Sheep&apos;s Clothing: Shearing the Camouflage of Malicious Java Components in Maven.",
+      "title": "Wolf in Sheep's Clothing: Shearing the Camouflage of Malicious Java Components in Maven.",
       "author": "Yutong Zeng, Cheng Huang 0003, Jiaxuan Han, Jianguo Zhao, Nannan Wang, Genpei Liang, Shuyi Jiang",
       "abstract": "In recent years, software supply chain attacks have become increasingly prevalent, prompting considerable research into detecting malicious packages within relevant repositories. With the popularity bolstered by the widespread adoption of open-source practices, Java become one of the preferred languages among modern developers. However, the issue of malware detection in Java components remains unresolved. Most prior approaches suffer from insufficient code coverage and coarse-grained representation, making them unsuitable for Java components. In this paper, we propose an innovative solution called Shear tailored for detecting malicious Java components. Shear firstly analyzes all methods in the component and locates potential malicious code snippets based on sensitive calls, as slice-level analysis provides a better understanding of the specific malicious activities. Secondly, statements depending on sensitive call sites are extracted and embedded into vectors for further detection instead of function-level representation which is coarse-grained facing the dynamic features in Java. The corresponding experimental results show that Shear effectively identifies the malicious semantics hidden in the code slices by leveraging the neural network model, outperforming currently available tools to a great extent. Through real-world validation, Shear detected 51 components with malicious characteristics out of 68,273, demonstrating its practical feasibility. This study introduces the first Java malicious component detection method suitable for real-world scenarios, carrying considerable practical significance in bolstering defenses within the software supply chain."
     },
@@ -10604,7 +10612,7 @@
     },
     {
       "conf": "TSE 2025",
-      "title": "Towards Exploring Developers&apos; Struggles in Developing Upgradeable Smart Contracts.",
+      "title": "Towards Exploring Developers' Struggles in Developing Upgradeable Smart Contracts.",
       "author": "Zhijie Zhong, Jiachi Chen, Jiashui Wang, Qing Xue, Jiajing Wu, Long Liu, Xinlei Ying, Zibin Zheng",
       "abstract": "Implementing upgradeable smart contracts (USCs) has become a trend in Decentralized applications. Due to blockchain immutability, ensuring the upgradeability of smart contracts requires specialized implementation strategies. A systematic study of developers’ concerns regarding USC development can provide insights to reduce development costs and increase software robustness. In this work, we propose the first empirical study on exploring developers’ concerns over USCs. We first extract 2,224 USC-related posts based on an iterative process combining keyword filtering and manual filtering of posts from the Ethereum StackExchange community. Following open card-sorting practice, we propose 13 common development concerns based on the extracted posts, as well as the causes of these concerns. Furthermore, we analyze the frequency of these concerns within developer discussions. We highlight the most significant concerns of developers, where the top 5 most frequently discussed concerns are notably absent in existing research, e.g., code bugs originating from interacting and testing USCs in specific development frameworks. Additionally, we examine the real-world impact of these concerns by analyzing on-chain smart contracts and security reports from two widely referred databases, i.e., Rekt and Slowmist. Based on case studies of the USC-related security reports in the past two years, we found that the causes of most USC security incidents are related to the identified concerns. Besides, we proposed a semi-automatic tool based on static analysis to detect related bugs and found 26 bugs in real-world smart contracts, which have involved over 0.3 million transactions. Based on these findings, we provide suggestions on the less-solved-yet-prevalent concerns regarding usability and security of USC development, such as facilitating the testing on USCs under existing development frameworks."
     },

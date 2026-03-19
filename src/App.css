@@ -62,20 +62,22 @@
 /* Filters */
 .filters {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 .filter-btn {
-  padding: 6px 14px;
+  padding: 5px 10px;
   border: 1.5px solid #dfe6e9;
   border-radius: 20px;
   background: white;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
   color: #636e72;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .filter-btn:hover {
   border-color: #74b9ff;
@@ -87,10 +89,12 @@
   color: white;
 }
 .filter-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #636e72;
-  margin-right: 4px;
+  margin-right: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* Paper card */
 .paper-card {
@@ -294,90 +298,50 @@
   top: calc(100% + 6px);
 }
 
-/* Highlights compound control */
-.hl-control {
-  display: flex;
-  align-items: center;
+/* Highlights button (contains inline gear) */
+.highlight-toggle {
   margin-left: auto;
-  height: 28px;
+  padding: 0 10px 0 12px;
+  height: 26px;
+  line-height: 26px;
   border: 1.5px solid #dfe6e9;
-  border-radius: 20px;
+  border-radius: 14px;
   background: white;
-  padding: 0 4px 0 8px;
-  gap: 6px;
-  transition: all 0.15s;
-}
-.hl-control.on {
-  background: #eef2ff;
-  border-color: #818cf8;
-}
-.hl-control:hover { border-color: #74b9ff; }
-.hl-control.on:hover { border-color: #818cf8; }
-
-/* Mini toggle switch */
-.hl-switch {
-  position: relative;
-  width: 28px;
-  height: 16px;
-  background: #ccc;
-  border-radius: 8px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.2s;
-  border: none;
-  padding: 0;
-}
-.hl-switch.on { background: #818cf8; }
-.hl-switch::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  background: white;
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-.hl-switch.on::after { transform: translateX(12px); }
-
-/* Label text */
-.hl-label {
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
   color: #636e72;
-  cursor: pointer;
-  user-select: none;
+  transition: all 0.15s;
   white-space: nowrap;
-}
-.hl-control.on .hl-label { color: #4f46e5; }
-
-/* Divider */
-.hl-divider {
-  width: 1px;
-  height: 14px;
-  background: #dfe6e9;
-  flex-shrink: 0;
-}
-.hl-control.on .hl-divider { background: #c7d2fe; }
-
-/* Gear icon */
-.hl-gear {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  color: #b2bec3;
-  padding: 0 4px;
-  transition: color 0.15s;
-  position: relative;
+  gap: 4px;
 }
-.hl-gear:hover { color: #636e72; }
-.hl-control.on .hl-gear { color: #818cf8; }
-.hl-control.on .hl-gear:hover { color: #4f46e5; }
+.highlight-toggle:hover { border-color: #74b9ff; color: #0984e3; }
+.highlight-toggle.on {
+  background: #eef2ff;
+  border-color: #818cf8;
+  color: #4f46e5;
+}
+/* Inline gear icon inside Highlights button */
+.hl-gear-inline {
+  font-size: 18px;
+  color: #b2bec3;
+  cursor: pointer;
+  transition: color 0.15s;
+  display: inline-block;
+  line-height: 1;
+}
+.hl-gear-inline:hover { color: #636e72; }
+.highlight-toggle.on .hl-gear-inline { color: #a5b4fc; }
+.highlight-toggle.on .hl-gear-inline:hover { color: #4f46e5; }
+@keyframes gear-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.hl-gear-inline.spinning {
+  animation: gear-spin 0.4s ease-in-out;
+}
 
 /* Order dropdown */
 .order-select {
@@ -391,6 +355,8 @@
   cursor: pointer;
   outline: none;
   transition: border-color 0.15s;
+  text-align: center;
+  text-align-last: center;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;

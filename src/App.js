@@ -892,19 +892,25 @@ function App() {
             {v}
           </button>
         ))}
-        <span className={`hl-control ${highlightsOn ? 'on' : ''}`}>
-          <button
-            className={`hl-switch ${highlightsOn ? 'on' : ''}`}
-            onClick={() => setHighlightsOn(v => !v)}
-            aria-label="Toggle highlights"
-          />
-          <span className="hl-label hl-tip tip-down" data-tip="Toggle highlights (H)" onClick={() => setHighlightsOn(v => !v)}>
-            Highlights {highlightsOn ? 'On' : 'Off'}
-          </span>
-          <span className="hl-divider" />
-          <button className="hl-gear hl-tip tip-down" onClick={openHlSettings} data-tip="Highlight Settings">⚙</button>
-        </span>
-        <span className="filter-label" style={{ marginLeft: 8 }}>Order:</span>
+        <button
+          className={`highlight-toggle ${highlightsOn ? 'on' : ''} hl-tip tip-down`}
+          onClick={() => setHighlightsOn(v => !v)}
+          data-tip="Toggle keyword highlights (H)"
+        >
+          Highlights {highlightsOn ? 'On' : 'Off'}
+          <span
+            className="hl-gear-inline"
+            onClick={(e) => {
+              e.stopPropagation();
+              const el = e.currentTarget;
+              el.classList.remove('spinning');
+              void el.offsetWidth;
+              el.classList.add('spinning');
+              setTimeout(() => { el.classList.remove('spinning'); openHlSettings(); }, 400);
+            }}
+          >⚙</span>
+        </button>
+        <span className="filter-label" style={{ marginLeft: 4 }}>Order:</span>
         <select
           className={`order-select ${Object.keys(aiScores).length === 0 ? 'hl-tip tip-down' : ''}`}
           value={sortByScore ? 'score' : 'default'}
