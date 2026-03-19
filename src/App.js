@@ -1188,8 +1188,23 @@ function App() {
       });
   }, []);
 
-  // Alias for Reload Data button and demo link in setup
-  const loadData = loadDemoData;
+  // Reload data: demo re-fetches JSON, imported re-reads from localStorage
+  const loadData = useCallback(() => {
+    if (isDemo) {
+      loadDemoData();
+    } else {
+      try {
+        const saved = localStorage.getItem(PAPERS_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPapers(parsed);
+            setLoading(false);
+          }
+        }
+      } catch (e) { console.warn('Could not reload papers:', e.message); }
+    }
+  }, [isDemo, loadDemoData]);
 
   // Import papers from Setup page
   const importPapers = useCallback((importedPapers, customName) => {
@@ -1804,7 +1819,7 @@ function App() {
         <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
         <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
-          {isDemo && <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>}
+          <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
             onClick={scoringProgress ? stopScoring : startScoring}
