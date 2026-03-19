@@ -335,7 +335,15 @@ function venueCls(conf) {
 }
 
 // ===== SETUP VIEW COMPONENT =====
-function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
+function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppend }) {
+  const handleImport = useCallback((papers, customName) => {
+    if (appendMode && onAppend) {
+      onAppend(papers);
+    } else {
+      onImport(papers, customName);
+    }
+  }, [appendMode, onAppend, onImport]);
+
   const [activeMethod, setActiveMethod] = useState(null); // 'csv' | 'json' | 'titles' | 'pdf'
 
   // CSV/Excel state
@@ -343,6 +351,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
   const [csvHeaders, setCsvHeaders] = useState([]);
   const [csvMapping, setCsvMapping] = useState({});
   const [csvFileName, setCsvFileName] = useState('');
+  const [csvProjectName, setCsvProjectName] = useState('');
 
   // JSON state
   const [jsonPapers, setJsonPapers] = useState(null);
@@ -350,16 +359,19 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
   const [jsonNoVenue, setJsonNoVenue] = useState(false);
   const [jsonDefaultVenue, setJsonDefaultVenue] = useState('');
 
-  // Paste titles state
-  const [titleText, setTitleText] = useState('');
-  const [titleResults, setTitleResults] = useState(null);
-  const [titleFetching, setTitleFetching] = useState(false);
-  const [titleProgress, setTitleProgress] = useState({ done: 0, total: 0 });
+  // Manual entry state
+  const emptyEntry = () => ({ title: '', venue: '', doi: '', arxiv_id: '', abstract: '', author: '', fetched: false });
+  const [manualEntries, setManualEntries] = useState([emptyEntry()]);
+  const [manualProjectName, setManualProjectName] = useState('');
+  const [manualFetching, setManualFetching] = useState(false);
+  const [manualProgress, setManualProgress] = useState({ done: 0, total: 0 });
 
   // PDF state
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfResults, setPdfResults] = useState([]);
   const [pdfProcessing, setPdfProcessing] = useState(false);
+  const [pdfProjectName, setPdfProjectName] = useState('');
+  const [pdfDefaultVenue, setPdfDefaultVenue] = useState('');
 
   const SCHEMA_FIELDS = ['title', 'author', 'abstract', 'conf', 'doi', 'doi_url', 'arxiv_id', 'pdf_url', 'year', '(skip)'];
 
@@ -395,8 +407,8 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
       }
       return normalizePaper(raw);
     }).filter(p => p.title);
-    onImport(papers);
-  }, [csvRows, csvMapping, onImport]);
+    handleImport(papers, csvProjectName || undefined);
+  }, [csvRows, csvMapping, csvProjectName, handleImport]);
 
   // === JSON handler ===
   const handleJsonFile = useCallback((file) => {
@@ -427,102 +439,151 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
   }, []);
 
   // === Paste titles handler ===
-  const fetchTitles = useCallback(async () => {
-    const lines = titleText.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) { alert('Paste at least one title.'); return; }
-    setTitleFetching(true);
-    setTitleProgress({ done: 0, total: lines.length });
-    const results = [];
-    for (let i = 0; i < lines.length; i++) {
+  // Update a single entry field
+  const updateEntry = useCallback((idx, field, value) => {
+    setManualEntries(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  }, []);
+
+  // Fetch missing info from Semantic Scholar
+  const fetchMissingInfo = useCallback(async () => {
+    const toFetch = manualEntries.filter(e => e.title.trim() && !e.fetched);
+    if (toFetch.length === 0) { alert('All entries are already fetched or have no title.'); return; }
+    setManualFetching(true);
+    setManualProgress({ done: 0, total: toFetch.length });
+    let fetchIdx = 0;
+    const updated = [...manualEntries];
+    for (let i = 0; i < updated.length; i++) {
+      if (!updated[i].title.trim() || updated[i].fetched) continue;
       try {
         const res = await fetch(S2_PROXY + '/search', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ title: lines[i] }),
+          body: JSON.stringify({ title: updated[i].title }),
         });
         const data = await res.json();
-        results.push({ ...data, originalTitle: lines[i] });
-      } catch (err) {
-        results.push({ found: false, originalTitle: lines[i], error: err.message });
+        if (data.found) {
+          updated[i] = {
+            ...updated[i],
+            author: updated[i].author || data.author || '',
+            abstract: updated[i].abstract || data.abstract || '',
+            doi: updated[i].doi || data.doi || '',
+            arxiv_id: updated[i].arxiv_id || data.arxiv_id || '',
+            venue: updated[i].venue || (data.venue ? `${data.venue} ${data.year || ''}`.trim() : ''),
+            fetched: true,
+          };
+        } else {
+          updated[i] = { ...updated[i], fetched: true };
+        }
+      } catch {
+        updated[i] = { ...updated[i], fetched: true };
       }
-      setTitleProgress({ done: i + 1, total: lines.length });
-      if (i < lines.length - 1) await new Promise(r => setTimeout(r, 200)); // small delay for UI
+      fetchIdx++;
+      setManualProgress({ done: fetchIdx, total: toFetch.length });
+      if (fetchIdx < toFetch.length) await new Promise(r => setTimeout(r, 1000));
     }
-    setTitleResults(results);
-    setTitleFetching(false);
-  }, [titleText]);
-
-  const importTitles = useCallback(() => {
-    if (!titleResults) return;
-    const papers = titleResults.filter(r => r.found).map(r => normalizePaper({
-      title: r.title, author: r.author, abstract: r.abstract,
-      conf: r.venue ? `${r.venue} ${r.year || ''}`.trim() : '',
-      doi: r.doi, arxiv_id: r.arxiv_id,
-    }));
-    if (papers.length === 0) { alert('No papers were found.'); return; }
-    onImport(papers);
-  }, [titleResults, onImport]);
+    setManualEntries(updated);
+    setManualFetching(false);
+  }, [manualEntries]);
 
   // === PDF handler ===
-  const handlePdfFiles = useCallback(async (files) => {
+  const handlePdfFiles = useCallback(async (files, currentApiKey) => {
     setPdfProcessing(true);
-    const results = [];
-    for (const file of files) {
+    // Initialize results with 'pending' status
+    const initial = files.map(f => ({
+      name: f.name, text: '', title: '', author: '', abstract: '',
+      status: 'processing', error: null, extracted: false,
+    }));
+    setPdfResults(initial);
+
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
       try {
+        // Step 1: Extract text from first 2 pages
         const arrayBuffer = await file.arrayBuffer();
         const pdfjsLib = await import('pdfjs-dist/build/pdf');
         pdfjsLib.GlobalWorkerOptions.workerSrc = '';
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
         let fullText = '';
-        for (let p = 1; p <= Math.min(pdf.numPages, 5); p++) { // first 5 pages
+        for (let p = 1; p <= Math.min(pdf.numPages, 2); p++) {
           const page = await pdf.getPage(p);
           const content = await page.getTextContent();
           fullText += content.items.map(i => i.str).join(' ') + '\n';
         }
-        results.push({ name: file.name, text: fullText.trim(), title: file.name.replace(/\.pdf$/i, ''), extracted: false });
+        const rawText = fullText.trim();
+
+        // Step 2: If API key available, extract with AI
+        if (currentApiKey) {
+          try {
+            const res = await fetch('http://localhost:3001/api/score', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', 'x-api-key': currentApiKey },
+              body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 800,
+                messages: [{
+                  role: 'user',
+                  content: `Extract the paper metadata from the text below. Return ONLY a JSON object with these fields:\n{"title": "full paper title", "authors": "comma-separated author names", "abstract": "full abstract text"}\n\nRules:\n- Extract the exact title as it appears in the paper\n- List all authors separated by commas\n- Extract the complete abstract\n- If you cannot find a field, use an empty string\n\nText from first 2 pages:\n${rawText.slice(0, 4000)}`
+                }],
+              }),
+            });
+            const data = await res.json();
+            const aiText = data.content?.[0]?.text || '';
+            const jsonStr = aiText.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+            const parsed = JSON.parse(jsonStr);
+            setPdfResults(prev => {
+              const updated = [...prev];
+              updated[fi] = { ...updated[fi], text: rawText, title: parsed.title || '', author: parsed.authors || '', abstract: parsed.abstract || '', status: 'done', extracted: true };
+              return updated;
+            });
+          } catch (aiErr) {
+            // AI failed, fall back to raw text
+            setPdfResults(prev => {
+              const updated = [...prev];
+              updated[fi] = { ...updated[fi], text: rawText, title: file.name.replace(/\.pdf$/i, ''), author: '', abstract: '', status: 'done', extracted: false };
+              return updated;
+            });
+          }
+        } else {
+          // No API key — just use filename as title
+          setPdfResults(prev => {
+            const updated = [...prev];
+            updated[fi] = { ...updated[fi], text: rawText, title: file.name.replace(/\.pdf$/i, ''), author: '', abstract: '', status: 'done', extracted: false };
+            return updated;
+          });
+        }
       } catch (err) {
-        results.push({ name: file.name, text: '', title: file.name.replace(/\.pdf$/i, ''), error: err.message, extracted: false });
+        setPdfResults(prev => {
+          const updated = [...prev];
+          updated[fi] = { ...updated[fi], status: 'failed', error: err.message };
+          return updated;
+        });
       }
     }
-    setPdfResults(results);
     setPdfProcessing(false);
   }, []);
 
-  const extractWithAI = useCallback(async (idx) => {
-    if (!apiKey) { alert('Set your API key first.'); return; }
-    const item = pdfResults[idx];
-    try {
-      const res = await fetch('http://localhost:3001/api/score', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 500,
-          messages: [{
-            role: 'user',
-            content: `Extract the paper metadata from this text. Return JSON only:\n{"title": "...", "authors": "...", "abstract": "..."}\n\nText:\n${item.text.slice(0, 3000)}`
-          }],
-        }),
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || '';
-      const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
-      const parsed = JSON.parse(jsonStr);
-      const updated = [...pdfResults];
-      updated[idx] = { ...updated[idx], title: parsed.title || item.title, author: parsed.authors || '', abstract: parsed.abstract || '', extracted: true };
-      setPdfResults(updated);
-    } catch (err) {
-      alert('AI extraction failed: ' + err.message);
-    }
-  }, [apiKey, pdfResults]);
+  const updatePdfResult = useCallback((idx, field, value) => {
+    setPdfResults(prev => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return updated;
+    });
+  }, []);
 
   const importPdfs = useCallback(() => {
-    const papers = pdfResults.map(r => normalizePaper({
-      title: r.title, author: r.author || '', abstract: r.abstract || r.text.slice(0, 1000),
-    })).filter(p => p.title);
+    const papers = pdfResults
+      .filter(r => r.status === 'done' && r.title.trim())
+      .map(r => normalizePaper({
+        title: r.title, author: r.author || '', abstract: r.abstract || '',
+        conf: pdfDefaultVenue || '',
+      }));
     if (papers.length === 0) { alert('No papers to import.'); return; }
-    onImport(papers);
-  }, [pdfResults, onImport]);
+    handleImport(papers, pdfProjectName || undefined);
+  }, [pdfResults, pdfDefaultVenue, pdfProjectName, handleImport]);
 
   // Drag-and-drop
   const handleDrop = useCallback((e) => {
@@ -531,22 +592,27 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
     const files = Array.from(e.dataTransfer.files);
     if (activeMethod === 'pdf') {
       const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
-      if (pdfs.length > 0) { setPdfFiles(pdfs); handlePdfFiles(pdfs); }
+      if (pdfs.length > 0) { setPdfFiles(pdfs); handlePdfFiles(pdfs, apiKey); }
     }
-  }, [activeMethod, handlePdfFiles]);
+  }, [activeMethod, handlePdfFiles, apiKey]);
 
   const methods = [
-    { id: 'csv', icon: '📊', title: 'Upload CSV / Excel', desc: 'Import a spreadsheet with paper titles, authors, abstracts. We\'ll auto-detect your columns.', primary: true },
+    { id: 'csv', icon: '📊', title: 'Upload CSV / Excel', desc: 'Import a spreadsheet with paper titles, authors, abstracts, venues, DOIs, and more. We\'ll auto-detect your columns.', primary: true },
     { id: 'json', icon: '{ }', title: 'Upload JSON', desc: 'Already have structured data? Drop your JSON file here.' },
-    { id: 'titles', icon: '📝', title: 'Paste Titles', desc: 'Paste paper titles and we\'ll fetch abstracts, authors, and DOIs from Semantic Scholar.' },
-    { id: 'pdf', icon: '📄', title: 'Upload PDFs', desc: 'Drop PDF files and extract metadata. Works best with an API key for AI extraction.' },
+    { id: 'titles', icon: '📝', title: 'Add Papers Manually', desc: 'Enter papers one by one with titles, venues, and DOIs. We\'ll auto-fetch missing info from Semantic Scholar.' },
+    { id: 'pdf', icon: '📄', title: 'Upload PDFs', desc: 'Upload one or multiple PDF files. We\'ll extract title, authors, and abstract from the first 2 pages of each paper using AI.' },
   ];
 
   return (
     <div className="setup-view">
+      {appendMode && (
+        <div className="append-banner">
+          Adding papers to: <strong>{appendMode}</strong>
+        </div>
+      )}
       <div className="setup-header">
         <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
-        <p className="setup-subtitle">Import your papers to begin screening</p>
+        <p className="setup-subtitle">{appendMode ? 'Choose how to add more papers' : 'Import your papers to begin screening'}</p>
       </div>
 
       {!activeMethod ? (
@@ -560,11 +626,17 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
               </button>
             ))}
           </div>
-          <div className="setup-footer">
-            <button className="setup-demo-link" onClick={onLoadDemo}>
-              or use the built-in demo dataset (1,100 SE papers)
-            </button>
-          </div>
+          {appendMode ? (
+            <div className="setup-footer">
+              <button className="setup-demo-link" onClick={onAppend}>Cancel and return to screening</button>
+            </div>
+          ) : (
+            <div className="setup-footer">
+              <button className="setup-demo-link" onClick={onLoadDemo}>
+                or use the built-in demo dataset (1,100 SE papers)
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <div className="setup-workflow">
@@ -573,38 +645,116 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
           {/* === CSV/Excel Workflow === */}
           {activeMethod === 'csv' && (
             <div className="setup-panel">
-              <h2>📊 Upload CSV / Excel</h2>
+              <h2>Upload CSV / Excel</h2>
               {!csvRows ? (
-                <div className="upload-zone" onClick={() => document.getElementById('csv-input').click()}>
-                  <input id="csv-input" type="file" accept=".csv,.xlsx,.xls,.tsv" style={{ display: 'none' }}
-                    onChange={(e) => e.target.files[0] && handleCsvFile(e.target.files[0])} />
-                  <span className="upload-zone-icon">📁</span>
-                  <span className="upload-zone-text">Click to select or drag a CSV/Excel file</span>
-                  <span className="upload-zone-hint">Supports .csv, .xlsx, .xls, .tsv</span>
-                </div>
+                <>
+                  <div className="upload-zone" onClick={() => document.getElementById('csv-input').click()}>
+                    <input id="csv-input" type="file" accept=".csv,.xlsx,.xls,.tsv" style={{ display: 'none' }}
+                      onChange={(e) => e.target.files[0] && handleCsvFile(e.target.files[0])} />
+                    <span className="upload-zone-icon">📁</span>
+                    <span className="upload-zone-text">Click to select or drag a CSV/Excel file</span>
+                    <span className="upload-zone-hint">Supports .csv, .xlsx, .xls, .tsv</span>
+                  </div>
+                </>
               ) : (
                 <>
+                  <div className="csv-project-name">
+                    <label className="manual-label">Project Name</label>
+                    <input className="manual-input" placeholder="e.g., My Literature Review"
+                      value={csvProjectName} onChange={(e) => setCsvProjectName(e.target.value)} />
+                  </div>
+
                   <div className="setup-file-info">
-                    <strong>{csvFileName}</strong> — {csvRows.length} rows, {csvHeaders.length} columns
+                    <strong>{csvFileName}</strong> — {csvRows.length} rows, {csvHeaders.length} columns detected
                   </div>
-                  <h3>Column Mapping</h3>
-                  <p className="setup-hint">We auto-detected some columns. Verify and adjust the mapping below.</p>
-                  <div className="column-mapping">
-                    {csvHeaders.map((h) => (
-                      <div key={h} className="column-mapping-row">
-                        <span className="column-header">{h}</span>
-                        <span className="column-arrow">→</span>
-                        <select className="column-select" value={csvMapping[h] || '(skip)'}
-                          onChange={(e) => setCsvMapping(prev => ({ ...prev, [h]: e.target.value }))}>
-                          {SCHEMA_FIELDS.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                        <span className="column-preview">{String(csvRows[0]?.[h] || '').slice(0, 50)}</span>
-                      </div>
-                    ))}
+
+                  <h3>Map Your Columns</h3>
+                  <p className="setup-hint">We auto-detected some columns. Use the dropdowns to map your spreadsheet columns to the fields below.</p>
+
+                  <div className="csv-mapping-grid">
+                    {[
+                      { field: 'title', label: 'Title', required: true },
+                      { field: 'author', label: 'Author' },
+                      { field: 'abstract', label: 'Abstract' },
+                      { field: 'conf', label: 'Venue / Conference' },
+                      { field: 'doi', label: 'DOI' },
+                      { field: 'arxiv_id', label: 'arXiv ID' },
+                    ].map(({ field, label, required }) => {
+                      // Find which header is currently mapped to this field
+                      const mappedHeader = Object.entries(csvMapping).find(([, v]) => v === field)?.[0] || '';
+                      return (
+                        <div key={field} className={`csv-mapping-item ${required ? 'required' : ''}`}>
+                          <label className="csv-mapping-label">
+                            {label} {required && <span className="csv-required">*required</span>}
+                          </label>
+                          <select className="csv-mapping-select" value={mappedHeader}
+                            onChange={(e) => {
+                              setCsvMapping(prev => {
+                                const next = { ...prev };
+                                // Remove old mapping for this field
+                                for (const [k, v] of Object.entries(next)) {
+                                  if (v === field) delete next[k];
+                                }
+                                // Set new mapping
+                                if (e.target.value) next[e.target.value] = field;
+                                return next;
+                              });
+                            }}>
+                            <option value="">-- not mapped --</option>
+                            {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                          </select>
+                          {mappedHeader && csvRows[0] && (
+                            <span className="csv-mapping-preview">e.g. "{String(csvRows[0][mappedHeader] || '').slice(0, 60)}"</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="setup-actions">
-                    <button className="save-btn" onClick={importCsv}>Import {csvRows.length} Papers</button>
-                    <button className="cancel-btn" onClick={() => { setCsvRows(null); setCsvHeaders([]); setCsvMapping({}); }}>Choose Different File</button>
+
+                  <div className="csv-info-note">
+                    Any field you provide (DOI, arXiv ID, venue) enables richer features during screening &mdash; PDF links, publisher links, arXiv links, and venue filtering. Only "title" is required to get started.
+                  </div>
+
+                  {/* Preview table */}
+                  <h3>Preview</h3>
+                  <div className="csv-preview-table">
+                    <div className="csv-preview-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            {['title', 'author', 'abstract', 'conf', 'doi', 'arxiv_id']
+                              .filter(f => Object.values(csvMapping).includes(f))
+                              .map(f => <th key={f}>{f === 'conf' ? 'Venue' : f.charAt(0).toUpperCase() + f.slice(1)}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {csvRows.slice(0, 5).map((row, ri) => {
+                            const reverseMap = {};
+                            for (const [header, field] of Object.entries(csvMapping)) {
+                              if (field && field !== '(skip)') reverseMap[field] = header;
+                            }
+                            return (
+                              <tr key={ri}>
+                                {['title', 'author', 'abstract', 'conf', 'doi', 'arxiv_id']
+                                  .filter(f => Object.values(csvMapping).includes(f))
+                                  .map(f => (
+                                    <td key={f}>{reverseMap[f] ? String(row[reverseMap[f]] || '').slice(0, 80) : ''}{reverseMap[f] && String(row[reverseMap[f]] || '').length > 80 ? '...' : ''}</td>
+                                  ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {csvRows.length > 5 && <div className="csv-preview-more">...and {csvRows.length - 5} more rows</div>}
+                  </div>
+
+                  <div className="setup-actions" style={{ marginTop: 16 }}>
+                    <button className="save-btn" onClick={importCsv}
+                      disabled={!Object.values(csvMapping).includes('title')}>
+                      Start Screening ({csvRows.length} papers)
+                    </button>
+                    <button className="cancel-btn" onClick={() => { setCsvRows(null); setCsvHeaders([]); setCsvMapping({}); setCsvFileName(''); }}>Choose Different File</button>
                   </div>
                 </>
               )}
@@ -691,7 +841,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
                           conf: (p.conf && p.conf !== 'not_found') ? p.conf : jsonDefaultVenue.trim(),
                         }));
                       }
-                      onImport(toImport);
+                      handleImport(toImport);
                     }}>Import {jsonPapers.length} Papers</button>
                     <button className="cancel-btn" onClick={() => { setJsonPapers(null); setJsonNoVenue(false); }}>Choose Different File</button>
                   </div>
@@ -700,108 +850,218 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
             </div>
           )}
 
-          {/* === Paste Titles Workflow === */}
+          {/* === Add Papers Manually === */}
           {activeMethod === 'titles' && (
             <div className="setup-panel">
-              <h2>📝 Paste Titles</h2>
-              <p className="setup-hint">Paste paper titles (one per line). We'll look up each title on Semantic Scholar to fetch abstracts, authors, and DOIs.</p>
-              {!titleResults ? (
-                <>
-                  <textarea className="paste-area" value={titleText} onChange={(e) => setTitleText(e.target.value)}
-                    placeholder={"Attention Is All You Need\nBERT: Pre-training of Deep Bidirectional Transformers\nCodeBERT: A Pre-Trained Model for Programming"} rows={10} />
-                  <div className="setup-hint" style={{ marginBottom: 12 }}>
-                    {titleText.split('\n').filter(l => l.trim()).length} title(s) entered
-                  </div>
-                  {titleFetching && (
-                    <div className="title-progress">
-                      <div className="title-progress-bar">
-                        <div className="title-progress-fill" style={{ width: `${(titleProgress.done / titleProgress.total) * 100}%` }} />
-                      </div>
-                      <span className="title-progress-text">Fetching {titleProgress.done}/{titleProgress.total}...</span>
+              <h2>📝 Add Papers</h2>
+              <p className="setup-hint">Enter your papers below. Fill in what you have — use "Fetch Missing Info" to auto-fill the rest from Semantic Scholar.</p>
+
+              <div className="manual-project-name">
+                <label className="manual-label">Project Name</label>
+                <input
+                  className="manual-input"
+                  value={manualProjectName}
+                  onChange={(e) => setManualProjectName(e.target.value)}
+                  placeholder="e.g., LLM Code Generation Survey"
+                />
+              </div>
+
+              <div className="manual-entries">
+                {manualEntries.map((entry, i) => (
+                  <div key={i} className={`manual-card ${entry.fetched ? 'fetched' : ''}`}>
+                    <div className="manual-card-header">
+                      <span className="manual-card-num">Paper {i + 1}</span>
+                      {entry.fetched && <span className="manual-fetched-badge">✓ Fetched</span>}
+                      {manualEntries.length > 1 && (
+                        <button className="manual-remove" onClick={() => setManualEntries(prev => prev.filter((_, j) => j !== i))}>×</button>
+                      )}
                     </div>
-                  )}
-                  <div className="setup-actions">
-                    <button className="save-btn" onClick={fetchTitles} disabled={titleFetching || !titleText.trim()}>
-                      {titleFetching ? `Fetching ${titleProgress.done}/${titleProgress.total}...` : 'Fetch Metadata'}
-                    </button>
-                  </div>
-                  <p className="setup-hint" style={{ marginTop: 8, fontSize: 11 }}>
-                    Note: Requires the proxy server (node server.js) to be running. Rate limited to ~1 req/sec.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="setup-file-info">
-                    Found {titleResults.filter(r => r.found).length} of {titleResults.length} titles
-                  </div>
-                  <div className="preview-table">
-                    <div className="preview-header">
-                      <span>Title</span><span>Status</span><span>Authors</span>
-                    </div>
-                    {titleResults.map((r, i) => (
-                      <div key={i} className={`preview-row ${r.found ? '' : 'not-found'}`}>
-                        <span>{(r.found ? r.title : r.originalTitle).slice(0, 50)}...</span>
-                        <span>{r.found ? '✓ Found' : '✗ Not found'}</span>
-                        <span>{r.found ? (r.author || '').slice(0, 30) : '—'}</span>
+                    <input
+                      className="manual-input manual-title"
+                      value={entry.title}
+                      onChange={(e) => updateEntry(i, 'title', e.target.value)}
+                      placeholder="Paper title (required)"
+                    />
+                    <div className="manual-row">
+                      <div className="manual-field">
+                        <label className="manual-label-sm">Venue</label>
+                        <input className="manual-input-sm" value={entry.venue}
+                          onChange={(e) => updateEntry(i, 'venue', e.target.value)}
+                          placeholder="e.g., ICSE 2025" />
                       </div>
-                    ))}
+                      <div className="manual-field">
+                        <label className="manual-label-sm">DOI</label>
+                        <input className="manual-input-sm" value={entry.doi}
+                          onChange={(e) => updateEntry(i, 'doi', e.target.value)}
+                          placeholder="10.1145/xxxxx" />
+                      </div>
+                      <div className="manual-field">
+                        <label className="manual-label-sm">arXiv ID</label>
+                        <input className="manual-input-sm" value={entry.arxiv_id}
+                          onChange={(e) => updateEntry(i, 'arxiv_id', e.target.value)}
+                          placeholder="2404.11671" />
+                      </div>
+                    </div>
+                    {entry.author && (
+                      <div className="manual-authors-display">
+                        <span className="manual-label-sm">Authors:</span> {entry.author}
+                      </div>
+                    )}
+                    <textarea
+                      className="manual-abstract"
+                      value={entry.abstract}
+                      onChange={(e) => updateEntry(i, 'abstract', e.target.value)}
+                      placeholder="Abstract (optional — if empty, Google Scholar link will be available during screening)"
+                      rows={2}
+                    />
                   </div>
-                  <div className="setup-actions">
-                    <button className="save-btn" onClick={importTitles}>
-                      Import {titleResults.filter(r => r.found).length} Papers
-                    </button>
-                    <button className="cancel-btn" onClick={() => setTitleResults(null)}>Edit Titles</button>
+                ))}
+              </div>
+
+              <button className="manual-add-btn" onClick={() => setManualEntries(prev => [...prev, emptyEntry()])}>
+                + Add Another Paper
+              </button>
+
+              {manualFetching && (
+                <div className="title-progress" style={{ marginTop: 16 }}>
+                  <div className="title-progress-bar">
+                    <div className="title-progress-fill" style={{ width: `${(manualProgress.done / manualProgress.total) * 100}%` }} />
                   </div>
-                </>
+                  <span className="title-progress-text">Fetching {manualProgress.done}/{manualProgress.total}...</span>
+                </div>
               )}
+
+              <div className="setup-actions" style={{ marginTop: 16 }}>
+                <button className="save-btn manual-fetch-btn" onClick={fetchMissingInfo}
+                  disabled={manualFetching || !manualEntries.some(e => e.title.trim() && !e.fetched)}>
+                  {manualFetching ? `Fetching ${manualProgress.done}/${manualProgress.total}...` : 'Fetch Missing Info'}
+                </button>
+                <button className="save-btn" onClick={() => {
+                  const valid = manualEntries.filter(e => e.title.trim());
+                  if (valid.length === 0) { alert('Add at least one paper with a title.'); return; }
+                  const papers = valid.map(e => normalizePaper({
+                    title: e.title, author: e.author, abstract: e.abstract,
+                    conf: e.venue, doi: e.doi, arxiv_id: e.arxiv_id,
+                  }));
+                  handleImport(papers, manualProjectName.trim() || undefined);
+                }}>
+                  Start Screening ({manualEntries.filter(e => e.title.trim()).length} papers)
+                </button>
+              </div>
+              <p className="setup-hint" style={{ marginTop: 8, fontSize: 11 }}>
+                "Fetch Missing Info" uses Semantic Scholar to find abstracts, authors, and DOIs. Requires the proxy server (node server.js). Rate limited to ~1 req/sec.
+              </p>
             </div>
           )}
 
           {/* === PDF Workflow === */}
           {activeMethod === 'pdf' && (
             <div className="setup-panel">
-              <h2>📄 Upload PDFs</h2>
-              {pdfResults.length === 0 ? (
+              <h2>Upload PDFs</h2>
+              <p className="setup-hint">Upload one or multiple PDF files. We'll extract title, authors, and abstract from the first 2 pages of each paper using AI.</p>
+
+              {/* Drop zone — always visible until processing starts */}
+              {pdfResults.length === 0 && (
                 <div className="upload-zone" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}
                   onClick={() => document.getElementById('pdf-input').click()}>
                   <input id="pdf-input" type="file" accept=".pdf" multiple style={{ display: 'none' }}
-                    onChange={(e) => { const files = Array.from(e.target.files); setPdfFiles(files); handlePdfFiles(files); }} />
+                    onChange={(e) => { const files = Array.from(e.target.files); setPdfFiles(files); handlePdfFiles(files, apiKey); }} />
                   <span className="upload-zone-icon">📄</span>
                   <span className="upload-zone-text">{pdfProcessing ? 'Processing...' : 'Click or drag PDF files here'}</span>
-                  <span className="upload-zone-hint">Multiple files supported. Text extracted from first 5 pages.</span>
+                  <span className="upload-zone-hint">Multiple files supported</span>
                 </div>
-              ) : (
+              )}
+
+              {/* Config fields — below drop zone */}
+              {pdfResults.length === 0 && (
+                <div className="pdf-config">
+                  <div className="pdf-config-row">
+                    <div className="pdf-config-field">
+                      <label className="manual-label">Project Name</label>
+                      <input className="manual-input" placeholder="e.g., My Literature Review"
+                        value={pdfProjectName} onChange={(e) => setPdfProjectName(e.target.value)} />
+                    </div>
+                    <div className="pdf-config-field">
+                      <label className="manual-label">Default Venue <span style={{ fontWeight: 400, color: '#b2bec3' }}>(optional)</span></label>
+                      <input className="manual-input" placeholder="e.g., ICSE 2025"
+                        value={pdfDefaultVenue} onChange={(e) => setPdfDefaultVenue(e.target.value)} />
+                      <span className="pdf-config-note">If left empty, all papers will appear under "All" with no venue filter.</span>
+                    </div>
+                  </div>
+                  <div className="pdf-config-field" style={{ marginTop: 12 }}>
+                    <label className="manual-label">Claude API Key</label>
+                    {apiKey ? (
+                      <div className="pdf-key-saved">Using saved key &#10003;</div>
+                    ) : (
+                      <>
+                        <input className="manual-input" type="password" placeholder="sk-ant-..."
+                          onKeyDown={(e) => { if (e.key === 'Enter' && e.target.value.trim()) setApiKey(e.target.value.trim()); }}
+                          onBlur={(e) => { if (e.target.value.trim()) setApiKey(e.target.value.trim()); }} />
+                        <span className="pdf-config-note">Without API key, only raw text extraction is available. With API key, we intelligently extract title, authors, and abstract.</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Results — file list with editable fields */}
+              {pdfResults.length > 0 && (
                 <>
                   <div className="setup-file-info">
-                    {pdfResults.length} PDF(s) processed
+                    {pdfResults.filter(r => r.status === 'done').length} / {pdfResults.length} PDF(s) processed
+                    {pdfProcessing && <span className="pdf-processing-badge">Processing...</span>}
                   </div>
-                  <div className="preview-table">
-                    <div className="preview-header">
-                      <span>File</span><span>Title</span><span>Abstract</span><span>AI</span>
-                    </div>
+
+                  <div className="pdf-results">
                     {pdfResults.map((r, i) => (
-                      <div key={i} className="preview-row">
-                        <span>{r.name.slice(0, 20)}</span>
-                        <span>{r.title.slice(0, 30)}</span>
-                        <span>{(r.abstract || r.text || '').slice(0, 30)}...</span>
-                        <span>
-                          {r.extracted ? '✓' : (
-                            <button className="setup-mini-btn" onClick={() => extractWithAI(i)}
-                              disabled={!apiKey}>Extract</button>
-                          )}
-                        </span>
+                      <div key={i} className={`pdf-result-card ${r.status}`}>
+                        <div className="pdf-result-header">
+                          <span className="pdf-result-filename">{r.name}</span>
+                          <span className={`pdf-result-status ${r.status}`}>
+                            {r.status === 'processing' && 'Processing...'}
+                            {r.status === 'done' && (r.extracted ? 'AI Extracted' : 'Text Only')}
+                            {r.status === 'failed' && 'Failed'}
+                          </span>
+                        </div>
+
+                        {r.status === 'failed' && (
+                          <div className="pdf-result-error">Error: {r.error}</div>
+                        )}
+
+                        {r.status === 'processing' && (
+                          <div className="pdf-result-loading">
+                            <div className="pdf-loading-bar"><div className="pdf-loading-fill" /></div>
+                          </div>
+                        )}
+
+                        {r.status === 'done' && (
+                          <div className="pdf-result-fields">
+                            <div className="pdf-result-field">
+                              <label className="manual-label-sm">Title</label>
+                              <input className="manual-input" value={r.title}
+                                onChange={(e) => updatePdfResult(i, 'title', e.target.value)} />
+                            </div>
+                            <div className="pdf-result-field">
+                              <label className="manual-label-sm">Authors</label>
+                              <input className="manual-input" value={r.author}
+                                onChange={(e) => updatePdfResult(i, 'author', e.target.value)} />
+                            </div>
+                            <div className="pdf-result-field">
+                              <label className="manual-label-sm">Abstract</label>
+                              <textarea className="manual-abstract" value={r.abstract}
+                                onChange={(e) => updatePdfResult(i, 'abstract', e.target.value)} rows={3} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                  {!apiKey && (
-                    <div className="setup-hint" style={{ marginTop: 8 }}>
-                      <strong>Tip:</strong> Set an API key to use AI extraction for better results.
-                      <input type="password" placeholder="sk-ant-..." className="setup-inline-key"
-                        onKeyDown={(e) => { if (e.key === 'Enter') setApiKey(e.target.value.trim()); }} />
-                    </div>
-                  )}
-                  <div className="setup-actions">
-                    <button className="save-btn" onClick={importPdfs}>Import {pdfResults.length} Papers</button>
+
+                  <div className="setup-actions" style={{ marginTop: 16 }}>
+                    <button className="save-btn" onClick={importPdfs}
+                      disabled={pdfProcessing || pdfResults.filter(r => r.status === 'done' && r.title.trim()).length === 0}>
+                      Start Screening ({pdfResults.filter(r => r.status === 'done' && r.title.trim()).length} papers)
+                    </button>
                     <button className="cancel-btn" onClick={() => { setPdfResults([]); setPdfFiles([]); }}>Start Over</button>
                   </div>
                 </>
@@ -904,6 +1164,8 @@ function App() {
   });
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [renamingProject, setRenamingProject] = useState(false);
+  const [appendMode, setAppendMode] = useState(null); // null or project name string
+  const [appendResult, setAppendResult] = useState(null); // { added, skipped, total }
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
 
@@ -926,12 +1188,12 @@ function App() {
   }, []);
 
   // Import papers from Setup page
-  const importPapers = useCallback((importedPapers) => {
+  const importPapers = useCallback((importedPapers, customName) => {
     setPapers(importedPapers);
     setLoading(false);
     setAppView('screener');
     setIsDemo(false);
-    const name = 'Untitled Project';
+    const name = customName || 'Untitled Project';
     setProjectName(name);
     localStorage.setItem('slr-screener-has-data', '1');
     localStorage.setItem('slr-screener-is-demo', '0');
@@ -943,6 +1205,32 @@ function App() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SCORES_KEY);
   }, []);
+
+  // Append papers to existing project (dedup by title)
+  const appendPapers = useCallback((newPapers) => {
+    if (!newPapers || newPapers.length === 0) {
+      // Called with no args = cancel
+      setAppendMode(null);
+      setAppView('screener');
+      return;
+    }
+    const existingTitles = new Set(papers.map(p => (p.title || '').toLowerCase().trim()));
+    const unique = [];
+    let skipped = 0;
+    for (const p of newPapers) {
+      const key = (p.title || '').toLowerCase().trim();
+      if (!key || existingTitles.has(key)) {
+        skipped++;
+      } else {
+        unique.push(p);
+        existingTitles.add(key);
+      }
+    }
+    setPapers(prev => [...prev, ...unique]);
+    setAppendMode(null);
+    setAppView('screener');
+    setAppendResult({ added: unique.length, skipped, total: papers.length + unique.length });
+  }, [papers]);
 
   // On mount: if screener mode, load default data; otherwise stay on setup
   useEffect(() => {
@@ -1453,7 +1741,8 @@ function App() {
 
   // ===== SETUP VIEW =====
   if (appView === 'setup') {
-    return <SetupView onImport={importPapers} onLoadDemo={loadData} apiKey={apiKey} setApiKey={setApiKey} />;
+    return <SetupView onImport={importPapers} onLoadDemo={loadData} apiKey={apiKey} setApiKey={setApiKey}
+      appendMode={appendMode} onAppend={appendPapers} />;
   }
 
   if (loading) {
@@ -1469,6 +1758,19 @@ function App() {
   return (
     <div className="app">
       {hlStyleTag}
+
+      {/* Append result notification */}
+      {appendResult && (
+        <div className="append-result-banner">
+          <span>
+            Added <strong>{appendResult.added}</strong> paper{appendResult.added !== 1 ? 's' : ''}.
+            {appendResult.skipped > 0 && <> <strong>{appendResult.skipped}</strong> duplicate{appendResult.skipped !== 1 ? 's' : ''} skipped.</>}
+            {' '}Total now: <strong>{appendResult.total}</strong>.
+          </span>
+          <button onClick={() => setAppendResult(null)}>&times;</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="header">
         <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
@@ -1885,6 +2187,12 @@ function App() {
               {projectMenuOpen && (
                 <div className="project-menu-dropdown">
                   <button onClick={() => { setProjectMenuOpen(false); setRenamingProject(true); }}>Rename</button>
+                  <button onClick={() => {
+                    setProjectMenuOpen(false);
+                    setProjectSidebarOpen(false);
+                    setAppendMode(projectName);
+                    setAppView('setup');
+                  }}>Add Papers</button>
                   <div className="project-menu-sep" />
                   <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
                   <button onClick={() => { setProjectMenuOpen(false); exportProjectCSV(); }}>Export CSV</button>
