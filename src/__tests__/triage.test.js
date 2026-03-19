@@ -1,0 +1,182 @@
+import React from 'react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import App from '../App';
+import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+
+jest.mock('xlsx', () => ({
+  read: jest.fn(),
+  utils: { sheet_to_json: jest.fn() },
+}));
+
+beforeEach(() => {
+  clearStorage();
+  setupFetchMock();
+  jest.spyOn(console, 'log').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe('Triage', () => {
+  test('Pressing Y marks paper as Yes and advances', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(document, { key: 'y' });
+
+    // Should advance to paper 2
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    // Decision should be saved in localStorage
+    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
+    expect(decisions['0']).toBe('Yes');
+  });
+
+  test('Pressing N marks paper as No and advances', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(document, { key: 'n' });
+
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
+    expect(decisions['0']).toBe('No');
+  });
+
+  test('Pressing M marks paper as Maybe and advances', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(document, { key: 'm' });
+
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
+    expect(decisions['0']).toBe('Maybe');
+  });
+
+  test('Pressing U undoes last decision', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Make a decision (advances to paper 2)
+    fireEvent.keyDown(document, { key: 'y' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    // Undo (should go back to paper 1 and remove the decision)
+    fireEvent.keyDown(document, { key: 'u' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
+    expect(decisions['0']).toBeUndefined();
+  });
+
+  test('Changing decision on already-decided paper works without advancing', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
+    });
+
+    // Make initial decision (advances)
+    fireEvent.keyDown(document, { key: 'y' });
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[1].title);
+    });
+
+    // Go back to paper 1
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
+    });
+
+    // Change decision to No — should NOT advance since paper already has a decision
+    fireEvent.keyDown(document, { key: 'n' });
+    await waitFor(() => {
+      // Should still be on paper 1
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
+    });
+
+    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
+    expect(decisions['0']).toBe('No');
+  });
+
+  test('Decision badge shows on decided papers', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
+    });
+
+    // Make a Yes decision, then go back to see the badge
+    fireEvent.keyDown(document, { key: 'y' });
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[1].title);
+    });
+
+    // Go back
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
+    });
+
+    // Check for decision badge
+    const badge = document.querySelector('.decision-badge');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toBe('Yes');
+    expect(badge).toHaveClass('yes');
+  });
+
+  test('Decision counts update correctly in progress bar', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Initial state
+    expect(screen.getByText('Yes: 0')).toBeInTheDocument();
+    expect(screen.getByText('No: 0')).toBeInTheDocument();
+    expect(screen.getByText('Maybe: 0')).toBeInTheDocument();
+    expect(screen.getByText('Remaining: 5')).toBeInTheDocument();
+
+    // Make Yes decision
+    fireEvent.keyDown(document, { key: 'y' });
+    await waitFor(() => {
+      expect(screen.getByText('Yes: 1')).toBeInTheDocument();
+      expect(screen.getByText('Remaining: 4')).toBeInTheDocument();
+    });
+
+    // Make No decision on paper 2
+    fireEvent.keyDown(document, { key: 'n' });
+    await waitFor(() => {
+      expect(screen.getByText('No: 1')).toBeInTheDocument();
+      expect(screen.getByText('Remaining: 3')).toBeInTheDocument();
+    });
+
+    // Make Maybe decision on paper 3
+    fireEvent.keyDown(document, { key: 'm' });
+    await waitFor(() => {
+      expect(screen.getByText('Maybe: 1')).toBeInTheDocument();
+      expect(screen.getByText('Remaining: 2')).toBeInTheDocument();
+    });
+  });
+});

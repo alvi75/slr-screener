@@ -1,0 +1,144 @@
+import React from 'react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import App from '../App';
+import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+
+// Mock xlsx to avoid issues in test environment
+jest.mock('xlsx', () => ({
+  read: jest.fn(),
+  utils: { sheet_to_json: jest.fn() },
+}));
+
+beforeEach(() => {
+  clearStorage();
+  setupFetchMock();
+  // Suppress console.log noise from the app
+  jest.spyOn(console, 'log').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe('Data & Navigation', () => {
+  test('App loads and displays first paper from demo data', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+    expect(screen.getByText(MOCK_PAPERS[0].author)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 5/)).toBeInTheDocument();
+  });
+
+  test('Right arrow key advances to next paper', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/2 of 5/)).toBeInTheDocument();
+  });
+
+  test('Left arrow key goes to previous paper', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Go forward first
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    // Go back
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+  });
+
+  test('Previous/Next buttons navigate correctly', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Previous should be disabled on first paper
+    const prevBtn = screen.getByText(/Previous/);
+    expect(prevBtn).toBeDisabled();
+
+    // Click Next
+    const nextBtn = screen.getByText(/Next/);
+    fireEvent.click(nextBtn);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
+    });
+
+    // Click Previous
+    fireEvent.click(prevBtn);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+  });
+
+  test('Paper position saves to localStorage and restores on reload', async () => {
+    const { unmount } = render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Navigate to paper 3
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument();
+    });
+
+    // Verify index saved
+    expect(localStorage.getItem('slr-screener-index')).toBe('2');
+
+    // Unmount and remount
+    unmount();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument();
+    });
+  });
+
+  test('Venue filter shows only papers from selected venue', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Click ICSE 2025 filter (there should be 2 ICSE papers)
+    const icseBtn = screen.getByRole('button', { name: 'ICSE 2025' });
+    fireEvent.click(icseBtn);
+
+    await waitFor(() => {
+      // Should show "1 / 2" in navigation (2 ICSE papers)
+      expect(screen.getByText(/1 \/ 2/)).toBeInTheDocument();
+    });
+
+    // Navigate to second ICSE paper
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument(); // second ICSE paper
+    });
+
+    // Click All to reset
+    const allBtn = screen.getByRole('button', { name: 'All' });
+    fireEvent.click(allBtn);
+    await waitFor(() => {
+      expect(screen.getByText(/\/ 5/)).toBeInTheDocument();
+    });
+  });
+});
