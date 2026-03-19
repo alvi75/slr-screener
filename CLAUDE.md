@@ -8,7 +8,9 @@ A general-purpose Systematic Literature Review (SLR) paper screening platform. B
 
 - **React** (Create React App) — single-page app, all logic in `src/App.js`
 - **Pure CSS** — no UI framework, custom styles in `src/App.css`
-- **localStorage** — persistence for decisions, scores, edits, API key, highlights, filters, project state
+- **Firebase Auth** — Google sign-in and email/password authentication
+- **Cloud Firestore** — cloud persistence for projects, decisions, AI scores, and settings
+- **localStorage** — local cache layer, dual-write with Firestore for instant reads
 - **Express** — lightweight proxy server (`server.js` on port 3001) for Claude API and Semantic Scholar API calls
 - **SheetJS (`xlsx`)** — CSV/Excel parsing for spreadsheet imports
 - **pdfjs-dist** — client-side PDF text extraction
@@ -38,6 +40,61 @@ Default demo dataset: `public/enriched_papers_2025.json` — 1100 papers, 1092 a
 ```
 
 All fields except `title` are optional. Missing fields are normalized to `"not_found"` by `normalizePaper()`.
+
+## Authentication
+
+Firebase Auth with two sign-in methods:
+
+- **Google sign-in** — one-click OAuth, bypasses email verification
+- **Email/password** — sign-up with password strength validation (8+ chars, uppercase, lowercase, number, special character), real-time strength indicator (Weak/Medium/Strong), show/hide password toggle
+- **Email verification flow** — after sign-up, shows "Check Your Email" screen with:
+  - Auto-polling every 5 seconds (calls `reloadUser()` to check verification status)
+  - Countdown timer (60s) before resend is available
+  - "Use Google sign-in instead" button
+  - "Sign out and use a different account" link
+- **Auth gating** — login required to access the app; unauthenticated users see LoginPage
+- **Header integration** — user avatar (photo or initial placeholder) and Sign Out button
+- **Auth context** (`src/contexts/AuthContext.js`) — provides `currentUser`, `signup`, `login`, `logout`, `googleSignIn`, `resendVerification`, `reloadUser`, `loading`
+
+## Database
+
+Dual-write architecture: localStorage (instant cache) + Cloud Firestore (source of truth).
+
+### Firestore Structure
+
+```
+users/{userId}/
+  projects/{projectId}           # Project metadata and settings
+    decisions/{paperId}          # Triage decisions (Yes/No/Maybe)
+
+projects/{projectId}/
+  aiScores/{paperId}             # Shared AI scores (not per-user)
+```
+
+### Sync Behavior
+
+- **On app load** — fetches projects, decisions, and AI scores from Firestore; merges with localStorage (Firestore wins on conflicts)
+- **On triage decision** — writes to both localStorage and Firestore
+- **On settings change** — syncs scoring model, project name, highlight categories, research goal to Firestore
+- **Background sync** — fire-and-forget pattern, never blocks the UI
+- **Sync indicator in header** — cloud icon: ✓ synced (green), ↻ syncing (blue), ✗ error (red, auto-clears after 10s)
+- **Graceful fallback** — if Firestore is unavailable, app continues with localStorage only
+
+### Service Layer (`src/services/firestore.js`)
+
+- **Project CRUD**: `saveProject`, `getProjects`, `getProject`, `deleteProject`
+- **Decisions**: `saveDecision`, `deleteDecision`, `getDecisions`, `saveAllDecisions`
+- **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`
+- **Sync helpers**: `syncDecisionsToFirestore`, `syncAIScoresToFirestore`, `syncProjectToFirestore` — fire-and-forget wrappers that log warnings but never throw
+- Batch writes chunked at 500 (Firestore limit); all writes include `serverTimestamp()`
+
+## Firebase Config
+
+- **Project**: slr-screener
+- **Plan**: Spark (free tier)
+- **Firestore location**: nam5 (US)
+- **Auth providers**: Google + Email/Password
+- **Config file**: `src/firebase.js`
 
 ## Features
 
@@ -146,7 +203,22 @@ slr-screener/
 │   └── index.html
 ├── src/
 │   ├── App.js                      # All application logic (single component)
-│   ├── App.css                     # All styles (~1600 lines)
+│   ├── App.css                     # All styles
+│   ├── LoginPage.js                # Login/sign-up page with password validation
+│   ├── firebase.js                 # Firebase configuration and initialization
+│   ├── contexts/
+│   │   └── AuthContext.js          # Auth context provider (Google + email/password)
+│   ├── services/
+│   │   └── firestore.js            # Firestore service layer (CRUD, sync helpers)
+│   ├── testHelpers.js              # Shared test utilities (mock data, fetch mock)
+│   ├── __tests__/
+│   │   ├── dataAndNavigation.test.js  # Navigation and data loading (12 tests)
+│   │   ├── triage.test.js             # Triage decisions and undo (7 tests)
+│   │   ├── highlights.test.js         # Keyword highlighting (3 tests)
+│   │   ├── export.test.js             # CSV export and decision log (3 tests)
+│   │   ├── project.test.js            # Project management sidebar (5 tests)
+│   │   ├── auth.test.js               # Auth flow and verification (19 tests)
+│   │   └── firestore.test.js          # Firestore service layer (19 tests)
 │   ├── index.js                    # Entry point
 │   └── index.css                   # Base/reset styles
 ├── server.js                       # Express proxy (Claude API + Semantic Scholar)
@@ -154,12 +226,33 @@ slr-screener/
 └── CLAUDE.md
 ```
 
+## Testing
+
+68 tests across 7 suites:
+
+```bash
+npm test         # Run all tests
+```
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| dataAndNavigation | 12 | Paper loading, navigation, arrow keys, progress bar |
+| triage | 7 | Y/N/M decisions, undo, re-decision, badges, counts |
+| highlights | 3 | Toggle on/off, whole-word matching, hover tooltips |
+| export | 3 | CSV format, decision log, search filter |
+| project | 5 | Sidebar, new project, switch back, screened count, menu |
+| auth | 19 | Login/sign-up forms, password validation, verification flow, Google sign-in |
+| firestore | 19 | CRUD operations, batch writes, sync helpers, error handling |
+
+All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests use `jest.useFakeTimers()` for countdown/polling.
+
 ## Running
 
 ```bash
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
+npm test         # Run test suite (68 tests)
 ```
 
 The proxy server (`server.js`) must be running for AI scoring and Semantic Scholar lookups. It proxies:
