@@ -565,15 +565,15 @@ function App() {
       return;
     }
 
-    // Find unscored papers that have abstracts
+    // Find papers not scored by the current model
     const unscored = [];
     for (let i = 0; i < papers.length; i++) {
-      if (aiScores[i]) continue;
+      if (aiScores[i]?.model === scoringModel) continue;
       const abs = getAbstract(i);
       if (!abs || abs === 'not_found') continue;
       unscored.push(i);
     }
-    if (unscored.length === 0) { alert('All papers with abstracts have been scored.'); return; }
+    if (unscored.length === 0) { alert(`All papers with abstracts have been scored by ${modelName(scoringModel)}.`); return; }
 
     scoringAbortRef.current = false;
     const total = unscored.length;
@@ -669,16 +669,16 @@ function App() {
       .sort((a, b) => b.score - a.score);
   }, [aiScores, papers]);
 
-  // Count unscored papers with abstracts
+  // Count papers not scored by the currently selected model
   const unscoredCount = useMemo(() => {
     let count = 0;
     for (let i = 0; i < papers.length; i++) {
-      if (aiScores[i]) continue;
+      if (aiScores[i]?.model === scoringModel) continue;
       const abs = abstractEdits[i] || papers[i]?.abstract || '';
       if (abs && abs !== 'not_found') count++;
     }
     return count;
-  }, [papers, aiScores, abstractEdits]);
+  }, [papers, aiScores, abstractEdits, scoringModel]);
 
   // Progress stats
   const totalPapers = papers.length;
@@ -801,19 +801,24 @@ function App() {
                   {decisions[globalIndex]}
                 </span>
               )}
-              {aiScores[globalIndex] ? (
-                <span className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'}`}
-                  title={`${aiScores[globalIndex].suggestion} · ${modelName(aiScores[globalIndex].model)}`}>
-                  AI: {aiScores[globalIndex].score}
-                </span>
-              ) : apiKey && (
-                <button
-                  className="score-one-btn"
+              {scoringOne === globalIndex ? (
+                <span className="ai-score-badge score-mid">Scoring...</span>
+              ) : aiScores[globalIndex] ? (
+                <span
+                  className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'} clickable`}
+                  title={`Click to rescore with ${modelName(scoringModel)}`}
                   onClick={() => scoreOnePaper(globalIndex)}
-                  disabled={scoringOne != null}
                 >
-                  {scoringOne === globalIndex ? 'Scoring...' : 'Score'}
-                </button>
+                  AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
+                </span>
+              ) : (
+                <span
+                  className="ai-score-badge score-unscored clickable"
+                  title={apiKey ? 'Click to score this paper' : 'Set API key first (use Score Papers button)'}
+                  onClick={() => scoreOnePaper(globalIndex)}
+                >
+                  AI: ?
+                </span>
               )}
             </div>
             <div className="paper-title">{paper.title}</div>
@@ -866,6 +871,11 @@ function App() {
                 </div>
               ) : (
                 <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract) : cleanAbstractText(abstract)}</div>
+              )}
+              {aiScores[globalIndex]?.reason && (
+                <div className="ai-reason">
+                  <strong>AI ({modelName(aiScores[globalIndex].model)}):</strong> {aiScores[globalIndex].reason}
+                </div>
               )}
             </div>
           </div>
@@ -1021,6 +1031,7 @@ function App() {
               <span className={`sidebar-decision ${aiScores[globalIndex].suggestion}`}>
                 {aiScores[globalIndex].suggestion.charAt(0).toUpperCase() + aiScores[globalIndex].suggestion.slice(1)}
               </span>
+              {aiScores[globalIndex].model && <span className="ai-via-model">via {modelName(aiScores[globalIndex].model)}</span>}
             </div>
             <div className="ai-insight-reason">{aiScores[globalIndex].reason}</div>
           </div>
@@ -1046,6 +1057,7 @@ function App() {
                 <span className={`sidebar-decision ${item.suggestion}`}>
                   {item.suggestion.charAt(0).toUpperCase() + item.suggestion.slice(1)}
                 </span>
+                {item.model && <span className="ai-via-model">via {modelName(item.model)}</span>}
               </div>
               <div className="sidebar-item-title">
                 {item.paper.title.length > 80 ? item.paper.title.slice(0, 80) + '...' : item.paper.title}

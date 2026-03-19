@@ -598,22 +598,18 @@
   border-radius: 12px;
   margin-left: auto;
 }
-/* Per-paper score button */
-.score-one-btn {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border: 1.5px solid #a29bfe;
-  border-radius: 12px;
-  background: white;
-  color: #6c5ce7;
-  cursor: pointer;
-  margin-left: auto;
-  transition: all 0.15s;
+.ai-score-badge.clickable { cursor: pointer; transition: opacity 0.15s; }
+.ai-score-badge.clickable:hover { opacity: 0.7; }
+.score-unscored { background: #dfe6e9; color: #636e72; }
+.rescore-icon { display: none; }
+.ai-score-badge.clickable:hover .rescore-icon { display: inline; }
+
+/* Model label in AI Insights list */
+.ai-via-model {
+  font-size: 10px;
+  color: #b2bec3;
+  font-weight: 500;
 }
-.score-one-btn:hover { background: #6c5ce7; color: white; }
-.score-one-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.score-one-btn:disabled:hover { background: white; color: #6c5ce7; }
 
 .score-high { background: #00b89422; color: #00b894; }
 .score-mid { background: #fdcb6e44; color: #e17055; }
