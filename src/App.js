@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { useAuth } from './contexts/AuthContext';
+import LoginPage from './LoginPage';
 import './App.css';
 
 // ===== HIGHLIGHT SYSTEM =====
@@ -1075,6 +1077,20 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
 }
 
 function App() {
+  const { currentUser, logout, loading: authLoading } = useAuth();
+
+  // Auth gate: show login page if not logged in
+  if (authLoading) {
+    return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading...</div>;
+  }
+  if (!currentUser) {
+    return <LoginPage />;
+  }
+
+  return <AppMain currentUser={currentUser} logout={logout} />;
+}
+
+function AppMain({ currentUser, logout }) {
   // App view: 'setup' or 'screener'
   // Always start in screener — first-time users get the demo auto-loaded
   const [appView, setAppView] = useState('screener');
@@ -1845,6 +1861,14 @@ function App() {
               AI Insights
             </button>
           )}
+          <div className="header-user">
+            {currentUser.photoURL ? (
+              <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="header-avatar-placeholder">{(currentUser.email || '?')[0].toUpperCase()}</span>
+            )}
+            <button className="header-btn btn-signout" onClick={logout}>Sign Out</button>
+          </div>
         </div>
       </div>
 

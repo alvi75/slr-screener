@@ -4,6 +4,15 @@ import '@testing-library/jest-dom';
 import App from '../App';
 import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
 
+// Mock auth so the app renders the screener instead of LoginPage
+jest.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    currentUser: { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null },
+    logout: jest.fn(),
+    loading: false,
+  }),
+}));
+
 // Mock xlsx to avoid issues in test environment
 jest.mock('xlsx', () => ({
   read: jest.fn(),

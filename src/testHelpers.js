@@ -43,6 +43,14 @@ export const MOCK_JSON_RESPONSE = {
   papers: MOCK_PAPERS,
 };
 
+/** Mock authenticated user */
+export const MOCK_USER = {
+  uid: 'test-uid-123',
+  email: 'test@example.com',
+  displayName: 'Test User',
+  photoURL: null,
+};
+
 /**
  * Set up global fetch mock to return demo data for the enriched_papers JSON URL.
  * Returns a jest.fn() for fetch so tests can inspect calls.
@@ -68,4 +76,20 @@ export function setupFetchMock() {
 export function clearStorage() {
   const keys = Object.keys(localStorage).filter(k => k.startsWith('slr-screener'));
   keys.forEach(k => localStorage.removeItem(k));
+}
+
+/**
+ * Create a standard mock for the AuthContext module.
+ * Call this BEFORE jest.mock() in each test file, or use the returned values.
+ */
+export function createAuthMock(overrides = {}) {
+  return {
+    currentUser: MOCK_USER,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    googleSignIn: jest.fn(),
+    loading: false,
+    ...overrides,
+  };
 }

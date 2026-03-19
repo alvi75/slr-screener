@@ -4,6 +4,14 @@ import '@testing-library/jest-dom';
 import App from '../App';
 import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
 
+jest.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    currentUser: { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null },
+    logout: jest.fn(),
+    loading: false,
+  }),
+}));
+
 jest.mock('xlsx', () => ({
   read: jest.fn(),
   utils: { sheet_to_json: jest.fn() },
