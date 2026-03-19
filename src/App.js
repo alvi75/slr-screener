@@ -628,7 +628,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
           </div>
           {appendMode ? (
             <div className="setup-footer">
-              <button className="setup-demo-link" onClick={onAppend}>Cancel and return to screening</button>
+              <button className="setup-demo-link" onClick={() => onAppend(null)}>Cancel and return to screening</button>
             </div>
           ) : (
             <div className="setup-footer">
@@ -1076,10 +1076,8 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
 
 function App() {
   // App view: 'setup' or 'screener'
-  const [appView, setAppView] = useState(() => {
-    try { return localStorage.getItem('slr-screener-has-data') ? 'screener' : 'setup'; }
-    catch { return 'setup'; }
-  });
+  // Always start in screener — first-time users get the demo auto-loaded
+  const [appView, setAppView] = useState('screener');
 
   // Initialize state from localStorage synchronously to avoid race conditions
   const [papers, setPapers] = useState([]);
@@ -1171,8 +1169,10 @@ function App() {
 
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
-  // Load data from default JSON (used by "Use demo data" and "Reload Data")
-  const loadData = useCallback(() => {
+  const PAPERS_KEY = 'slr-screener-papers';
+
+  // Load demo data from JSON file
+  const loadDemoData = useCallback(() => {
     fetch(process.env.PUBLIC_URL + '/enriched_papers_2025.json?t=' + Date.now())
       .then((r) => r.json())
       .then((data) => {
@@ -1184,8 +1184,12 @@ function App() {
         localStorage.setItem('slr-screener-has-data', '1');
         localStorage.setItem('slr-screener-is-demo', '1');
         localStorage.setItem('slr-screener-project-name', 'Model Sizes in SE Research 2025');
+        // Demo papers are not stored in localStorage (too large), re-fetched on each load
       });
   }, []);
+
+  // Alias for Reload Data button and demo link in setup
+  const loadData = loadDemoData;
 
   // Import papers from Setup page
   const importPapers = useCallback((importedPapers, customName) => {
@@ -1198,6 +1202,8 @@ function App() {
     localStorage.setItem('slr-screener-has-data', '1');
     localStorage.setItem('slr-screener-is-demo', '0');
     localStorage.setItem('slr-screener-project-name', name);
+    // Persist imported papers so they survive page refresh
+    try { localStorage.setItem(PAPERS_KEY, JSON.stringify(importedPapers)); } catch (e) { console.warn('Could not save papers to localStorage:', e.message); }
     setCurrentIndex(0);
     setDecisions({});
     setAbstractEdits({});
@@ -1208,7 +1214,7 @@ function App() {
 
   // Append papers to existing project (dedup by title)
   const appendPapers = useCallback((newPapers) => {
-    if (!newPapers || newPapers.length === 0) {
+    if (!Array.isArray(newPapers) || newPapers.length === 0) {
       // Called with no args = cancel
       setAppendMode(null);
       setAppView('screener');
@@ -1226,15 +1232,37 @@ function App() {
         existingTitles.add(key);
       }
     }
-    setPapers(prev => [...prev, ...unique]);
+    const merged = [...papers, ...unique];
+    setPapers(merged);
     setAppendMode(null);
     setAppView('screener');
-    setAppendResult({ added: unique.length, skipped, total: papers.length + unique.length });
-  }, [papers]);
+    setAppendResult({ added: unique.length, skipped, total: merged.length });
+    // Persist updated papers (skip for demo — too large)
+    if (!isDemo) {
+      try { localStorage.setItem(PAPERS_KEY, JSON.stringify(merged)); } catch (e) { console.warn('Could not save papers:', e.message); }
+    }
+  }, [papers, isDemo]);
 
-  // On mount: if screener mode, load default data; otherwise stay on setup
+  // On mount: restore saved project or auto-load demo for first-time users.
   useEffect(() => {
-    if (appView === 'screener') loadData();
+    const savedIsDemo = localStorage.getItem('slr-screener-is-demo');
+    // If user has a non-demo project with saved papers, restore them
+    if (savedIsDemo === '0') {
+      try {
+        const saved = localStorage.getItem(PAPERS_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPapers(parsed);
+            setLoading(false);
+            setAppView('screener');
+            return;
+          }
+        }
+      } catch (e) { /* fall through to demo */ }
+    }
+    // First visit or demo project — load demo data
+    loadDemoData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save decisions
@@ -1776,7 +1804,7 @@ function App() {
         <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
         <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
-          <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
+          {isDemo && <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>}
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
             onClick={scoringProgress ? stopScoring : startScoring}
@@ -2213,7 +2241,11 @@ function App() {
                         localStorage.removeItem('slr-screener-has-data');
                         localStorage.removeItem(STORAGE_KEY);
                         localStorage.removeItem(SCORES_KEY);
-                        setAppView('setup');
+                        localStorage.removeItem(PAPERS_KEY);
+                        localStorage.removeItem('slr-screener-is-demo');
+                        localStorage.removeItem('slr-screener-project-name');
+                        // Load demo as fallback after delete
+                        loadDemoData();
                       }
                     }}>Delete</button>
                   )}
