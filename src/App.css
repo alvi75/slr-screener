@@ -283,12 +283,13 @@
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.05s;
   z-index: 20;
   line-height: 1.4;
 }
 .hl-tip:hover::after {
   opacity: 1;
+  transition-delay: 0s;
 }
 
 /* Highlights toggle button */
