@@ -89,7 +89,7 @@ projects/{projectId}/
 - **Project CRUD**: `saveProject`, `getProjects`, `getProject`, `deleteProject`
 - **Decisions**: `saveDecision`, `deleteDecision`, `getDecisions`, `saveAllDecisions`
 - **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`
-- **Sharing**: `saveProjectMeta`, `getProjectMeta`, `addCollaborator`, `removeCollaborator`, `updateCollaboratorRole`, `getCollaborators`, `acceptInvite`, `getSharedProjects`
+- **Sharing**: `saveProjectMeta`, `getProjectMeta`, `addCollaborator`, `removeCollaborator`, `updateCollaboratorRole`, `getCollaborators`, `acceptInvite`, `declineInvite`, `getSharedProjects`
 - **Final Decisions**: `saveFinalDecision`, `getFinalDecisions`, `deleteFinalDecision`
 - **Sync helpers**: `syncDecisionsToFirestore`, `syncAIScoresToFirestore`, `syncProjectToFirestore` — fire-and-forget wrappers that log warnings but never throw
 - Batch writes chunked at 500 (Firestore limit); all writes include `serverTimestamp()`
@@ -205,9 +205,12 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 - **Share modal** — invite collaborators by email with role selection (Annotator or Viewer)
 - **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
-- **Collaborator list** — shows email, role (editable), status (pending/accepted), remove button
+- **Collaborator list** — shows email, role (editable), status badge (pending yellow, accepted green, declined red), remove button
 - **Auto-discovery** — on login, collectionGroup query finds all projects where user's email is a collaborator
-- **Auto-accept** — pending invites automatically accepted when collaborator signs in
+- **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines
+- **Notification bell** — header icon with red badge showing pending invite count; clicking opens dropdown with invite cards (owner email, project name, role, Accept/Decline buttons)
+- **Accept** — moves project to "Shared with me" sidebar, updates Firestore status to `accepted`
+- **Decline** — removes invite from notifications, updates Firestore status to `declined`; owner sees "declined" in share modal
 - **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
 - **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
 
@@ -267,7 +270,7 @@ slr-screener/
 
 ## Testing
 
-113 tests across 8 suites:
+114 tests across 8 suites:
 
 ```bash
 npm test         # Run all tests
@@ -281,7 +284,7 @@ npm test         # Run all tests
 | export | 3 | CSV format, decision log, search filter |
 | project | 8 | Sidebar, new project, switch back, screened count, menu, sharing modal, validation |
 | auth | 23 | Login/sign-up forms, password validation, verification flow, Google sign-in, forgot password |
-| firestore | 30 | CRUD, batch writes, sync helpers, sharing, final decisions |
+| firestore | 31 | CRUD, batch writes, sync helpers, sharing, decline invite, final decisions |
 | kappa | 27 | Cohen's Kappa, Fleiss' Kappa, interpretation, conflict detection, edge cases |
 
 All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests use `jest.useFakeTimers()` for countdown/polling.
@@ -292,7 +295,7 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
-npm test         # Run test suite (113 tests)
+npm test         # Run test suite (114 tests)
 npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
 ```
 

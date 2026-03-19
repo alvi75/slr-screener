@@ -37,6 +37,7 @@ jest.mock('../services/firestore', () => ({
   updateCollaboratorRole: jest.fn(() => Promise.resolve()),
   getCollaborators: jest.fn(() => Promise.resolve([])),
   acceptInvite: jest.fn(() => Promise.resolve()),
+  declineInvite: jest.fn(() => Promise.resolve()),
   getSharedProjects: jest.fn(() => Promise.resolve([])),
   saveFinalDecision: jest.fn(() => Promise.resolve()),
   getFinalDecisions: jest.fn(() => Promise.resolve({})),

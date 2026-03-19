@@ -58,6 +58,7 @@ import {
   updateCollaboratorRole,
   getCollaborators,
   acceptInvite,
+  declineInvite,
   getSharedProjects,
   saveFinalDecision,
   getFinalDecisions,
@@ -440,6 +441,18 @@ describe('Firestore Service', () => {
       expect(mockSetDoc).toHaveBeenCalledWith(
         expect.objectContaining({ _path: 'projects/proj1/collaborators/collab@test.com' }),
         expect.objectContaining({ status: 'accepted', acceptedAt: 'SERVER_TIMESTAMP' }),
+        { merge: true }
+      );
+    });
+  });
+
+  describe('declineInvite', () => {
+    test('updates status to declined with merge', async () => {
+      await declineInvite('proj1', 'collab@test.com');
+
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/collaborators/collab@test.com' }),
+        expect.objectContaining({ status: 'declined', declinedAt: 'SERVER_TIMESTAMP' }),
         { merge: true }
       );
     });

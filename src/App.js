@@ -21,6 +21,7 @@ import {
   updateCollaboratorRole as fsUpdateCollaboratorRole,
   getCollaborators as fsGetCollaborators,
   acceptInvite as fsAcceptInvite,
+  declineInvite as fsDeclineInvite,
   getSharedProjects as fsGetSharedProjects,
   saveFinalDecision as fsSaveFinalDecision,
   getFinalDecisions as fsGetFinalDecisions,
@@ -1335,6 +1336,8 @@ function AppMain({ currentUser, logout }) {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState('');
   const [sharedProjects, setSharedProjects] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState([]); // enriched invites with projectName, ownerEmail
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
   const [projectOwnerId, setProjectOwnerId] = useState(null);
 
@@ -1425,6 +1428,25 @@ function AppMain({ currentUser, logout }) {
       console.warn('[Sharing] Role update failed:', err.message);
     }
   }, [projectId, loadCollaborators]);
+
+  const handleAcceptInvite = useCallback(async (invite) => {
+    try {
+      await fsAcceptInvite(invite.projectId, currentUser?.email);
+      setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
+      setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
+    } catch (err) {
+      console.warn('[Sharing] Accept invite failed:', err.message);
+    }
+  }, [currentUser]);
+
+  const handleDeclineInvite = useCallback(async (invite) => {
+    try {
+      await fsDeclineInvite(invite.projectId, currentUser?.email);
+      setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
+    } catch (err) {
+      console.warn('[Sharing] Decline invite failed:', err.message);
+    }
+  }, [currentUser]);
 
   // Check if current project has collaborators (for Team badge)
   const hasCollaborators = (collaborators || []).length > 0;
@@ -1709,20 +1731,24 @@ function AppMain({ currentUser, logout }) {
         const shared = await fsGetSharedProjects(currentUser?.email);
         if (shared.length > 0) {
           // Enrich with project meta (owner info, project name)
-          const enriched = [];
+          const enrichedAccepted = [];
+          const enrichedPending = [];
           for (const s of shared) {
             try {
               const meta = await fsGetProjectMeta(s.projectId);
               if (meta && meta.ownerId !== userId) {
-                enriched.push({ ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerId: meta.ownerId });
-                // Auto-accept pending invites
-                if (s.status === 'pending') {
-                  fsAcceptInvite(s.projectId, currentUser.email).catch(() => {});
+                const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerId: meta.ownerId };
+                if (s.status === 'accepted') {
+                  enrichedAccepted.push(enriched);
+                } else if (s.status === 'pending') {
+                  enrichedPending.push(enriched);
                 }
+                // declined invites are not shown
               }
             } catch { /* skip inaccessible projects */ }
           }
-          setSharedProjects(enriched);
+          setSharedProjects(enrichedAccepted);
+          setPendingInvites(enrichedPending);
         }
       } catch (err) {
         console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);
@@ -2515,6 +2541,41 @@ function AppMain({ currentUser, logout }) {
             {syncStatus === 'syncing' && <svg className="sync-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M12 12v3"/></svg>}
             {syncStatus === 'error' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="15" y1="13" x2="9" y2="17"/><line x1="9" y1="13" x2="15" y2="17"/></svg>}
           </span>
+          <div className="notif-wrapper">
+            <button
+              className="notif-bell-btn"
+              onClick={() => setNotificationsOpen(v => !v)}
+              title={pendingInvites.length > 0 ? `${pendingInvites.length} pending invite${pendingInvites.length > 1 ? 's' : ''}` : 'No pending invites'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              {pendingInvites.length > 0 && (
+                <span className="notif-badge">{pendingInvites.length}</span>
+              )}
+            </button>
+            {notificationsOpen && (
+              <div className="notif-dropdown">
+                <div className="notif-dropdown-header">Invitations</div>
+                {pendingInvites.length === 0 ? (
+                  <div className="notif-empty">No pending invitations</div>
+                ) : (
+                  pendingInvites.map(inv => (
+                    <div key={inv.projectId} className="notif-invite-card">
+                      <div className="notif-invite-text">
+                        <strong>{inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{inv.role}</span>
+                      </div>
+                      <div className="notif-invite-actions">
+                        <button className="notif-accept-btn" onClick={() => { handleAcceptInvite(inv); }}>Accept</button>
+                        <button className="notif-decline-btn" onClick={() => { handleDeclineInvite(inv); }}>Decline</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="header-user">
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />

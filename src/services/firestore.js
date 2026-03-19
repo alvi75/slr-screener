@@ -326,6 +326,16 @@ export async function acceptInvite(projectId, email) {
 }
 
 /**
+ * Decline a collaboration invite (update status to declined).
+ * @param {string} projectId
+ * @param {string} email
+ */
+export async function declineInvite(projectId, email) {
+  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  await setDoc(ref, { status: 'declined', declinedAt: serverTimestamp() }, { merge: true });
+}
+
+/**
  * Get all projects shared with a user by email.
  * Uses a collectionGroup query across all 'collaborators' subcollections.
  * @param {string} userEmail
