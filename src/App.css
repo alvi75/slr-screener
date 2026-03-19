@@ -191,6 +191,208 @@
 .project-menu-dropdown .project-menu-danger { color: #d63031; }
 .project-menu-dropdown .project-menu-danger:hover { background: #fff5f5; }
 
+/* Team / Shared badges */
+.project-team-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0984e3;
+  background: #dfe6e9;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+.project-shared-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6c5ce7;
+  background: #f3e8ff;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* Shared projects section label */
+.shared-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #b2bec3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 12px 4px;
+  margin-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+/* Share Modal */
+.share-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+}
+.share-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  z-index: 201;
+  width: 480px;
+  max-width: 95vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.share-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+.share-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #2d3436;
+}
+.share-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+.share-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.share-email-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.share-email-input:focus { border-color: #0984e3; }
+.share-role-select {
+  padding: 8px 10px;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 8px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+  font-family: inherit;
+}
+.share-invite-btn {
+  padding: 8px 16px;
+  background: #0984e3;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.share-invite-btn:hover { opacity: 0.85; }
+.share-invite-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.share-error {
+  color: #d63031;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.share-collaborator-list {
+  margin-top: 16px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.share-collaborator-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f5f6fa;
+  font-size: 13px;
+}
+.share-collaborator-row:last-child { border-bottom: none; }
+.share-collab-email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #2d3436;
+}
+.share-role-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.share-role-badge.owner { background: #dfe6e9; color: #2d3436; }
+.share-role-inline {
+  padding: 4px 6px;
+  border: 1px solid #dfe6e9;
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+  cursor: pointer;
+}
+.share-status-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.share-status-badge.pending { background: #fef3c7; color: #b45309; }
+.share-status-badge.accepted { background: #dcfce7; color: #15803d; }
+.share-remove-btn {
+  background: none;
+  border: none;
+  color: #b2bec3;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.share-remove-btn:hover { color: #d63031; }
+.share-empty {
+  padding: 16px;
+  text-align: center;
+  color: #b2bec3;
+  font-size: 13px;
+}
+.share-info {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #636e72;
+  line-height: 1.4;
+}
+
+/* Viewer read-only notice */
+.viewer-readonly-notice {
+  text-align: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  color: #636e72;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* Progress bar */
 .progress-section {
   margin-bottom: 20px;

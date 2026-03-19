@@ -9,6 +9,8 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  where,
+  collectionGroup,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -236,5 +238,109 @@ export function syncProjectToFirestore(userId, projectId, settings) {
   if (!userId || !projectId) return;
   saveProject(userId, projectId, settings).catch(err => {
     console.warn('[Firestore sync] Failed to sync project:', err.message);
+  });
+}
+
+// ─── Project Sharing / Collaborators ─────────────────────────────
+
+/**
+ * Save project meta at the top-level projects collection.
+ * Used for sharing lookup — stores ownerId so collaborators can find the owner's data.
+ * @param {string} projectId
+ * @param {object} meta - { ownerId, ownerEmail, projectName }
+ */
+export async function saveProjectMeta(projectId, meta) {
+  const ref = doc(db, 'projects', projectId);
+  await setDoc(ref, { ...meta, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+/**
+ * Get project meta from top-level projects collection.
+ * @param {string} projectId
+ * @returns {Promise<object|null>}
+ */
+export async function getProjectMeta(projectId) {
+  const ref = doc(db, 'projects', projectId);
+  const snap = await getDoc(ref);
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Add a collaborator to a project.
+ * @param {string} projectId
+ * @param {string} email - Collaborator's email
+ * @param {string} role - "annotator" | "viewer"
+ * @param {string} invitedByUserId - UID of the inviting user
+ */
+export async function addCollaborator(projectId, email, role, invitedByUserId) {
+  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  await setDoc(ref, {
+    email,
+    role,
+    status: 'pending',
+    invitedBy: invitedByUserId,
+    invitedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Remove a collaborator from a project.
+ * @param {string} projectId
+ * @param {string} email
+ */
+export async function removeCollaborator(projectId, email) {
+  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  await deleteDoc(ref);
+}
+
+/**
+ * Update a collaborator's role.
+ * @param {string} projectId
+ * @param {string} email
+ * @param {string} newRole - "annotator" | "viewer"
+ */
+export async function updateCollaboratorRole(projectId, email, newRole) {
+  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  await setDoc(ref, { role: newRole, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+/**
+ * Get all collaborators for a project.
+ * @param {string} projectId
+ * @returns {Promise<Array<{email, role, status, invitedBy, invitedAt}>>}
+ */
+export async function getCollaborators(projectId) {
+  const colRef = collection(db, 'projects', projectId, 'collaborators');
+  const snap = await getDocs(colRef);
+  return snap.docs.map(d => ({ email: d.id, ...d.data() }));
+}
+
+/**
+ * Accept a collaboration invite (update status from pending to accepted).
+ * @param {string} projectId
+ * @param {string} email
+ */
+export async function acceptInvite(projectId, email) {
+  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  await setDoc(ref, { status: 'accepted', acceptedAt: serverTimestamp() }, { merge: true });
+}
+
+/**
+ * Get all projects shared with a user by email.
+ * Uses a collectionGroup query across all 'collaborators' subcollections.
+ * @param {string} userEmail
+ * @returns {Promise<Array<{projectId, role, status}>>}
+ */
+export async function getSharedProjects(userEmail) {
+  if (!userEmail) return [];
+  const q = query(
+    collectionGroup(db, 'collaborators'),
+    where('email', '==', userEmail)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => {
+    // d.ref.path is "projects/{projectId}/collaborators/{email}"
+    const projectId = d.ref.parent.parent.id;
+    return { projectId, ...d.data() };
   });
 }

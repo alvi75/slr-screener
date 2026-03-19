@@ -29,6 +29,14 @@ jest.mock('../services/firestore', () => ({
   syncDecisionsToFirestore: jest.fn(),
   syncAIScoresToFirestore: jest.fn(),
   syncProjectToFirestore: jest.fn(),
+  saveProjectMeta: jest.fn(() => Promise.resolve()),
+  getProjectMeta: jest.fn(() => Promise.resolve(null)),
+  addCollaborator: jest.fn(() => Promise.resolve()),
+  removeCollaborator: jest.fn(() => Promise.resolve()),
+  updateCollaboratorRole: jest.fn(() => Promise.resolve()),
+  getCollaborators: jest.fn(() => Promise.resolve([])),
+  acceptInvite: jest.fn(() => Promise.resolve()),
+  getSharedProjects: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('xlsx', () => ({

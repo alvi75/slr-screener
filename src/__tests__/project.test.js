@@ -29,6 +29,14 @@ jest.mock('../services/firestore', () => ({
   syncDecisionsToFirestore: jest.fn(),
   syncAIScoresToFirestore: jest.fn(),
   syncProjectToFirestore: jest.fn(),
+  saveProjectMeta: jest.fn(() => Promise.resolve()),
+  getProjectMeta: jest.fn(() => Promise.resolve(null)),
+  addCollaborator: jest.fn(() => Promise.resolve()),
+  removeCollaborator: jest.fn(() => Promise.resolve()),
+  updateCollaboratorRole: jest.fn(() => Promise.resolve()),
+  getCollaborators: jest.fn(() => Promise.resolve([])),
+  acceptInvite: jest.fn(() => Promise.resolve()),
+  getSharedProjects: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('xlsx', () => ({
@@ -170,7 +178,83 @@ describe('Project Management', () => {
       expect(buttons).toContain('Add Papers');
       expect(buttons).toContain('Export JSON');
       expect(buttons).toContain('Export CSV');
+      expect(buttons).toContain('Share Project');
       expect(buttons).toContain('Duplicate');
+    });
+  });
+
+  test('Share Project opens share modal', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Open sidebar
+    fireEvent.click(screen.getByLabelText('Menu'));
+    await waitFor(() => expect(screen.getByText('Projects')).toBeInTheDocument());
+
+    // Click three-dot menu
+    const menuBtn = document.querySelector('.project-menu-btn');
+    fireEvent.click(menuBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Share Project')).toBeInTheDocument();
+    });
+
+    // Click Share Project
+    fireEvent.click(screen.getByText('Share Project'));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Email address')).toBeInTheDocument();
+      expect(screen.getByText('Send Invite')).toBeInTheDocument();
+      expect(screen.getByText('No collaborators yet. Invite someone above.')).toBeInTheDocument();
+    });
+  });
+
+  test('Share modal shows validation error for empty email', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Open sidebar -> three-dot -> Share Project
+    fireEvent.click(screen.getByLabelText('Menu'));
+    await waitFor(() => expect(screen.getByText('Projects')).toBeInTheDocument());
+    fireEvent.click(document.querySelector('.project-menu-btn'));
+    await waitFor(() => expect(screen.getByText('Share Project')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Share Project'));
+
+    await waitFor(() => expect(screen.getByText('Send Invite')).toBeInTheDocument());
+
+    // Click Send Invite with empty email
+    fireEvent.click(screen.getByText('Send Invite'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Please enter an email address.')).toBeInTheDocument();
+    });
+  });
+
+  test('Share modal shows validation error for self-invite', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
+    });
+
+    // Open share modal
+    fireEvent.click(screen.getByLabelText('Menu'));
+    await waitFor(() => expect(screen.getByText('Projects')).toBeInTheDocument());
+    fireEvent.click(document.querySelector('.project-menu-btn'));
+    await waitFor(() => expect(screen.getByText('Share Project')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Share Project'));
+
+    await waitFor(() => expect(screen.getByText('Send Invite')).toBeInTheDocument());
+
+    // Type own email and try to invite
+    fireEvent.change(screen.getByPlaceholderText('Email address'), { target: { value: 'test@example.com' } });
+    fireEvent.click(screen.getByText('Send Invite'));
+
+    await waitFor(() => {
+      expect(screen.getByText('You cannot invite yourself.')).toBeInTheDocument();
     });
   });
 });

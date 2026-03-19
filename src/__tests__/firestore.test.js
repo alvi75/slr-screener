@@ -16,6 +16,9 @@ var mockDocFn = jest.fn((_db, ...segments) => ({ _path: segments.join('/') }));
 var mockCollectionFn = jest.fn((_db, ...segments) => ({ _path: segments.join('/') }));
 /* eslint-enable no-var */
 
+var mockCollectionGroupFn = jest.fn((_db, name) => ({ _collectionGroup: name }));
+var mockWhereFn = jest.fn();
+
 jest.mock('firebase/firestore', () => ({
   doc: (...args) => mockDocFn(...args),
   collection: (...args) => mockCollectionFn(...args),
@@ -24,8 +27,10 @@ jest.mock('firebase/firestore', () => ({
   getDocs: (...args) => mockGetDocs(...args),
   deleteDoc: (...args) => mockDeleteDoc(...args),
   writeBatch: () => ({ set: mockBatchSet, delete: mockBatchDelete, commit: mockBatchCommit }),
-  query: (colRef) => colRef,
+  query: (colRef, ...conditions) => colRef,
   orderBy: jest.fn(),
+  where: (...args) => mockWhereFn(...args),
+  collectionGroup: (...args) => mockCollectionGroupFn(...args),
   serverTimestamp: () => 'SERVER_TIMESTAMP',
 }));
 
@@ -46,6 +51,14 @@ import {
   syncDecisionsToFirestore,
   syncAIScoresToFirestore,
   syncProjectToFirestore,
+  saveProjectMeta,
+  getProjectMeta,
+  addCollaborator,
+  removeCollaborator,
+  updateCollaboratorRole,
+  getCollaborators,
+  acceptInvite,
+  getSharedProjects,
 } from '../services/firestore';
 
 beforeEach(() => {
@@ -321,6 +334,145 @@ describe('Firestore Service', () => {
       expect(mockSetDoc).not.toHaveBeenCalled();
       syncProjectToFirestore('user1', null, { name: 'Test' });
       expect(mockSetDoc).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Project Sharing / Collaborators ────────────────────────
+
+  describe('saveProjectMeta', () => {
+    test('writes to top-level projects collection with merge', async () => {
+      await saveProjectMeta('proj1', { ownerId: 'user1', ownerEmail: 'a@b.com', projectName: 'Test' });
+
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1' }),
+        expect.objectContaining({ ownerId: 'user1', ownerEmail: 'a@b.com', projectName: 'Test', updatedAt: 'SERVER_TIMESTAMP' }),
+        { merge: true }
+      );
+    });
+  });
+
+  describe('getProjectMeta', () => {
+    test('returns project meta when exists', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        id: 'proj1',
+        data: () => ({ ownerId: 'user1', ownerEmail: 'a@b.com', projectName: 'Test' }),
+      });
+      const meta = await getProjectMeta('proj1');
+      expect(meta).toEqual({ id: 'proj1', ownerId: 'user1', ownerEmail: 'a@b.com', projectName: 'Test' });
+    });
+
+    test('returns null when not found', async () => {
+      mockGetDoc.mockResolvedValueOnce({ exists: () => false });
+      const meta = await getProjectMeta('proj1');
+      expect(meta).toBeNull();
+    });
+  });
+
+  describe('addCollaborator', () => {
+    test('writes to correct path with pending status', async () => {
+      await addCollaborator('proj1', 'collab@test.com', 'annotator', 'user1');
+
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'collaborators', 'collab@test.com');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/collaborators/collab@test.com' }),
+        expect.objectContaining({
+          email: 'collab@test.com',
+          role: 'annotator',
+          status: 'pending',
+          invitedBy: 'user1',
+          invitedAt: 'SERVER_TIMESTAMP',
+        })
+      );
+    });
+  });
+
+  describe('removeCollaborator', () => {
+    test('deletes the correct document', async () => {
+      await removeCollaborator('proj1', 'collab@test.com');
+
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'collaborators', 'collab@test.com');
+      expect(mockDeleteDoc).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateCollaboratorRole', () => {
+    test('updates role with merge', async () => {
+      await updateCollaboratorRole('proj1', 'collab@test.com', 'viewer');
+
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/collaborators/collab@test.com' }),
+        expect.objectContaining({ role: 'viewer', updatedAt: 'SERVER_TIMESTAMP' }),
+        { merge: true }
+      );
+    });
+  });
+
+  describe('getCollaborators', () => {
+    test('returns formatted collaborator list', async () => {
+      mockGetDocs.mockResolvedValueOnce(mockQuerySnap([
+        mockDocSnap('alice@test.com', { email: 'alice@test.com', role: 'annotator', status: 'accepted', invitedBy: 'user1' }),
+        mockDocSnap('bob@test.com', { email: 'bob@test.com', role: 'viewer', status: 'pending', invitedBy: 'user1' }),
+      ]));
+
+      const collabs = await getCollaborators('proj1');
+      expect(collabs).toEqual([
+        { email: 'alice@test.com', role: 'annotator', status: 'accepted', invitedBy: 'user1' },
+        { email: 'bob@test.com', role: 'viewer', status: 'pending', invitedBy: 'user1' },
+      ]);
+    });
+
+    test('returns empty array when no collaborators', async () => {
+      mockGetDocs.mockResolvedValueOnce(mockQuerySnap([]));
+      const collabs = await getCollaborators('proj1');
+      expect(collabs).toEqual([]);
+    });
+  });
+
+  describe('acceptInvite', () => {
+    test('updates status to accepted with merge', async () => {
+      await acceptInvite('proj1', 'collab@test.com');
+
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/collaborators/collab@test.com' }),
+        expect.objectContaining({ status: 'accepted', acceptedAt: 'SERVER_TIMESTAMP' }),
+        { merge: true }
+      );
+    });
+  });
+
+  describe('getSharedProjects', () => {
+    test('queries collectionGroup and extracts projectId from path', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            data: () => ({ email: 'user@test.com', role: 'annotator', status: 'pending' }),
+            ref: { parent: { parent: { id: 'proj1' } } },
+          },
+          {
+            data: () => ({ email: 'user@test.com', role: 'viewer', status: 'accepted' }),
+            ref: { parent: { parent: { id: 'proj2' } } },
+          },
+        ],
+      });
+
+      const shared = await getSharedProjects('user@test.com');
+      expect(shared).toEqual([
+        { projectId: 'proj1', email: 'user@test.com', role: 'annotator', status: 'pending' },
+        { projectId: 'proj2', email: 'user@test.com', role: 'viewer', status: 'accepted' },
+      ]);
+      expect(mockCollectionGroupFn).toHaveBeenCalledWith('MOCK_DB', 'collaborators');
+    });
+
+    test('returns empty array when no email', async () => {
+      const shared = await getSharedProjects('');
+      expect(shared).toEqual([]);
+    });
+
+    test('returns empty array when null email', async () => {
+      const shared = await getSharedProjects(null);
+      expect(shared).toEqual([]);
     });
   });
 });

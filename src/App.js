@@ -14,6 +14,14 @@ import {
   syncDecisionsToFirestore,
   syncAIScoresToFirestore,
   syncProjectToFirestore,
+  saveProjectMeta as fsSaveProjectMeta,
+  getProjectMeta as fsGetProjectMeta,
+  addCollaborator as fsAddCollaborator,
+  removeCollaborator as fsRemoveCollaborator,
+  updateCollaboratorRole as fsUpdateCollaboratorRole,
+  getCollaborators as fsGetCollaborators,
+  acceptInvite as fsAcceptInvite,
+  getSharedProjects as fsGetSharedProjects,
 } from './services/firestore';
 import './App.css';
 
@@ -1316,6 +1324,17 @@ function AppMain({ currentUser, logout }) {
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
 
+  // ── Project Sharing ───────────────────────────────────────────
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareRole, setShareRole] = useState('annotator');
+  const [collaborators, setCollaborators] = useState([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [sharedProjects, setSharedProjects] = useState([]);
+  const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
+  const [projectOwnerId, setProjectOwnerId] = useState(null);
+
   // ── Firestore sync ──────────────────────────────────────────
   // 'synced' | 'syncing' | 'error'
   const [syncStatus, setSyncStatus] = useState('synced');
@@ -1342,6 +1361,64 @@ function AppMain({ currentUser, logout }) {
     });
   }, [userId]);
 
+  // ── Sharing helpers ─────────────────────────────────────────────
+  const loadCollaborators = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const collabs = await fsGetCollaborators(projectId);
+      setCollaborators(collabs);
+    } catch (err) {
+      console.warn('[Sharing] Failed to load collaborators:', err.message);
+    }
+  }, [projectId]);
+
+  const handleSendInvite = useCallback(async () => {
+    setShareError('');
+    const email = shareEmail.trim().toLowerCase();
+    if (!email) { setShareError('Please enter an email address.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setShareError('Please enter a valid email.'); return; }
+    if (email === currentUser?.email?.toLowerCase()) { setShareError('You cannot invite yourself.'); return; }
+    if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
+
+    setShareLoading(true);
+    try {
+      // Ensure project meta exists at top-level for collaborator lookup
+      await fsSaveProjectMeta(projectId, {
+        ownerId: userId,
+        ownerEmail: currentUser?.email,
+        projectName,
+      });
+      await fsAddCollaborator(projectId, email, shareRole, userId);
+      setShareEmail('');
+      await loadCollaborators();
+    } catch (err) {
+      setShareError('Failed to send invite. Please try again.');
+      console.warn('[Sharing] Invite failed:', err.message);
+    }
+    setShareLoading(false);
+  }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators]);
+
+  const handleRemoveCollaborator = useCallback(async (email) => {
+    try {
+      await fsRemoveCollaborator(projectId, email);
+      await loadCollaborators();
+    } catch (err) {
+      console.warn('[Sharing] Remove failed:', err.message);
+    }
+  }, [projectId, loadCollaborators]);
+
+  const handleRoleChange = useCallback(async (email, newRole) => {
+    try {
+      await fsUpdateCollaboratorRole(projectId, email, newRole);
+      await loadCollaborators();
+    } catch (err) {
+      console.warn('[Sharing] Role update failed:', err.message);
+    }
+  }, [projectId, loadCollaborators]);
+
+  // Check if current project has collaborators (for Team badge)
+  const hasCollaborators = (collaborators || []).length > 0;
+
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
   const PAPERS_KEY = 'slr-screener-papers';
@@ -1363,8 +1440,11 @@ function AppMain({ currentUser, logout }) {
         // Sync demo project metadata to Firestore
         const demoId = projectSlug('Model Sizes in SE Research 2025');
         syncProjectToFirestore(userId, demoId, { name: 'Model Sizes in SE Research 2025', isDemo: true, createdAt: Date.now(), paperCount: data.papers.length });
+        try { fsSaveProjectMeta(demoId, { ownerId: userId, ownerEmail: currentUser?.email, projectName: 'Model Sizes in SE Research 2025' })?.catch(() => {}); } catch (e) { /* ignore */ }
+        setProjectRole('owner');
+        setProjectOwnerId(null);
       });
-  }, [userId]);
+  }, [userId, currentUser]);
 
   // Reload data: demo re-fetches JSON, imported re-reads from localStorage
   const loadData = useCallback(() => {
@@ -1403,10 +1483,13 @@ function AppMain({ currentUser, logout }) {
     setAiScores({});
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SCORES_KEY);
-    // Sync new project to Firestore
+    // Sync new project to Firestore + save top-level meta for sharing
     const newProjectId = projectSlug(name);
     firestoreSync(() => fsSaveProject(userId, newProjectId, { name, isDemo: false, createdAt: Date.now(), paperCount: importedPapers.length }));
-  }, [userId, firestoreSync]);
+    try { fsSaveProjectMeta(newProjectId, { ownerId: userId, ownerEmail: currentUser?.email, projectName: name })?.catch(() => {}); } catch (e) { /* ignore */ }
+    setProjectRole('owner');
+    setProjectOwnerId(null);
+  }, [userId, currentUser, firestoreSync]);
 
   // Append papers to existing project (dedup by title)
   const appendPapers = useCallback((newPapers) => {
@@ -1498,6 +1581,29 @@ function AppMain({ currentUser, logout }) {
             localStorage.setItem(SCORES_KEY, JSON.stringify(merged));
             return merged;
           });
+        }
+        // Fetch collaborators for current project (for Team badge)
+        const collabs = await fsGetCollaborators(projectId);
+        setCollaborators(collabs);
+
+        // Fetch shared projects (projects where this user is a collaborator)
+        const shared = await fsGetSharedProjects(currentUser?.email);
+        if (shared.length > 0) {
+          // Enrich with project meta (owner info, project name)
+          const enriched = [];
+          for (const s of shared) {
+            try {
+              const meta = await fsGetProjectMeta(s.projectId);
+              if (meta && meta.ownerId !== userId) {
+                enriched.push({ ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerId: meta.ownerId });
+                // Auto-accept pending invites
+                if (s.status === 'pending') {
+                  fsAcceptInvite(s.projectId, currentUser.email).catch(() => {});
+                }
+              }
+            } catch { /* skip inaccessible projects */ }
+          }
+          setSharedProjects(enriched);
         }
       } catch (err) {
         console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);
@@ -1688,10 +1794,10 @@ function AppMain({ currentUser, logout }) {
       if (editing) return;
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       switch (e.key.toLowerCase()) {
-        case 'y': makeDecision('Yes'); break;
-        case 'n': makeDecision('No'); break;
-        case 'm': makeDecision('Maybe'); break;
-        case 'u': undoDecision(); break;
+        case 'y': if (projectRole !== 'viewer') makeDecision('Yes'); break;
+        case 'n': if (projectRole !== 'viewer') makeDecision('No'); break;
+        case 'm': if (projectRole !== 'viewer') makeDecision('Maybe'); break;
+        case 'u': if (projectRole !== 'viewer') undoDecision(); break;
         case 'h': setHighlightsOn(v => !v); break;
         case 'arrowright': goNext(); break;
         case 'arrowleft': goPrev(); break;
@@ -2269,7 +2375,10 @@ function AppMain({ currentUser, logout }) {
 
           {/* Decision buttons */}
           <div className="decision-section">
-            {(() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
+            {projectRole === 'viewer' && (
+              <div className="viewer-readonly-notice">You have view-only access to this project.</div>
+            )}
+            {projectRole !== 'viewer' && (() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
             <button
               className={`decision-btn btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('Yes')}
@@ -2289,13 +2398,15 @@ function AppMain({ currentUser, logout }) {
               No <span className="shortcut">N</span>
             </button>
             </>; })()}
-            <button
-              className="decision-btn btn-undo"
-              onClick={undoDecision}
-              disabled={undoStack.length === 0}
-            >
-              Undo <span className="shortcut">U</span>
-            </button>
+            {projectRole !== 'viewer' && (
+              <button
+                className="decision-btn btn-undo"
+                onClick={undoDecision}
+                disabled={undoStack.length === 0}
+              >
+                Undo <span className="shortcut">U</span>
+              </button>
+            )}
           </div>
 
           {/* Navigation */}
@@ -2481,6 +2592,8 @@ function AppMain({ currentUser, logout }) {
                 <span className="project-item-name">
                   {projectName}
                   {isDemo && <span className="project-demo-badge">Demo</span>}
+                  {projectRole === 'owner' && hasCollaborators && <span className="project-team-badge">Team</span>}
+                  {projectRole !== 'owner' && <span className="project-shared-badge">Shared with me</span>}
                 </span>
               )}
               <span className="project-item-meta">{totalPapers} papers · {decidedCount} screened</span>
@@ -2500,6 +2613,9 @@ function AppMain({ currentUser, logout }) {
                   <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
                   <button onClick={() => { setProjectMenuOpen(false); exportProjectCSV(); }}>Export CSV</button>
                   <div className="project-menu-sep" />
+                  {projectRole === 'owner' && (
+                    <button onClick={() => { setProjectMenuOpen(false); setShareModalOpen(true); loadCollaborators(); }}>Share Project</button>
+                  )}
                   <button onClick={() => {
                     setProjectMenuOpen(false);
                     alert('Duplicate is not yet implemented — coming soon with multi-project support.');
@@ -2530,6 +2646,57 @@ function AppMain({ currentUser, logout }) {
               )}
             </div>
           </div>
+          {/* Shared projects section */}
+          {sharedProjects.length > 0 && (
+            <>
+              <div className="shared-section-label">Shared with me</div>
+              {sharedProjects.map(sp => (
+                <div
+                  key={sp.projectId}
+                  className={`project-item ${projectRole !== 'owner' && projectId === sp.projectId ? 'active' : ''}`}
+                  onClick={async () => {
+                    setProjectSidebarOpen(false);
+                    setProjectMenuOpen(false);
+                    setProjectRole(sp.role);
+                    setProjectOwnerId(sp.ownerId);
+                    setProjectName(sp.projectName);
+                    setIsDemo(false);
+                    localStorage.setItem('slr-screener-project-name', sp.projectName);
+                    localStorage.setItem('slr-screener-is-demo', '0');
+                    // Load owner's project data
+                    try {
+                      const ownerProject = await fsGetProject(sp.ownerId, sp.projectId);
+                      if (ownerProject) {
+                        if (ownerProject.hlCategories) setHlCategories(ownerProject.hlCategories);
+                        if (ownerProject.researchGoal) setResearchGoal(ownerProject.researchGoal);
+                      }
+                      // Load own decisions for this project
+                      const myDecisions = await fsGetDecisions(userId, sp.projectId);
+                      setDecisions(myDecisions);
+                      localStorage.setItem(STORAGE_KEY, JSON.stringify(myDecisions));
+                      // Load shared AI scores
+                      const scores = await fsGetAIScores(sp.projectId);
+                      setAiScores(scores);
+                      setAppView('screener');
+                    } catch (err) {
+                      console.warn('[Sharing] Failed to load shared project:', err.message);
+                    }
+                  }}
+                >
+                  <span className="project-item-icon">📄</span>
+                  <div className="project-item-info">
+                    <span className="project-item-name">
+                      {sp.projectName}
+                      <span className="project-shared-badge">Shared with me</span>
+                    </span>
+                    <span className="project-item-meta">
+                      by {sp.ownerEmail} · {sp.role}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
         <div className="project-sidebar-footer">
           <button className="project-new-btn" onClick={() => {
@@ -2542,6 +2709,83 @@ function AppMain({ currentUser, logout }) {
         </div>
       </div>
       {projectSidebarOpen && <div className="sidebar-overlay" onClick={() => { setProjectSidebarOpen(false); setProjectMenuOpen(false); }} />}
+
+      {/* Share Project Modal */}
+      {shareModalOpen && (
+        <>
+          <div className="share-modal-overlay" onClick={() => setShareModalOpen(false)} />
+          <div className="share-modal">
+            <div className="share-modal-header">
+              <h3>Share "{projectName}"</h3>
+              <button className="sidebar-close" onClick={() => setShareModalOpen(false)}>&times;</button>
+            </div>
+            <div className="share-modal-body">
+              <div className="share-input-row">
+                <input
+                  type="email"
+                  className="share-email-input"
+                  placeholder="Email address"
+                  value={shareEmail}
+                  onChange={(e) => { setShareEmail(e.target.value); setShareError(''); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSendInvite(); }}
+                />
+                <select
+                  className="share-role-select"
+                  value={shareRole}
+                  onChange={(e) => setShareRole(e.target.value)}
+                >
+                  <option value="annotator">Annotator</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+                <button
+                  className="share-invite-btn"
+                  onClick={handleSendInvite}
+                  disabled={shareLoading}
+                >
+                  {shareLoading ? 'Sending...' : 'Send Invite'}
+                </button>
+              </div>
+              {shareError && <div className="share-error">{shareError}</div>}
+
+              <div className="share-collaborator-list">
+                {/* Owner row */}
+                <div className="share-collaborator-row">
+                  <span className="share-collab-email">{currentUser?.email}</span>
+                  <span className="share-role-badge owner">Owner</span>
+                  <span className="share-status-badge accepted">You</span>
+                </div>
+                {/* Collaborator rows */}
+                {(collaborators || []).map(c => (
+                  <div key={c.email} className="share-collaborator-row">
+                    <span className="share-collab-email">{c.email}</span>
+                    <select
+                      className="share-role-inline"
+                      value={c.role}
+                      onChange={(e) => handleRoleChange(c.email, e.target.value)}
+                    >
+                      <option value="annotator">Annotator</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                    <span className={`share-status-badge ${c.status}`}>{c.status}</span>
+                    <button
+                      className="share-remove-btn"
+                      onClick={() => handleRemoveCollaborator(c.email)}
+                      title="Remove collaborator"
+                    >&times;</button>
+                  </div>
+                ))}
+                {(!collaborators || collaborators.length === 0) && (
+                  <div className="share-empty">No collaborators yet. Invite someone above.</div>
+                )}
+              </div>
+
+              <div className="share-info">
+                Collaborators with matching email will see this project when they sign in. Annotators' decisions are stored separately to prevent bias.
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Highlight Settings Panel */}
       {hlSettingsOpen && (
