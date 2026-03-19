@@ -100,6 +100,8 @@ projects/{projectId}/
 - **Firestore location**: nam5 (US)
 - **Auth providers**: Google + Email/Password
 - **Config file**: `src/firebase.js`
+- **Hosting**: Firebase Hosting at https://slr-screener.web.app
+- **Hosting config**: `firebase.json` (build dir, SPA rewrites), `.firebaserc` (project alias)
 
 ## Features
 
@@ -256,6 +258,8 @@ slr-screener/
 │   ├── index.js                    # Entry point
 │   └── index.css                   # Base/reset styles
 ├── server.js                       # Express proxy (Claude API + Semantic Scholar)
+├── firebase.json                   # Firebase Hosting config (build dir, SPA rewrites)
+├── .firebaserc                     # Firebase project alias (slr-screener)
 ├── package.json
 └── CLAUDE.md
 ```
@@ -288,14 +292,13 @@ npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
 npm test         # Run test suite (109 tests)
+npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
 ```
+
+**Live deployment**: https://slr-screener.web.app
 
 The proxy server (`server.js`) must be running for AI scoring and Semantic Scholar lookups. It proxies:
 - `POST /api/score` — Claude API (`api.anthropic.com/v1/messages`)
 - `POST /api/semantic-scholar/search` — single title lookup
 - `POST /api/semantic-scholar/batch` — batch title lookup with 1s rate limiting
 - `GET /api/health` — health check
-
-## Planned Features
-
-- Deployment as a reusable module for other SLR projects
