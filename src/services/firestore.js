@@ -344,3 +344,41 @@ export async function getSharedProjects(userEmail) {
     return { projectId, ...d.data() };
   });
 }
+
+// ─── Final Decisions (Conflict Resolution) ───────────────────
+
+/**
+ * Save a final (resolved) decision for a paper.
+ * @param {string} projectId
+ * @param {string} paperId
+ * @param {object} data - { decision, resolvedBy, comment }
+ */
+export async function saveFinalDecision(projectId, paperId, data) {
+  const ref = doc(db, 'projects', projectId, 'finalDecisions', String(paperId));
+  await setDoc(ref, { ...data, resolvedAt: serverTimestamp() });
+}
+
+/**
+ * Get all final decisions for a project.
+ * @param {string} projectId
+ * @returns {Promise<object>} { paperId: { decision, resolvedBy, resolvedAt, comment }, ... }
+ */
+export async function getFinalDecisions(projectId) {
+  const colRef = collection(db, 'projects', projectId, 'finalDecisions');
+  const snap = await getDocs(colRef);
+  const results = {};
+  snap.docs.forEach(d => {
+    results[d.id] = d.data();
+  });
+  return results;
+}
+
+/**
+ * Delete a final decision (un-resolve a conflict).
+ * @param {string} projectId
+ * @param {string} paperId
+ */
+export async function deleteFinalDecision(projectId, paperId) {
+  const ref = doc(db, 'projects', projectId, 'finalDecisions', String(paperId));
+  await deleteDoc(ref);
+}

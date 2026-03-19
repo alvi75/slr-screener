@@ -38,6 +38,9 @@ jest.mock('../services/firestore', () => ({
   getCollaborators: jest.fn(() => Promise.resolve([])),
   acceptInvite: jest.fn(() => Promise.resolve()),
   getSharedProjects: jest.fn(() => Promise.resolve([])),
+  saveFinalDecision: jest.fn(() => Promise.resolve()),
+  getFinalDecisions: jest.fn(() => Promise.resolve({})),
+  deleteFinalDecision: jest.fn(() => Promise.resolve()),
 }));
 
 // Mock xlsx to avoid issues in test environment

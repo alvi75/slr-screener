@@ -59,6 +59,9 @@ import {
   getCollaborators,
   acceptInvite,
   getSharedProjects,
+  saveFinalDecision,
+  getFinalDecisions,
+  deleteFinalDecision,
 } from '../services/firestore';
 
 beforeEach(() => {
@@ -473,6 +476,54 @@ describe('Firestore Service', () => {
     test('returns empty array when null email', async () => {
       const shared = await getSharedProjects(null);
       expect(shared).toEqual([]);
+    });
+  });
+
+  // ── Final Decisions (Conflict Resolution) ──────────────────
+
+  describe('saveFinalDecision', () => {
+    test('writes to correct path with timestamp', async () => {
+      await saveFinalDecision('proj1', '5', { decision: 'Yes', resolvedBy: 'owner@test.com', comment: 'Majority rule' });
+
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'finalDecisions', '5');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/finalDecisions/5' }),
+        expect.objectContaining({
+          decision: 'Yes',
+          resolvedBy: 'owner@test.com',
+          comment: 'Majority rule',
+          resolvedAt: 'SERVER_TIMESTAMP',
+        })
+      );
+    });
+  });
+
+  describe('getFinalDecisions', () => {
+    test('returns final decisions as map', async () => {
+      mockGetDocs.mockResolvedValueOnce(mockQuerySnap([
+        mockDocSnap('3', { decision: 'Yes', resolvedBy: 'owner@test.com', comment: 'Clear yes', resolvedAt: 'ts' }),
+        mockDocSnap('7', { decision: 'No', resolvedBy: 'owner@test.com', comment: '', resolvedAt: 'ts' }),
+      ]));
+
+      const results = await getFinalDecisions('proj1');
+      expect(results).toEqual({
+        '3': { decision: 'Yes', resolvedBy: 'owner@test.com', comment: 'Clear yes', resolvedAt: 'ts' },
+        '7': { decision: 'No', resolvedBy: 'owner@test.com', comment: '', resolvedAt: 'ts' },
+      });
+    });
+
+    test('returns empty object when no final decisions', async () => {
+      mockGetDocs.mockResolvedValueOnce(mockQuerySnap([]));
+      const results = await getFinalDecisions('proj1');
+      expect(results).toEqual({});
+    });
+  });
+
+  describe('deleteFinalDecision', () => {
+    test('deletes the correct document', async () => {
+      await deleteFinalDecision('proj1', '5');
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'finalDecisions', '5');
+      expect(mockDeleteDoc).toHaveBeenCalled();
     });
   });
 });

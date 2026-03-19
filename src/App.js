@@ -22,7 +22,10 @@ import {
   getCollaborators as fsGetCollaborators,
   acceptInvite as fsAcceptInvite,
   getSharedProjects as fsGetSharedProjects,
+  saveFinalDecision as fsSaveFinalDecision,
+  getFinalDecisions as fsGetFinalDecisions,
 } from './services/firestore';
+import { analyzeConflicts, interpretKappa } from './utils/kappa';
 import './App.css';
 
 // ===== HIGHLIGHT SYSTEM =====
@@ -1335,6 +1338,13 @@ function AppMain({ currentUser, logout }) {
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
   const [projectOwnerId, setProjectOwnerId] = useState(null);
 
+  // ── Conflict Resolution ───────────────────────────────────────
+  const [conflictData, setConflictData] = useState(null); // { annotatorDecisions, annotators, finalDecisions, analysis }
+  const [conflictTab, setConflictTab] = useState('conflicts');
+  const [conflictSearch, setConflictSearch] = useState('');
+  const [conflictVenueFilter, setConflictVenueFilter] = useState('All');
+  const [conflictStatusFilter, setConflictStatusFilter] = useState('all'); // 'all' | 'resolved' | 'unresolved'
+
   // ── Firestore sync ──────────────────────────────────────────
   // 'synced' | 'syncing' | 'error'
   const [syncStatus, setSyncStatus] = useState('synced');
@@ -1418,6 +1428,115 @@ function AppMain({ currentUser, logout }) {
 
   // Check if current project has collaborators (for Team badge)
   const hasCollaborators = (collaborators || []).length > 0;
+
+  // ── Conflict Resolution helpers ──────────────────────────────
+  const openConflictDashboard = useCallback(async () => {
+    if (!projectId || projectRole !== 'owner') return;
+    setProjectMenuOpen(false);
+    setProjectSidebarOpen(false);
+
+    try {
+      // Fetch each annotator's decisions
+      const collabs = await fsGetCollaborators(projectId);
+      const annotators = [
+        { id: userId, email: currentUser?.email, role: 'owner' },
+        ...collabs.filter(c => c.role === 'annotator' && c.status === 'accepted').map(c => ({ id: null, email: c.email, role: 'annotator' })),
+      ];
+
+      // We need annotator userIds. For the owner, we have it.
+      // For collaborators, we need to look them up. Since we don't store userId in collaborators,
+      // we'll fetch decisions for each annotator by their userId if available.
+      // For now, we use the owner's userId and look for collaborator decisions.
+      // Actually, collaborators store decisions under their own userId. We need their UIDs.
+      // We'll store annotator progress by email and fetch by known patterns.
+
+      // Fetch owner's decisions
+      const annotatorDecisions = {};
+      const ownerDecisions = await fsGetDecisions(userId, projectId);
+      annotatorDecisions[userId] = ownerDecisions;
+
+      // For collaborators, we need their UIDs. Store them in the collaborator doc when they accept.
+      // For now, fetch via project meta approach — collaborators' decisions use their own UID path.
+      // We'll use a placeholder approach: fetch from the collabs' acceptedUid if stored.
+      // Since we don't have collaborator UIDs yet, we only show owner's decisions in v1.
+      // TODO: In a future update, store collaborator UIDs when they accept invites.
+
+      // Fetch final decisions
+      const finalDecisions = await fsGetFinalDecisions(projectId);
+
+      // Run analysis
+      const analysis = analyzeConflicts(annotatorDecisions);
+
+      setConflictData({ annotatorDecisions, annotators, finalDecisions, analysis });
+      setConflictTab('conflicts');
+      setConflictSearch('');
+      setConflictVenueFilter('All');
+      setConflictStatusFilter('all');
+      setAppView('conflicts');
+    } catch (err) {
+      console.warn('[Conflicts] Failed to load conflict data:', err.message);
+    }
+  }, [projectId, projectRole, userId, currentUser]);
+
+  const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
+    if (!projectId) return;
+    try {
+      await fsSaveFinalDecision(projectId, paperId, {
+        decision,
+        resolvedBy: currentUser?.email,
+        comment: comment || '',
+      });
+      // Update local state
+      setConflictData(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev.finalDecisions, [paperId]: { decision, resolvedBy: currentUser?.email, comment: comment || '', resolvedAt: new Date().toISOString() } };
+        return { ...prev, finalDecisions: updated };
+      });
+    } catch (err) {
+      console.warn('[Conflicts] Failed to save final decision:', err.message);
+    }
+  }, [projectId, currentUser]);
+
+  const exportResolved = useCallback(() => {
+    if (!conflictData || !papers.length) return;
+    const { annotatorDecisions, annotators, finalDecisions } = conflictData;
+    const annotatorIds = Object.keys(annotatorDecisions);
+
+    const escapeCSV = (s) => {
+      if (!s) return '';
+      const str = String(s);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    // Header
+    const annotatorHeaders = annotators.map((a, i) => `annotator_${i + 1}_decision`);
+    const header = ['title', 'author', 'venue', 'abstract', 'doi', ...annotatorHeaders, 'final_decision', 'conflict_comment', 'resolved_by', 'resolved_at'].join(',');
+
+    const rows = papers.map((p, idx) => {
+      const paperId = String(idx);
+      const annotatorCols = annotatorIds.map(aid => escapeCSV(annotatorDecisions[aid]?.[paperId] || ''));
+      const fd = finalDecisions[paperId];
+      return [
+        escapeCSV(p.title), escapeCSV(p.author), escapeCSV(p.conf),
+        escapeCSV(p.abstract), escapeCSV(p.doi),
+        ...annotatorCols,
+        escapeCSV(fd?.decision || ''), escapeCSV(fd?.comment || ''),
+        escapeCSV(fd?.resolvedBy || ''), escapeCSV(fd?.resolvedAt || ''),
+      ].join(',');
+    });
+
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${projectName}_resolved.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [conflictData, papers, projectName]);
 
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
@@ -2137,6 +2256,199 @@ function AppMain({ currentUser, logout }) {
       appendMode={appendMode} onAppend={appendPapers} />;
   }
 
+  // ===== CONFLICT RESOLUTION VIEW =====
+  if (appView === 'conflicts' && conflictData) {
+    const { annotatorDecisions, annotators, finalDecisions, analysis } = conflictData;
+    const annotatorIds = Object.keys(annotatorDecisions);
+    const totalPapers = papers.length;
+
+    // Compute venues for filter
+    const conflictVenues = ['All', ...new Set(papers.map(p => p.conf).filter(Boolean))];
+
+    // Get papers for current tab
+    let tabPaperIds;
+    if (conflictTab === 'conflicts') tabPaperIds = analysis.conflicts;
+    else if (conflictTab === 'agreed') tabPaperIds = analysis.agreed;
+    else tabPaperIds = analysis.screened;
+
+    // Apply filters
+    let filteredPapers = tabPaperIds.map(id => ({ paperId: id, paper: papers[parseInt(id)] })).filter(p => p.paper);
+    if (conflictVenueFilter !== 'All') {
+      filteredPapers = filteredPapers.filter(p => p.paper.conf === conflictVenueFilter);
+    }
+    if (conflictSearch) {
+      const q = conflictSearch.toLowerCase();
+      filteredPapers = filteredPapers.filter(p => p.paper.title?.toLowerCase().includes(q));
+    }
+    if (conflictTab === 'conflicts' && conflictStatusFilter !== 'all') {
+      if (conflictStatusFilter === 'resolved') {
+        filteredPapers = filteredPapers.filter(p => finalDecisions[p.paperId]);
+      } else {
+        filteredPapers = filteredPapers.filter(p => !finalDecisions[p.paperId]);
+      }
+    }
+
+    const kappaInfo = interpretKappa(analysis.kappa);
+    const resolvedCount = analysis.conflicts.filter(id => finalDecisions[id]).length;
+
+    return (
+      <div className="app conflict-view">
+        <div className="conflict-header">
+          <button className="conflict-back-btn" onClick={() => setAppView('screener')}>&larr; Back to Screener</button>
+          <h2>Conflict Resolution — {projectName}</h2>
+          <button className="conflict-export-btn" onClick={exportResolved}>Export Resolved</button>
+        </div>
+
+        {/* Annotator Progress */}
+        <div className="conflict-section">
+          <h3>Annotator Progress</h3>
+          <div className="conflict-annotator-grid">
+            {annotators.map((a, i) => {
+              const aid = annotatorIds[i] || a.id;
+              const decs = aid ? annotatorDecisions[aid] || {} : {};
+              const count = Object.keys(decs).length;
+              const pct = totalPapers > 0 ? Math.round((count / totalPapers) * 100) : 0;
+              return (
+                <div key={a.email} className="conflict-annotator-card">
+                  <div className="conflict-annotator-info">
+                    <span className="conflict-annotator-email">{a.email}</span>
+                    <span className="conflict-annotator-role">{a.role}</span>
+                  </div>
+                  <div className="conflict-progress-bar">
+                    <div className="conflict-progress-fill" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="conflict-progress-label">{count} / {totalPapers} ({pct}%)</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Agreement Summary */}
+        <div className="conflict-section">
+          <h3>Agreement Summary</h3>
+          <div className="conflict-stats-grid">
+            <div className="conflict-stat">
+              <span className="conflict-stat-value">{analysis.screened.length}</span>
+              <span className="conflict-stat-label">Screened by 2+</span>
+            </div>
+            <div className="conflict-stat">
+              <span className="conflict-stat-value">{analysis.agreementRate.toFixed(1)}%</span>
+              <span className="conflict-stat-label">Agreement Rate</span>
+            </div>
+            {analysis.kappaType !== 'none' && (
+              <div className="conflict-stat">
+                <span className="conflict-stat-value">{analysis.kappa.toFixed(3)}</span>
+                <span className="conflict-stat-label">{analysis.kappaType} Kappa</span>
+                <span className="conflict-kappa-badge" style={{ background: kappaInfo.color }}>{kappaInfo.label}</span>
+              </div>
+            )}
+            <div className="conflict-stat">
+              <span className="conflict-stat-value conflict-stat-conflict">{analysis.conflicts.length}</span>
+              <span className="conflict-stat-label">Conflicts ({resolvedCount} resolved)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="conflict-tabs">
+          <button className={`conflict-tab ${conflictTab === 'conflicts' ? 'active' : ''}`} onClick={() => setConflictTab('conflicts')}>
+            Conflicts ({analysis.conflicts.length})
+          </button>
+          <button className={`conflict-tab ${conflictTab === 'agreed' ? 'active' : ''}`} onClick={() => setConflictTab('agreed')}>
+            Agreed ({analysis.agreed.length})
+          </button>
+          <button className={`conflict-tab ${conflictTab === 'all' ? 'active' : ''}`} onClick={() => setConflictTab('all')}>
+            All ({analysis.screened.length})
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="conflict-filters">
+          <input
+            className="conflict-search"
+            type="text"
+            placeholder="Search by title..."
+            value={conflictSearch}
+            onChange={(e) => setConflictSearch(e.target.value)}
+          />
+          <select className="conflict-venue-filter" value={conflictVenueFilter} onChange={(e) => setConflictVenueFilter(e.target.value)}>
+            {conflictVenues.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          {conflictTab === 'conflicts' && (
+            <select className="conflict-status-filter" value={conflictStatusFilter} onChange={(e) => setConflictStatusFilter(e.target.value)}>
+              <option value="all">All conflicts</option>
+              <option value="unresolved">Unresolved</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          )}
+        </div>
+
+        {/* Paper List */}
+        <div className="conflict-paper-list">
+          {filteredPapers.length === 0 && (
+            <div className="conflict-empty">No papers match the current filters.</div>
+          )}
+          {filteredPapers.map(({ paperId, paper }) => {
+            const fd = finalDecisions[paperId];
+            const isConflict = analysis.conflicts.includes(paperId);
+            return (
+              <div key={paperId} className={`conflict-paper-row ${fd ? 'resolved' : ''}`}>
+                <div className="conflict-paper-info">
+                  <span className="conflict-paper-venue">{paper.conf}</span>
+                  <span className="conflict-paper-title">{paper.title?.length > 100 ? paper.title.slice(0, 100) + '...' : paper.title}</span>
+                </div>
+                <div className="conflict-decisions-row">
+                  {annotatorIds.map((aid, i) => {
+                    const d = annotatorDecisions[aid]?.[paperId];
+                    return (
+                      <span key={aid} className={`conflict-decision-chip ${d ? d.toLowerCase() : 'none'}`} title={annotators[i]?.email}>
+                        {d || '—'}
+                      </span>
+                    );
+                  })}
+                  {isConflict && (
+                    <div className="conflict-resolve-controls">
+                      <select
+                        className="conflict-final-select"
+                        value={fd?.decision || ''}
+                        onChange={(e) => {
+                          const comment = fd?.comment || '';
+                          handleFinalDecision(paperId, e.target.value, comment);
+                        }}
+                      >
+                        <option value="">— Resolve —</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                        <option value="Maybe">Maybe</option>
+                      </select>
+                      <input
+                        className="conflict-comment-input"
+                        type="text"
+                        placeholder="Comment..."
+                        defaultValue={fd?.comment || ''}
+                        onBlur={(e) => {
+                          if (fd?.decision) {
+                            handleFinalDecision(paperId, fd.decision, e.target.value);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  {!isConflict && (
+                    <span className={`conflict-decision-chip agreed ${(annotatorDecisions[annotatorIds[0]]?.[paperId] || '').toLowerCase()}`}>
+                      Agreed
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading papers...</div>;
   }
@@ -2615,6 +2927,9 @@ function AppMain({ currentUser, logout }) {
                   <div className="project-menu-sep" />
                   {projectRole === 'owner' && (
                     <button onClick={() => { setProjectMenuOpen(false); setShareModalOpen(true); loadCollaborators(); }}>Share Project</button>
+                  )}
+                  {projectRole === 'owner' && hasCollaborators && (
+                    <button onClick={openConflictDashboard}>Resolve Conflicts</button>
                   )}
                   <button onClick={() => {
                     setProjectMenuOpen(false);

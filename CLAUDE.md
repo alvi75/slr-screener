@@ -68,7 +68,10 @@ users/{userId}/
     decisions/{paperId}          # Triage decisions (Yes/No/Maybe)
 
 projects/{projectId}/
+  meta                           # Owner info for sharing lookup (ownerId, ownerEmail, projectName)
   aiScores/{paperId}             # Shared AI scores (not per-user)
+  collaborators/{email}          # Sharing: role, status, invitedBy, invitedAt
+  finalDecisions/{paperId}       # Conflict resolution: decision, resolvedBy, resolvedAt, comment
 ```
 
 ### Sync Behavior
@@ -85,6 +88,8 @@ projects/{projectId}/
 - **Project CRUD**: `saveProject`, `getProjects`, `getProject`, `deleteProject`
 - **Decisions**: `saveDecision`, `deleteDecision`, `getDecisions`, `saveAllDecisions`
 - **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`
+- **Sharing**: `saveProjectMeta`, `getProjectMeta`, `addCollaborator`, `removeCollaborator`, `updateCollaboratorRole`, `getCollaborators`, `acceptInvite`, `getSharedProjects`
+- **Final Decisions**: `saveFinalDecision`, `getFinalDecisions`, `deleteFinalDecision`
 - **Sync helpers**: `syncDecisionsToFirestore`, `syncAIScoresToFirestore`, `syncProjectToFirestore` — fire-and-forget wrappers that log warnings but never throw
 - Batch writes chunked at 500 (Firestore limit); all writes include `serverTimestamp()`
 
@@ -112,7 +117,7 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 ### Project Management
 
 - **Project sidebar** — hamburger menu (☰), lists current project with paper/screened counts
-- **Three-dot menu (⋮)** — Rename, Add Papers, Export JSON, Export CSV, Duplicate, Delete
+- **Three-dot menu (⋮)** — Rename, Add Papers, Export JSON, Export CSV, Share Project (owner), Resolve Conflicts (owner, shared), Duplicate, Delete
 - **Add Papers** — opens import page in append mode with banner "Adding papers to: [Project Name]", deduplicates by title (case-insensitive), shows result notification with counts
 - **Export JSON** — standardized format matching `enriched_papers_2025.json` schema
 - **Export CSV** — includes all triage data (decisions, AI scores, suggestions, reasons)
@@ -193,6 +198,32 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Progress bar** — segmented bar showing Yes (green), Maybe (yellow), No (red) counts with remaining
 - **Auto-save** — all state persists in localStorage
 
+### Project Sharing
+
+- **Share modal** — invite collaborators by email with role selection (Annotator or Viewer)
+- **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
+- **Collaborator list** — shows email, role (editable), status (pending/accepted), remove button
+- **Auto-discovery** — on login, collectionGroup query finds all projects where user's email is a collaborator
+- **Auto-accept** — pending invites automatically accepted when collaborator signs in
+- **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
+- **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
+
+### Conflict Resolution Dashboard
+
+Owner-only view for shared projects, accessible via "Resolve Conflicts" in three-dot menu:
+
+- **Annotator Progress** — cards showing each annotator's email, role, screened count, and progress bar
+- **Agreement Summary** — total screened by 2+, agreement rate %, Kappa score with interpretation badge, conflict count
+  - **Cohen's Kappa** — for exactly 2 annotators
+  - **Fleiss' Kappa** — for 3+ annotators
+  - **Interpretation labels**: Poor (<0.2), Fair (0.2–0.4), Moderate (0.4–0.6), Substantial (0.6–0.8), Almost Perfect (>0.8)
+- **Three tabs** — Conflicts (disagreements), Agreed (unanimous), All (every screened paper)
+- **Filters** — search by title, filter by venue, filter by resolution status (resolved/unresolved)
+- **Conflict rows** — venue badge, truncated title, color-coded decision chips per annotator, final decision dropdown, comment input
+- **Final decisions** — stored at `projects/{projectId}/finalDecisions/{paperId}` with decision, resolvedBy, resolvedAt, comment
+- **Export Resolved** — CSV with title, author, venue, abstract, doi, each annotator's decision columns, final_decision, conflict_comment, resolved_by, resolved_at
+- **Kappa utility** (`src/utils/kappa.js`) — pure functions: `cohensKappa`, `fleissKappa`, `interpretKappa`, `analyzeConflicts`
+
 ## Project Structure
 
 ```
@@ -209,16 +240,19 @@ slr-screener/
 │   ├── contexts/
 │   │   └── AuthContext.js          # Auth context provider (Google + email/password)
 │   ├── services/
-│   │   └── firestore.js            # Firestore service layer (CRUD, sync helpers)
+│   │   └── firestore.js            # Firestore service layer (CRUD, sync, sharing, conflicts)
+│   ├── utils/
+│   │   └── kappa.js                # Cohen's/Fleiss' Kappa, conflict analysis
 │   ├── testHelpers.js              # Shared test utilities (mock data, fetch mock)
 │   ├── __tests__/
 │   │   ├── dataAndNavigation.test.js  # Navigation and data loading (12 tests)
 │   │   ├── triage.test.js             # Triage decisions and undo (7 tests)
 │   │   ├── highlights.test.js         # Keyword highlighting (3 tests)
 │   │   ├── export.test.js             # CSV export and decision log (3 tests)
-│   │   ├── project.test.js            # Project management sidebar (5 tests)
+│   │   ├── project.test.js            # Project management and sharing (8 tests)
 │   │   ├── auth.test.js               # Auth flow and verification (19 tests)
-│   │   └── firestore.test.js          # Firestore service layer (19 tests)
+│   │   ├── firestore.test.js          # Firestore service layer (24 tests)
+│   │   └── kappa.test.js              # Kappa calculations and conflict detection (26 tests)
 │   ├── index.js                    # Entry point
 │   └── index.css                   # Base/reset styles
 ├── server.js                       # Express proxy (Claude API + Semantic Scholar)
@@ -228,7 +262,7 @@ slr-screener/
 
 ## Testing
 
-68 tests across 7 suites:
+109 tests across 8 suites:
 
 ```bash
 npm test         # Run all tests
@@ -240,9 +274,10 @@ npm test         # Run all tests
 | triage | 7 | Y/N/M decisions, undo, re-decision, badges, counts |
 | highlights | 3 | Toggle on/off, whole-word matching, hover tooltips |
 | export | 3 | CSV format, decision log, search filter |
-| project | 5 | Sidebar, new project, switch back, screened count, menu |
+| project | 8 | Sidebar, new project, switch back, screened count, menu, sharing modal, validation |
 | auth | 19 | Login/sign-up forms, password validation, verification flow, Google sign-in |
-| firestore | 19 | CRUD operations, batch writes, sync helpers, error handling |
+| firestore | 30 | CRUD, batch writes, sync helpers, sharing, final decisions |
+| kappa | 27 | Cohen's Kappa, Fleiss' Kappa, interpretation, conflict detection, edge cases |
 
 All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests use `jest.useFakeTimers()` for countdown/polling.
 
@@ -252,7 +287,7 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
-npm test         # Run test suite (68 tests)
+npm test         # Run test suite (109 tests)
 ```
 
 The proxy server (`server.js`) must be running for AI scoring and Semantic Scholar lookups. It proxies:
@@ -263,5 +298,4 @@ The proxy server (`server.js`) must be running for AI scoring and Semantic Schol
 
 ## Planned Features
 
-- Multi-reviewer support with conflict resolution
 - Deployment as a reusable module for other SLR projects
