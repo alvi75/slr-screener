@@ -1076,6 +1076,120 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
   );
 }
 
+function VerificationPage() {
+  const { currentUser, resendVerification, reloadUser, logout, googleSignIn } = useAuth();
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [countdown, setCountdown] = useState(60);
+  const countdownRef = useRef(null);
+  const pollRef = useRef(null);
+
+  // Start countdown on mount (initial email already sent at signup)
+  useEffect(() => {
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(countdownRef.current); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(countdownRef.current);
+  }, []);
+
+  // Auto-poll every 5s to check if email has been verified
+  useEffect(() => {
+    pollRef.current = setInterval(async () => {
+      try {
+        await reloadUser();
+      } catch { /* ignore polling errors */ }
+    }, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [reloadUser]);
+
+  async function handleResend() {
+    setMessage('');
+    setError('');
+    setSending(true);
+    try {
+      await resendVerification();
+      setMessage('Verification email sent! Check your inbox.');
+      setCountdown(60);
+      clearInterval(countdownRef.current);
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) { clearInterval(countdownRef.current); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      if (err.code === 'auth/too-many-requests') {
+        setError('Too many requests. Please wait a few minutes before trying again.');
+      } else {
+        setError('Failed to send verification email. Please try again.');
+      }
+    }
+    setSending(false);
+  }
+
+  async function handleGoogle() {
+    setError('');
+    setMessage('');
+    try {
+      await googleSignIn();
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError('Google sign-in failed. Please try again.');
+      }
+    }
+  }
+
+  const resendDisabled = sending || countdown > 0;
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
+          <p className="login-subtitle">Check Your Email</p>
+        </div>
+
+        <div className="verify-content">
+          <div className="verify-icon">✉️</div>
+          <p className="verify-text">
+            We sent a verification link to <strong>{currentUser.email}</strong>
+          </p>
+          <p className="verify-hint">Click the link in your email to verify your account. This page will update automatically once verified.</p>
+
+          <div className="verify-poll-status">Checking verification status...</div>
+
+          {message && <div className="login-message">{message}</div>}
+          {error && <div className="login-error">{error}</div>}
+
+          <button className="verify-resend-btn" onClick={handleResend} disabled={resendDisabled}>
+            {sending ? 'Sending...' : countdown > 0 ? `Resend available in ${countdown}s` : 'Resend Verification Email'}
+          </button>
+
+          <div className="verify-divider"><span>or</span></div>
+
+          <button className="login-google-btn" onClick={handleGoogle} type="button">
+            <svg viewBox="0 0 24 24" width="18" height="18" className="login-google-icon">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Use Google sign-in instead
+          </button>
+
+          <button className="verify-signout-btn" onClick={logout}>
+            Sign out and use a different account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const { currentUser, logout, loading: authLoading } = useAuth();
 
@@ -1085,6 +1199,12 @@ function App() {
   }
   if (!currentUser) {
     return <LoginPage />;
+  }
+
+  // Email/password users must verify their email before accessing the app.
+  // Google sign-in users are always verified, so skip this check for them.
+  if (!currentUser.emailVerified && currentUser.providerData?.[0]?.providerId === 'password') {
+    return <VerificationPage />;
   }
 
   return <AppMain currentUser={currentUser} logout={logout} />;

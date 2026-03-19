@@ -6,8 +6,10 @@ import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
-    currentUser: { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null },
+    currentUser: { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null, emailVerified: true, providerData: [{ providerId: 'password' }] },
     logout: jest.fn(),
+    resendVerification: jest.fn(),
+    reloadUser: jest.fn(),
     loading: false,
   }),
 }));

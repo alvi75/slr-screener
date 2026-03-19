@@ -19,9 +19,14 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const actionCodeSettings = {
+    url: window.location.origin,
+    handleCodeInApp: false,
+  };
+
   function signup(email, password) {
     return createUserWithEmailAndPassword(auth, email, password).then((cred) => {
-      return sendEmailVerification(cred.user).then(() => cred);
+      return sendEmailVerification(cred.user, actionCodeSettings).then(() => cred);
     });
   }
 
@@ -35,6 +40,22 @@ export function AuthProvider({ children }) {
 
   function googleSignIn() {
     return signInWithPopup(auth, googleProvider);
+  }
+
+  function resendVerification() {
+    if (currentUser && !currentUser.emailVerified) {
+      return sendEmailVerification(currentUser, actionCodeSettings);
+    }
+    return Promise.resolve();
+  }
+
+  function reloadUser() {
+    if (currentUser) {
+      return currentUser.reload().then(() => {
+        setCurrentUser({ ...auth.currentUser });
+      });
+    }
+    return Promise.resolve();
   }
 
   useEffect(() => {
@@ -51,6 +72,8 @@ export function AuthProvider({ children }) {
     login,
     logout,
     googleSignIn,
+    resendVerification,
+    reloadUser,
     loading,
   };
 

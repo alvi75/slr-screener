@@ -1982,6 +1982,91 @@
 .login-input:focus {
   border-color: #74b9ff;
 }
+
+/* Password field wrapper with eye toggle */
+.login-pw-wrapper {
+  position: relative;
+}
+.login-input-pw {
+  padding-right: 40px;
+}
+.login-pw-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: #b2bec3;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.login-pw-toggle:hover {
+  color: #636e72;
+}
+
+/* Password strength bar */
+.pw-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pw-strength-bar {
+  flex: 1;
+  height: 4px;
+  background: #dfe6e9;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pw-strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.25s, background 0.25s;
+}
+.pw-strength-fill.pw-weak { background: #d63031; }
+.pw-strength-fill.pw-medium { background: #fdcb6e; }
+.pw-strength-fill.pw-strong { background: #00b894; }
+.pw-strength-label {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 52px;
+  text-align: right;
+}
+.pw-strength-label.pw-weak { color: #d63031; }
+.pw-strength-label.pw-medium { color: #e17055; }
+.pw-strength-label.pw-strong { color: #00b894; }
+
+/* Password validation rules */
+.pw-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pw-rules li {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pw-rule-icon {
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pw-rule-pass {
+  color: #00b894;
+}
+.pw-rule-fail {
+  color: #b2bec3;
+}
+
 .login-error {
   font-size: 13px;
   color: #d63031;
@@ -2031,6 +2116,107 @@
   font-family: inherit;
 }
 .login-toggle-btn:hover { text-decoration: underline; }
+
+/* ===== VERIFICATION PAGE ===== */
+.verify-content {
+  text-align: center;
+}
+.verify-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+.verify-text {
+  font-size: 14px;
+  color: #2d3436;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.verify-text strong {
+  color: #0984e3;
+}
+.verify-hint {
+  font-size: 13px;
+  color: #636e72;
+  margin-bottom: 16px;
+}
+.verify-poll-status {
+  font-size: 12px;
+  color: #b2bec3;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.verify-poll-status::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00b894;
+  animation: verify-pulse 1.5s ease-in-out infinite;
+}
+@keyframes verify-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.verify-resend-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  background: white;
+  color: #0984e3;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.verify-resend-btn:hover:not(:disabled) {
+  background: #f0f7ff;
+  border-color: #0984e3;
+}
+.verify-resend-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  color: #636e72;
+}
+.verify-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  gap: 12px;
+}
+.verify-divider::before,
+.verify-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #dfe6e9;
+}
+.verify-divider span {
+  font-size: 12px;
+  color: #b2bec3;
+  text-transform: uppercase;
+}
+.verify-signout-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: #636e72;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: color 0.15s;
+}
+.verify-signout-btn:hover {
+  color: #d63031;
+}
 
 /* ===== HEADER USER ===== */
 .header-user {

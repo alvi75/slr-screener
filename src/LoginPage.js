@@ -1,5 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from './contexts/AuthContext';
+
+const PW_RULES = [
+  { key: 'length', label: 'At least 8 characters', test: pw => pw.length >= 8 },
+  { key: 'upper', label: 'One uppercase letter', test: pw => /[A-Z]/.test(pw) },
+  { key: 'lower', label: 'One lowercase letter', test: pw => /[a-z]/.test(pw) },
+  { key: 'number', label: 'One number', test: pw => /[0-9]/.test(pw) },
+  { key: 'special', label: 'One special character (!@#$%^&*)', test: pw => /[!@#$%^&*]/.test(pw) },
+];
+
+function getStrength(passed) {
+  if (passed <= 2) return { level: 'weak', label: 'Weak', color: '#d63031' };
+  if (passed <= 4) return { level: 'medium', label: 'Medium', color: '#fdcb6e' };
+  return { level: 'strong', label: 'Strong', color: '#00b894' };
+}
 
 export default function LoginPage() {
   const { login, signup, googleSignIn } = useAuth();
@@ -7,27 +21,40 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const ruleResults = useMemo(() => PW_RULES.map(r => ({ ...r, passed: r.test(password) })), [password]);
+  const passedCount = ruleResults.filter(r => r.passed).length;
+  const strength = getStrength(passedCount);
+  const allPassed = passedCount === PW_RULES.length;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setMessage('');
 
-    if (isSignUp && password !== confirmPassword) {
-      return setError('Passwords do not match.');
-    }
-    if (password.length < 6) {
-      return setError('Password must be at least 6 characters.');
+    if (isSignUp) {
+      if (!allPassed) {
+        return setError('Password does not meet all requirements.');
+      }
+      if (password !== confirmPassword) {
+        return setError('Passwords do not match.');
+      }
+    } else {
+      if (password.length < 1) {
+        return setError('Please enter your password.');
+      }
     }
 
     setSubmitting(true);
     try {
       if (isSignUp) {
         await signup(email, password);
-        setMessage('Account created! A verification email has been sent to ' + email + '.');
+        setMessage('Verification email sent to ' + email + '. Check your inbox and click the link to verify your account.');
       } else {
         await login(email, password);
       }
@@ -90,25 +117,96 @@ export default function LoginPage() {
             required
             autoComplete="email"
           />
-          <input
-            type="password"
-            placeholder="Password"
-            className="login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete={isSignUp ? 'new-password' : 'current-password'}
-          />
-          {isSignUp && (
+
+          <div className="login-pw-wrapper">
             <input
-              type="password"
-              placeholder="Confirm password"
-              className="login-input"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              className="login-input login-input-pw"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="new-password"
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
             />
+            <button
+              type="button"
+              className="login-pw-toggle"
+              onClick={() => setShowPassword(v => !v)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {isSignUp && password.length > 0 && (
+            <div className="pw-strength">
+              <div className="pw-strength-bar">
+                <div
+                  className={`pw-strength-fill pw-${strength.level}`}
+                  style={{ width: `${(passedCount / PW_RULES.length) * 100}%` }}
+                />
+              </div>
+              <span className={`pw-strength-label pw-${strength.level}`}>{strength.label}</span>
+            </div>
+          )}
+
+          {isSignUp && password.length > 0 && (
+            <ul className="pw-rules">
+              {ruleResults.map(r => (
+                <li key={r.key} className={r.passed ? 'pw-rule-pass' : 'pw-rule-fail'}>
+                  <span className="pw-rule-icon">{r.passed ? '\u2713' : '\u2717'}</span>
+                  {r.label}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {isSignUp && (
+            <div className="login-pw-wrapper">
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                placeholder="Confirm password"
+                className="login-input login-input-pw"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="login-pw-toggle"
+                onClick={() => setShowConfirm(v => !v)}
+                tabIndex={-1}
+                aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirm ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                    <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
           )}
 
           {error && <div className="login-error">{error}</div>}

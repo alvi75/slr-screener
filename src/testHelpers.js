@@ -49,6 +49,8 @@ export const MOCK_USER = {
   email: 'test@example.com',
   displayName: 'Test User',
   photoURL: null,
+  emailVerified: true,
+  providerData: [{ providerId: 'password' }],
 };
 
 /**
@@ -89,6 +91,8 @@ export function createAuthMock(overrides = {}) {
     signup: jest.fn(),
     logout: jest.fn(),
     googleSignIn: jest.fn(),
+    resendVerification: jest.fn(),
+    reloadUser: jest.fn(),
     loading: false,
     ...overrides,
   };
