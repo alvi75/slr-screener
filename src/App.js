@@ -327,6 +327,7 @@ function App() {
     catch { return DEFAULT_MODEL; }
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
+  const [scoringDone, setScoringDone] = useState(false);
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
 
@@ -604,8 +605,10 @@ function App() {
       setAiScores(prev => ({ ...prev, ...newScores }));
       setScoringProgress({ done, total, errors });
     }
-    // Clear progress after a short delay so user sees 100%
-    setTimeout(() => setScoringProgress(null), 2000);
+    // Show checkmark briefly then clear
+    setScoringProgress(null);
+    setScoringDone(true);
+    setTimeout(() => setScoringDone(false), 2000);
   }, [apiKey, papers, aiScores, getAbstract, scoringModel]);
 
   const stopScoring = useCallback(() => {
@@ -666,6 +669,17 @@ function App() {
       .sort((a, b) => b.score - a.score);
   }, [aiScores, papers]);
 
+  // Count unscored papers with abstracts
+  const unscoredCount = useMemo(() => {
+    let count = 0;
+    for (let i = 0; i < papers.length; i++) {
+      if (aiScores[i]) continue;
+      const abs = abstractEdits[i] || papers[i]?.abstract || '';
+      if (abs && abs !== 'not_found') count++;
+    }
+    return count;
+  }, [papers, aiScores, abstractEdits]);
+
   // Progress stats
   const totalPapers = papers.length;
   const yesCount = Object.values(decisions).filter((d) => d === 'Yes').length;
@@ -693,10 +707,18 @@ function App() {
             {decidedCount}/{totalPapers} screened
           </span>
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
-          <button className="header-btn btn-score" onClick={scoringProgress ? stopScoring : startScoring}>
+          <button
+            className="header-btn btn-score"
+            onClick={scoringProgress ? stopScoring : startScoring}
+            title={scoringProgress
+              ? `${Object.keys(aiScores).length + scoringProgress.done}/${totalPapers} scored with ${modelName(scoringModel)}`
+              : scoringDone
+                ? `${Object.keys(aiScores).length}/${totalPapers} scored with ${modelName(scoringModel)}`
+                : `${unscoredCount} papers unscored. Click to score them.`}
+          >
             {scoringProgress
-              ? `Scoring ${scoringProgress.done}/${scoringProgress.total}${scoringProgress.errors > 0 ? ` (${scoringProgress.errors} err)` : ''}`
-              : `Score Papers${Object.keys(aiScores).length > 0 ? ` (${Object.keys(aiScores).length})` : ''}`}
+              ? `Scoring... ${scoringProgress.total - scoringProgress.done} left`
+              : scoringDone ? 'Score Papers \u2713' : 'Score Papers'}
           </button>
           <button className="header-btn btn-export" onClick={exportCSV}>Export CSV</button>
           <button className="header-btn btn-log" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
