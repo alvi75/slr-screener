@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import './App.css';
 
 // ===== HIGHLIGHT SYSTEM =====
@@ -270,6 +271,53 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
   return { score: parsed.score, suggestion: parsed.suggestion.toLowerCase(), reason: parsed.reason, model };
 }
 
+// ===== SETUP / IMPORT HELPERS =====
+const COLUMN_HINTS = {
+  title: ['title', 'paper title', 'paper_title', 'name', 'paper name'],
+  author: ['author', 'authors', 'writer', 'writers', 'author(s)'],
+  abstract: ['abstract', 'summary', 'description'],
+  conf: ['conf', 'conference', 'venue', 'source', 'journal', 'proceeding', 'proceedings'],
+  doi: ['doi', 'DOI'],
+  doi_url: ['doi_url', 'doi url', 'doi link'],
+  arxiv_id: ['arxiv_id', 'arxiv', 'arxiv id'],
+  pdf_url: ['pdf_url', 'pdf', 'pdf link', 'pdf url'],
+  year: ['year', 'pub_year', 'publication year'],
+};
+
+function autoDetectColumns(headers) {
+  const mapping = {};
+  for (const [field, hints] of Object.entries(COLUMN_HINTS)) {
+    for (const header of headers) {
+      const h = header.toLowerCase().trim();
+      if (hints.includes(h)) { mapping[header] = field; break; }
+    }
+  }
+  return mapping;
+}
+
+function normalizePaper(raw) {
+  const val = (v) => v || 'not_found';
+  const doi = raw.doi || '';
+  return {
+    conf: val(raw.conf || raw.venue || raw.conference),
+    title: val(raw.title),
+    author: val(raw.author || raw.authors),
+    abstract: val(raw.abstract || raw.summary),
+    doi: val(doi),
+    doi_url: doi ? `https://doi.org/${doi}` : val(raw.doi_url),
+    openalex_id: val(raw.openalex_id),
+    arxiv_id: val(raw.arxiv_id),
+    pdf_url: val(raw.pdf_url),
+    pdf_source: val(raw.pdf_source),
+  };
+}
+
+function projectSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'project';
+}
+
+const S2_PROXY = 'http://localhost:3001/api/semantic-scholar';
+
 const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
 const STORAGE_KEY = 'slr-screener-decisions';
 const INDEX_KEY = 'slr-screener-index';
@@ -286,7 +334,493 @@ function venueCls(conf) {
   return '';
 }
 
+// ===== SETUP VIEW COMPONENT =====
+function SetupView({ onImport, onLoadDemo, apiKey, setApiKey }) {
+  const [activeMethod, setActiveMethod] = useState(null); // 'csv' | 'json' | 'titles' | 'pdf'
+
+  // CSV/Excel state
+  const [csvRows, setCsvRows] = useState(null);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [csvMapping, setCsvMapping] = useState({});
+  const [csvFileName, setCsvFileName] = useState('');
+
+  // JSON state
+  const [jsonPapers, setJsonPapers] = useState(null);
+  const [jsonFileName, setJsonFileName] = useState('');
+  const [jsonNoVenue, setJsonNoVenue] = useState(false);
+  const [jsonDefaultVenue, setJsonDefaultVenue] = useState('');
+
+  // Paste titles state
+  const [titleText, setTitleText] = useState('');
+  const [titleResults, setTitleResults] = useState(null);
+  const [titleFetching, setTitleFetching] = useState(false);
+  const [titleProgress, setTitleProgress] = useState({ done: 0, total: 0 });
+
+  // PDF state
+  const [pdfFiles, setPdfFiles] = useState([]);
+  const [pdfResults, setPdfResults] = useState([]);
+  const [pdfProcessing, setPdfProcessing] = useState(false);
+
+  const SCHEMA_FIELDS = ['title', 'author', 'abstract', 'conf', 'doi', 'doi_url', 'arxiv_id', 'pdf_url', 'year', '(skip)'];
+
+  // === CSV/Excel handler ===
+  const handleCsvFile = useCallback((file) => {
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (rows.length === 0) { alert('No data found in file.'); return; }
+      const headers = Object.keys(rows[0]);
+      setCsvHeaders(headers);
+      setCsvRows(rows);
+      setCsvMapping(autoDetectColumns(headers));
+    };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const importCsv = useCallback(() => {
+    if (!csvRows) return;
+    const reverseMap = {};
+    for (const [header, field] of Object.entries(csvMapping)) {
+      if (field && field !== '(skip)') reverseMap[field] = header;
+    }
+    if (!reverseMap.title) { alert('Please map at least the "title" column.'); return; }
+    const papers = csvRows.map((row) => {
+      const raw = {};
+      for (const [field, header] of Object.entries(reverseMap)) {
+        raw[field] = row[header] || '';
+      }
+      return normalizePaper(raw);
+    }).filter(p => p.title);
+    onImport(papers);
+  }, [csvRows, csvMapping, onImport]);
+
+  // === JSON handler ===
+  const handleJsonFile = useCallback((file) => {
+    setJsonFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        let papers;
+        if (Array.isArray(parsed)) {
+          papers = parsed;
+        } else if (parsed.papers && Array.isArray(parsed.papers)) {
+          papers = parsed.papers;
+        } else {
+          alert('JSON must be an array of papers or an object with a "papers" array.'); return;
+        }
+        const normalized = papers.map(normalizePaper).filter(p => p.title && p.title !== 'not_found');
+        // Check if any paper has a real venue
+        const hasVenue = normalized.some(p => p.conf && p.conf !== 'not_found');
+        setJsonNoVenue(!hasVenue);
+        setJsonDefaultVenue('');
+        setJsonPapers(normalized);
+      } catch (err) {
+        alert('Invalid JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }, []);
+
+  // === Paste titles handler ===
+  const fetchTitles = useCallback(async () => {
+    const lines = titleText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) { alert('Paste at least one title.'); return; }
+    setTitleFetching(true);
+    setTitleProgress({ done: 0, total: lines.length });
+    const results = [];
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const res = await fetch(S2_PROXY + '/search', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: lines[i] }),
+        });
+        const data = await res.json();
+        results.push({ ...data, originalTitle: lines[i] });
+      } catch (err) {
+        results.push({ found: false, originalTitle: lines[i], error: err.message });
+      }
+      setTitleProgress({ done: i + 1, total: lines.length });
+      if (i < lines.length - 1) await new Promise(r => setTimeout(r, 200)); // small delay for UI
+    }
+    setTitleResults(results);
+    setTitleFetching(false);
+  }, [titleText]);
+
+  const importTitles = useCallback(() => {
+    if (!titleResults) return;
+    const papers = titleResults.filter(r => r.found).map(r => normalizePaper({
+      title: r.title, author: r.author, abstract: r.abstract,
+      conf: r.venue ? `${r.venue} ${r.year || ''}`.trim() : '',
+      doi: r.doi, arxiv_id: r.arxiv_id,
+    }));
+    if (papers.length === 0) { alert('No papers were found.'); return; }
+    onImport(papers);
+  }, [titleResults, onImport]);
+
+  // === PDF handler ===
+  const handlePdfFiles = useCallback(async (files) => {
+    setPdfProcessing(true);
+    const results = [];
+    for (const file of files) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfjsLib = await import('pdfjs-dist/build/pdf');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
+        let fullText = '';
+        for (let p = 1; p <= Math.min(pdf.numPages, 5); p++) { // first 5 pages
+          const page = await pdf.getPage(p);
+          const content = await page.getTextContent();
+          fullText += content.items.map(i => i.str).join(' ') + '\n';
+        }
+        results.push({ name: file.name, text: fullText.trim(), title: file.name.replace(/\.pdf$/i, ''), extracted: false });
+      } catch (err) {
+        results.push({ name: file.name, text: '', title: file.name.replace(/\.pdf$/i, ''), error: err.message, extracted: false });
+      }
+    }
+    setPdfResults(results);
+    setPdfProcessing(false);
+  }, []);
+
+  const extractWithAI = useCallback(async (idx) => {
+    if (!apiKey) { alert('Set your API key first.'); return; }
+    const item = pdfResults[idx];
+    try {
+      const res = await fetch('http://localhost:3001/api/score', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: `Extract the paper metadata from this text. Return JSON only:\n{"title": "...", "authors": "...", "abstract": "..."}\n\nText:\n${item.text.slice(0, 3000)}`
+          }],
+        }),
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      const updated = [...pdfResults];
+      updated[idx] = { ...updated[idx], title: parsed.title || item.title, author: parsed.authors || '', abstract: parsed.abstract || '', extracted: true };
+      setPdfResults(updated);
+    } catch (err) {
+      alert('AI extraction failed: ' + err.message);
+    }
+  }, [apiKey, pdfResults]);
+
+  const importPdfs = useCallback(() => {
+    const papers = pdfResults.map(r => normalizePaper({
+      title: r.title, author: r.author || '', abstract: r.abstract || r.text.slice(0, 1000),
+    })).filter(p => p.title);
+    if (papers.length === 0) { alert('No papers to import.'); return; }
+    onImport(papers);
+  }, [pdfResults, onImport]);
+
+  // Drag-and-drop
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = Array.from(e.dataTransfer.files);
+    if (activeMethod === 'pdf') {
+      const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+      if (pdfs.length > 0) { setPdfFiles(pdfs); handlePdfFiles(pdfs); }
+    }
+  }, [activeMethod, handlePdfFiles]);
+
+  const methods = [
+    { id: 'csv', icon: '📊', title: 'Upload CSV / Excel', desc: 'Import a spreadsheet with paper titles, authors, abstracts. We\'ll auto-detect your columns.', primary: true },
+    { id: 'json', icon: '{ }', title: 'Upload JSON', desc: 'Already have structured data? Drop your JSON file here.' },
+    { id: 'titles', icon: '📝', title: 'Paste Titles', desc: 'Paste paper titles and we\'ll fetch abstracts, authors, and DOIs from Semantic Scholar.' },
+    { id: 'pdf', icon: '📄', title: 'Upload PDFs', desc: 'Drop PDF files and extract metadata. Works best with an API key for AI extraction.' },
+  ];
+
+  return (
+    <div className="setup-view">
+      <div className="setup-header">
+        <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
+        <p className="setup-subtitle">Import your papers to begin screening</p>
+      </div>
+
+      {!activeMethod ? (
+        <>
+          <div className="setup-grid">
+            {methods.map(m => (
+              <button key={m.id} className={`setup-card ${m.primary ? 'primary' : ''}`} onClick={() => setActiveMethod(m.id)}>
+                <span className="setup-card-icon">{m.icon}</span>
+                <span className="setup-card-title">{m.title}</span>
+                <span className="setup-card-desc">{m.desc}</span>
+              </button>
+            ))}
+          </div>
+          <div className="setup-footer">
+            <button className="setup-demo-link" onClick={onLoadDemo}>
+              or use the built-in demo dataset (1,100 SE papers)
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="setup-workflow">
+          <button className="setup-back" onClick={() => setActiveMethod(null)}>&larr; Back to options</button>
+
+          {/* === CSV/Excel Workflow === */}
+          {activeMethod === 'csv' && (
+            <div className="setup-panel">
+              <h2>📊 Upload CSV / Excel</h2>
+              {!csvRows ? (
+                <div className="upload-zone" onClick={() => document.getElementById('csv-input').click()}>
+                  <input id="csv-input" type="file" accept=".csv,.xlsx,.xls,.tsv" style={{ display: 'none' }}
+                    onChange={(e) => e.target.files[0] && handleCsvFile(e.target.files[0])} />
+                  <span className="upload-zone-icon">📁</span>
+                  <span className="upload-zone-text">Click to select or drag a CSV/Excel file</span>
+                  <span className="upload-zone-hint">Supports .csv, .xlsx, .xls, .tsv</span>
+                </div>
+              ) : (
+                <>
+                  <div className="setup-file-info">
+                    <strong>{csvFileName}</strong> — {csvRows.length} rows, {csvHeaders.length} columns
+                  </div>
+                  <h3>Column Mapping</h3>
+                  <p className="setup-hint">We auto-detected some columns. Verify and adjust the mapping below.</p>
+                  <div className="column-mapping">
+                    {csvHeaders.map((h) => (
+                      <div key={h} className="column-mapping-row">
+                        <span className="column-header">{h}</span>
+                        <span className="column-arrow">→</span>
+                        <select className="column-select" value={csvMapping[h] || '(skip)'}
+                          onChange={(e) => setCsvMapping(prev => ({ ...prev, [h]: e.target.value }))}>
+                          {SCHEMA_FIELDS.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                        <span className="column-preview">{String(csvRows[0]?.[h] || '').slice(0, 50)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="setup-actions">
+                    <button className="save-btn" onClick={importCsv}>Import {csvRows.length} Papers</button>
+                    <button className="cancel-btn" onClick={() => { setCsvRows(null); setCsvHeaders([]); setCsvMapping({}); }}>Choose Different File</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* === JSON Workflow === */}
+          {activeMethod === 'json' && (
+            <div className="setup-panel">
+              <h2>{'{ }'} Upload JSON</h2>
+              {!jsonPapers ? (
+                <>
+                  <div className="upload-zone" onClick={() => document.getElementById('json-input').click()}>
+                    <input id="json-input" type="file" accept=".json" style={{ display: 'none' }}
+                      onChange={(e) => e.target.files[0] && handleJsonFile(e.target.files[0])} />
+                    <span className="upload-zone-icon">📁</span>
+                    <span className="upload-zone-text">Click to select a JSON file</span>
+                    <span className="upload-zone-hint">Array of papers or {'{ "papers": [...] }'} format</span>
+                  </div>
+                  <div className="json-examples">
+                    <h3>Example 1 (minimal):</h3>
+                    <pre className="json-code">{`[
+  {"title": "Paper Title Here", "author": "Author Name", "conf": "ICSE 2025"},
+  {"title": "Another Paper", "author": "John Doe", "conf": "FSE 2025"}
+]`}</pre>
+                    <h3>Example 2 (full):</h3>
+                    <pre className="json-code">{`{"papers": [
+  {
+    "title": "Paper Title",
+    "author": "Author Name",
+    "abstract": "Paper abstract text...",
+    "conf": "ICSE 2025",
+    "doi": "10.1145/xxxxx",
+    "arxiv_id": "2404.11671"
+  }
+]}`}</pre>
+                    <p className="setup-hint" style={{ marginTop: 12 }}>
+                      Only <strong>"title"</strong> is required. Add <strong>"conf"</strong> (venue name like ICSE 2025, FSE 2025) to enable venue filtering.
+                      Any missing fields will be handled automatically — papers without abstracts get a Google Scholar link and Edit button for manual entry during screening.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="setup-file-info">
+                    <strong>{jsonFileName}</strong> — {jsonPapers.length} papers found
+                  </div>
+                  {jsonNoVenue && (
+                    <div className="venue-prompt">
+                      <p className="venue-prompt-text">No venue/conference field detected. Enter a default venue to apply to all papers (optional):</p>
+                      <input
+                        className="venue-prompt-input"
+                        type="text"
+                        value={jsonDefaultVenue}
+                        onChange={(e) => setJsonDefaultVenue(e.target.value)}
+                        placeholder="e.g., ICSE 2025, FSE 2025, ASE 2025"
+                      />
+                    </div>
+                  )}
+                  <h3>Preview</h3>
+                  <div className="preview-table">
+                    <div className="preview-header">
+                      <span>Title</span><span>Authors</span><span>Venue</span><span>Abstract</span>
+                    </div>
+                    {jsonPapers.slice(0, 5).map((p, i) => {
+                      const venue = (p.conf && p.conf !== 'not_found') ? p.conf : (jsonDefaultVenue || '—');
+                      return (
+                        <div key={i} className="preview-row">
+                          <span>{p.title.slice(0, 40)}{p.title.length > 40 ? '...' : ''}</span>
+                          <span>{(p.author && p.author !== 'not_found') ? p.author.slice(0, 25) : '—'}</span>
+                          <span>{venue}</span>
+                          <span>{(p.abstract && p.abstract !== 'not_found') ? p.abstract.slice(0, 30) + '...' : '—'}</span>
+                        </div>
+                      );
+                    })}
+                    {jsonPapers.length > 5 && <div className="preview-more">...and {jsonPapers.length - 5} more</div>}
+                  </div>
+                  <div className="setup-actions">
+                    <button className="save-btn" onClick={() => {
+                      let toImport = jsonPapers;
+                      if (jsonNoVenue && jsonDefaultVenue.trim()) {
+                        toImport = jsonPapers.map(p => ({
+                          ...p,
+                          conf: (p.conf && p.conf !== 'not_found') ? p.conf : jsonDefaultVenue.trim(),
+                        }));
+                      }
+                      onImport(toImport);
+                    }}>Import {jsonPapers.length} Papers</button>
+                    <button className="cancel-btn" onClick={() => { setJsonPapers(null); setJsonNoVenue(false); }}>Choose Different File</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* === Paste Titles Workflow === */}
+          {activeMethod === 'titles' && (
+            <div className="setup-panel">
+              <h2>📝 Paste Titles</h2>
+              <p className="setup-hint">Paste paper titles (one per line). We'll look up each title on Semantic Scholar to fetch abstracts, authors, and DOIs.</p>
+              {!titleResults ? (
+                <>
+                  <textarea className="paste-area" value={titleText} onChange={(e) => setTitleText(e.target.value)}
+                    placeholder={"Attention Is All You Need\nBERT: Pre-training of Deep Bidirectional Transformers\nCodeBERT: A Pre-Trained Model for Programming"} rows={10} />
+                  <div className="setup-hint" style={{ marginBottom: 12 }}>
+                    {titleText.split('\n').filter(l => l.trim()).length} title(s) entered
+                  </div>
+                  {titleFetching && (
+                    <div className="title-progress">
+                      <div className="title-progress-bar">
+                        <div className="title-progress-fill" style={{ width: `${(titleProgress.done / titleProgress.total) * 100}%` }} />
+                      </div>
+                      <span className="title-progress-text">Fetching {titleProgress.done}/{titleProgress.total}...</span>
+                    </div>
+                  )}
+                  <div className="setup-actions">
+                    <button className="save-btn" onClick={fetchTitles} disabled={titleFetching || !titleText.trim()}>
+                      {titleFetching ? `Fetching ${titleProgress.done}/${titleProgress.total}...` : 'Fetch Metadata'}
+                    </button>
+                  </div>
+                  <p className="setup-hint" style={{ marginTop: 8, fontSize: 11 }}>
+                    Note: Requires the proxy server (node server.js) to be running. Rate limited to ~1 req/sec.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="setup-file-info">
+                    Found {titleResults.filter(r => r.found).length} of {titleResults.length} titles
+                  </div>
+                  <div className="preview-table">
+                    <div className="preview-header">
+                      <span>Title</span><span>Status</span><span>Authors</span>
+                    </div>
+                    {titleResults.map((r, i) => (
+                      <div key={i} className={`preview-row ${r.found ? '' : 'not-found'}`}>
+                        <span>{(r.found ? r.title : r.originalTitle).slice(0, 50)}...</span>
+                        <span>{r.found ? '✓ Found' : '✗ Not found'}</span>
+                        <span>{r.found ? (r.author || '').slice(0, 30) : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="setup-actions">
+                    <button className="save-btn" onClick={importTitles}>
+                      Import {titleResults.filter(r => r.found).length} Papers
+                    </button>
+                    <button className="cancel-btn" onClick={() => setTitleResults(null)}>Edit Titles</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* === PDF Workflow === */}
+          {activeMethod === 'pdf' && (
+            <div className="setup-panel">
+              <h2>📄 Upload PDFs</h2>
+              {pdfResults.length === 0 ? (
+                <div className="upload-zone" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}
+                  onClick={() => document.getElementById('pdf-input').click()}>
+                  <input id="pdf-input" type="file" accept=".pdf" multiple style={{ display: 'none' }}
+                    onChange={(e) => { const files = Array.from(e.target.files); setPdfFiles(files); handlePdfFiles(files); }} />
+                  <span className="upload-zone-icon">📄</span>
+                  <span className="upload-zone-text">{pdfProcessing ? 'Processing...' : 'Click or drag PDF files here'}</span>
+                  <span className="upload-zone-hint">Multiple files supported. Text extracted from first 5 pages.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="setup-file-info">
+                    {pdfResults.length} PDF(s) processed
+                  </div>
+                  <div className="preview-table">
+                    <div className="preview-header">
+                      <span>File</span><span>Title</span><span>Abstract</span><span>AI</span>
+                    </div>
+                    {pdfResults.map((r, i) => (
+                      <div key={i} className="preview-row">
+                        <span>{r.name.slice(0, 20)}</span>
+                        <span>{r.title.slice(0, 30)}</span>
+                        <span>{(r.abstract || r.text || '').slice(0, 30)}...</span>
+                        <span>
+                          {r.extracted ? '✓' : (
+                            <button className="setup-mini-btn" onClick={() => extractWithAI(i)}
+                              disabled={!apiKey}>Extract</button>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {!apiKey && (
+                    <div className="setup-hint" style={{ marginTop: 8 }}>
+                      <strong>Tip:</strong> Set an API key to use AI extraction for better results.
+                      <input type="password" placeholder="sk-ant-..." className="setup-inline-key"
+                        onKeyDown={(e) => { if (e.key === 'Enter') setApiKey(e.target.value.trim()); }} />
+                    </div>
+                  )}
+                  <div className="setup-actions">
+                    <button className="save-btn" onClick={importPdfs}>Import {pdfResults.length} Papers</button>
+                    <button className="cancel-btn" onClick={() => { setPdfResults([]); setPdfFiles([]); }}>Start Over</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
+  // App view: 'setup' or 'screener'
+  const [appView, setAppView] = useState(() => {
+    try { return localStorage.getItem('slr-screener-has-data') ? 'screener' : 'setup'; }
+    catch { return 'setup'; }
+  });
+
   // Initialize state from localStorage synchronously to avoid race conditions
   const [papers, setPapers] = useState([]);
   const [decisions, setDecisions] = useState(() => {
@@ -359,22 +893,61 @@ function App() {
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [scoringDone, setScoringDone] = useState(false);
+  const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
+  const [projectName, setProjectName] = useState(() => {
+    try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
+    catch { return 'Model Sizes in SE Research 2025'; }
+  });
+  const [isDemo, setIsDemo] = useState(() => {
+    try { return localStorage.getItem('slr-screener-is-demo') === '1'; }
+    catch { return false; }
+  });
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [renamingProject, setRenamingProject] = useState(false);
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
 
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
-  // Load data
+  // Load data from default JSON (used by "Use demo data" and "Reload Data")
   const loadData = useCallback(() => {
     fetch(process.env.PUBLIC_URL + '/enriched_papers_2025.json?t=' + Date.now())
       .then((r) => r.json())
       .then((data) => {
         setPapers(data.papers);
         setLoading(false);
+        setAppView('screener');
+        setIsDemo(true);
+        setProjectName('Model Sizes in SE Research 2025');
+        localStorage.setItem('slr-screener-has-data', '1');
+        localStorage.setItem('slr-screener-is-demo', '1');
+        localStorage.setItem('slr-screener-project-name', 'Model Sizes in SE Research 2025');
       });
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // Import papers from Setup page
+  const importPapers = useCallback((importedPapers) => {
+    setPapers(importedPapers);
+    setLoading(false);
+    setAppView('screener');
+    setIsDemo(false);
+    const name = 'Untitled Project';
+    setProjectName(name);
+    localStorage.setItem('slr-screener-has-data', '1');
+    localStorage.setItem('slr-screener-is-demo', '0');
+    localStorage.setItem('slr-screener-project-name', name);
+    setCurrentIndex(0);
+    setDecisions({});
+    setAbstractEdits({});
+    setAiScores({});
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SCORES_KEY);
+  }, []);
+
+  // On mount: if screener mode, load default data; otherwise stay on setup
+  useEffect(() => {
+    if (appView === 'screener') loadData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save decisions
   useEffect(() => {
@@ -407,6 +980,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem(MODEL_KEY, scoringModel);
   }, [scoringModel]);
+
+  // Save project name
+  useEffect(() => {
+    localStorage.setItem('slr-screener-project-name', projectName);
+  }, [projectName]);
 
   // Save highlight categories
   useEffect(() => {
@@ -584,6 +1162,72 @@ function App() {
     a.click();
     URL.revokeObjectURL(url);
   }, [papers, decisions, getAbstract, aiScores]);
+
+  // Export standardized JSON
+  const exportProjectJSON = useCallback(() => {
+    const data = {
+      metadata: {
+        project_name: projectName,
+        total_papers: papers.length,
+        exported_date: new Date().toISOString(),
+        source: 'SLR Screener',
+      },
+      papers: papers.map((p, i) => {
+        const abs = getAbstract(i);
+        return {
+          conf: p.conf || 'not_found',
+          title: p.title || 'not_found',
+          author: p.author || 'not_found',
+          abstract: abs || 'not_found',
+          doi: p.doi || 'not_found',
+          doi_url: p.doi_url || 'not_found',
+          openalex_id: p.openalex_id || 'not_found',
+          arxiv_id: p.arxiv_id || 'not_found',
+          pdf_url: p.pdf_url || 'not_found',
+          pdf_source: p.pdf_source || 'not_found',
+        };
+      }),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = projectSlug(projectName) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [papers, projectName, getAbstract]);
+
+  // Export CSV with screening results (uses project name for filename)
+  const exportProjectCSV = useCallback(() => {
+    const escapeCSV = (s) => {
+      if (!s) return '';
+      const str = String(s);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+    const header = 'conf,title,author,decision,ai_score,ai_suggestion,ai_reason,abstract,doi,pdf_url,arxiv_id';
+    const rows = papers.map((p, i) => {
+      const abs = getAbstract(i);
+      const score = aiScores[i];
+      return [
+        escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
+        escapeCSV(decisions[i] || ''),
+        escapeCSV(score?.score ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        escapeCSV(abs),
+        escapeCSV(p.doi || ''), escapeCSV(p.pdf_url || ''), escapeCSV(p.arxiv_id || ''),
+      ].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = projectSlug(projectName) + '_results.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [papers, decisions, getAbstract, aiScores, projectName]);
 
   const clearAllDecisions = useCallback(() => {
     setDecisions({});
@@ -807,6 +1451,11 @@ function App() {
   const maybeCount = Object.values(decisions).filter((d) => d === 'Maybe').length;
   const decidedCount = yesCount + noCount + maybeCount;
 
+  // ===== SETUP VIEW =====
+  if (appView === 'setup') {
+    return <SetupView onImport={importPapers} onLoadDemo={loadData} apiKey={apiKey} setApiKey={setApiKey} />;
+  }
+
   if (loading) {
     return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading papers...</div>;
   }
@@ -822,11 +1471,9 @@ function App() {
       {hlStyleTag}
       {/* Header */}
       <div className="header">
+        <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
         <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
-          <span style={{ fontSize: 13, color: '#636e72' }}>
-            {decidedCount}/{totalPapers} screened
-          </span>
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
@@ -1205,6 +1852,79 @@ function App() {
         )}
       </div>
       {aiInsightsOpen && <div className="sidebar-overlay" onClick={() => setAiInsightsOpen(false)} />}
+
+      {/* Project Sidebar (left) */}
+      <div className={`project-sidebar ${projectSidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <h2>Projects</h2>
+          <button className="sidebar-close" onClick={() => setProjectSidebarOpen(false)}>&times;</button>
+        </div>
+        <div className="project-sidebar-body">
+          <div className="project-item active" onClick={() => setProjectMenuOpen(false)}>
+            <span className="project-item-icon">📄</span>
+            <div className="project-item-info">
+              {renamingProject ? (
+                <input
+                  className="project-rename-input"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  onBlur={() => setRenamingProject(false)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setRenamingProject(false); if (e.key === 'Escape') setRenamingProject(false); }}
+                  autoFocus
+                />
+              ) : (
+                <span className="project-item-name">
+                  {projectName}
+                  {isDemo && <span className="project-demo-badge">Demo</span>}
+                </span>
+              )}
+              <span className="project-item-meta">{totalPapers} papers · {decidedCount} screened</span>
+            </div>
+            <div className="project-menu-wrap">
+              <button className="project-menu-btn" onClick={(e) => { e.stopPropagation(); setProjectMenuOpen(v => !v); }}>⋮</button>
+              {projectMenuOpen && (
+                <div className="project-menu-dropdown">
+                  <button onClick={() => { setProjectMenuOpen(false); setRenamingProject(true); }}>Rename</button>
+                  <div className="project-menu-sep" />
+                  <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
+                  <button onClick={() => { setProjectMenuOpen(false); exportProjectCSV(); }}>Export CSV</button>
+                  <div className="project-menu-sep" />
+                  <button onClick={() => {
+                    setProjectMenuOpen(false);
+                    alert('Duplicate is not yet implemented — coming soon with multi-project support.');
+                  }}>Duplicate</button>
+                  {!isDemo && (
+                    <button className="project-menu-danger" onClick={() => {
+                      if (window.confirm(`Delete "${projectName}"? This will clear all decisions and scores.`)) {
+                        setProjectMenuOpen(false);
+                        setProjectSidebarOpen(false);
+                        setPapers([]);
+                        setDecisions({});
+                        setAiScores({});
+                        setAbstractEdits({});
+                        localStorage.removeItem('slr-screener-has-data');
+                        localStorage.removeItem(STORAGE_KEY);
+                        localStorage.removeItem(SCORES_KEY);
+                        setAppView('setup');
+                      }
+                    }}>Delete</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="project-sidebar-footer">
+          <button className="project-new-btn" onClick={() => {
+            setProjectSidebarOpen(false);
+            setAppView('setup');
+            localStorage.removeItem('slr-screener-has-data');
+          }}>
+            + New Project
+          </button>
+        </div>
+      </div>
+      {projectSidebarOpen && <div className="sidebar-overlay" onClick={() => { setProjectSidebarOpen(false); setProjectMenuOpen(false); }} />}
 
       {/* Highlight Settings Panel */}
       {hlSettingsOpen && (
