@@ -54,7 +54,8 @@ Firebase Auth with two sign-in methods:
   - "Sign out and use a different account" link
 - **Auth gating** — login required to access the app; unauthenticated users see LoginPage
 - **Header integration** — user avatar (photo or initial placeholder) and Sign Out button
-- **Auth context** (`src/contexts/AuthContext.js`) — provides `currentUser`, `signup`, `login`, `logout`, `googleSignIn`, `resendVerification`, `reloadUser`, `loading`
+- **Forgot password** — "Forgot Password?" link on sign-in form, shows email input + "Send Reset Link" button, uses Firebase `sendPasswordResetEmail()`, success/error messages, "Back to Sign In" link
+- **Auth context** (`src/contexts/AuthContext.js`) — provides `currentUser`, `signup`, `login`, `logout`, `googleSignIn`, `resendVerification`, `reloadUser`, `resetPassword`, `loading`
 
 ## Database
 
@@ -237,7 +238,7 @@ slr-screener/
 ├── src/
 │   ├── App.js                      # All application logic (single component)
 │   ├── App.css                     # All styles
-│   ├── LoginPage.js                # Login/sign-up page with password validation
+│   ├── LoginPage.js                # Login/sign-up/forgot-password page with password validation
 │   ├── firebase.js                 # Firebase configuration and initialization
 │   ├── contexts/
 │   │   └── AuthContext.js          # Auth context provider (Google + email/password)
@@ -266,7 +267,7 @@ slr-screener/
 
 ## Testing
 
-109 tests across 8 suites:
+113 tests across 8 suites:
 
 ```bash
 npm test         # Run all tests
@@ -279,7 +280,7 @@ npm test         # Run all tests
 | highlights | 3 | Toggle on/off, whole-word matching, hover tooltips |
 | export | 3 | CSV format, decision log, search filter |
 | project | 8 | Sidebar, new project, switch back, screened count, menu, sharing modal, validation |
-| auth | 19 | Login/sign-up forms, password validation, verification flow, Google sign-in |
+| auth | 23 | Login/sign-up forms, password validation, verification flow, Google sign-in, forgot password |
 | firestore | 30 | CRUD, batch writes, sync helpers, sharing, final decisions |
 | kappa | 27 | Cohen's Kappa, Fleiss' Kappa, interpretation, conflict detection, edge cases |
 
@@ -291,7 +292,7 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
-npm test         # Run test suite (109 tests)
+npm test         # Run test suite (113 tests)
 npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
 ```
 

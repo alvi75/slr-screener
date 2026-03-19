@@ -2318,6 +2318,13 @@
   font-family: inherit;
 }
 .login-toggle-btn:hover { text-decoration: underline; }
+.login-forgot {
+  text-align: right;
+  margin: -8px 0 4px;
+}
+.login-forgot .login-toggle-btn {
+  font-size: 0.82rem;
+}
 
 /* ===== VERIFICATION PAGE ===== */
 .verify-content {

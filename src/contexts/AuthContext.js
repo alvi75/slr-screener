@@ -6,6 +6,7 @@ import {
   signInWithPopup,
   onAuthStateChanged,
   sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 
@@ -49,6 +50,10 @@ export function AuthProvider({ children }) {
     return Promise.resolve();
   }
 
+  function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email, actionCodeSettings);
+  }
+
   function reloadUser() {
     if (currentUser) {
       return currentUser.reload().then(() => {
@@ -74,6 +79,7 @@ export function AuthProvider({ children }) {
     googleSignIn,
     resendVerification,
     reloadUser,
+    resetPassword,
     loading,
   };
 

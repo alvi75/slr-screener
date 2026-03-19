@@ -57,6 +57,7 @@ beforeEach(() => {
   mockAuth.reloadUser = jest.fn(() => Promise.resolve());
   mockAuth.logout = jest.fn();
   mockAuth.googleSignIn = jest.fn(() => Promise.resolve());
+  mockAuth.resetPassword = jest.fn(() => Promise.resolve());
 });
 
 afterEach(() => {
@@ -325,5 +326,57 @@ describe('Auth Flow', () => {
     fireEvent.click(screen.getByText('Sign out and use a different account'));
 
     expect(mockAuth.logout).toHaveBeenCalled();
+  });
+
+  test('Forgot Password link shows reset form', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Forgot Password?'));
+
+    expect(screen.getByText('Reset Password')).toBeInTheDocument();
+    expect(screen.getByText('Send Reset Link')).toBeInTheDocument();
+    expect(screen.getByText('Back to Sign In')).toBeInTheDocument();
+    // Password field should not be visible
+    expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+  });
+
+  test('Forgot Password sends reset email and shows success', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Forgot Password?'));
+    fireEvent.change(screen.getByPlaceholderText('Email address'), { target: { value: 'reset@example.com' } });
+
+    await act(async () => {
+      fireEvent.submit(screen.getByPlaceholderText('Email address').closest('form'));
+    });
+
+    expect(mockAuth.resetPassword).toHaveBeenCalledWith('reset@example.com');
+    expect(screen.getByText('Password reset email sent to reset@example.com. Check your inbox.')).toBeInTheDocument();
+  });
+
+  test('Forgot Password shows error for invalid email', async () => {
+    mockAuth.resetPassword = jest.fn(() => Promise.reject({ code: 'auth/invalid-email' }));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Forgot Password?'));
+    fireEvent.change(screen.getByPlaceholderText('Email address'), { target: { value: 'bad-email' } });
+
+    await act(async () => {
+      fireEvent.submit(screen.getByPlaceholderText('Email address').closest('form'));
+    });
+
+    expect(screen.getByText('Please enter a valid email address.')).toBeInTheDocument();
+  });
+
+  test('Back to Sign In returns from forgot password view', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Forgot Password?'));
+    expect(screen.getByText('Reset Password')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Back to Sign In'));
+    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    expect(screen.queryByText('Reset Password')).not.toBeInTheDocument();
   });
 });

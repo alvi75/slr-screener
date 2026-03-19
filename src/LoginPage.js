@@ -16,8 +16,10 @@ function getStrength(passed) {
 }
 
 export default function LoginPage() {
-  const { login, signup, googleSignIn } = useAuth();
+  const { login, signup, googleSignIn, resetPassword } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -73,6 +75,30 @@ export default function LoginPage() {
     setSubmitting(false);
   }
 
+  async function handleForgotPassword(e) {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    if (!resetEmail.trim()) {
+      return setError('Please enter your email address.');
+    }
+    setSubmitting(true);
+    try {
+      await resetPassword(resetEmail.trim());
+      setMessage(`Password reset email sent to ${resetEmail.trim()}. Check your inbox.`);
+    } catch (err) {
+      const code = err.code || '';
+      if (code === 'auth/user-not-found') {
+        setError('No account found with this email address.');
+      } else if (code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
+      } else {
+        setError(err.message);
+      }
+    }
+    setSubmitting(false);
+  }
+
   async function handleGoogle() {
     setError('');
     setMessage('');
@@ -103,6 +129,31 @@ export default function LoginPage() {
           Sign in with Google
         </button>
 
+        {isForgotPassword ? (
+          <>
+            <div className="login-divider"><span>Reset Password</span></div>
+            <form onSubmit={handleForgotPassword} className="login-form">
+              <input
+                type="email"
+                placeholder="Email address"
+                className="login-input"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+              {error && <div className="login-error">{error}</div>}
+              {message && <div className="login-message">{message}</div>}
+              <button type="submit" className="login-submit-btn" disabled={submitting}>
+                {submitting ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
+            <div className="login-toggle">
+              <button className="login-toggle-btn" onClick={() => { setIsForgotPassword(false); setError(''); setMessage(''); }}>Back to Sign In</button>
+            </div>
+          </>
+        ) : (
+          <>
         <div className="login-divider">
           <span>or</span>
         </div>
@@ -150,6 +201,12 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+
+          {!isSignUp && (
+            <div className="login-forgot">
+              <button type="button" className="login-toggle-btn" onClick={() => { setIsForgotPassword(true); setResetEmail(email); setError(''); setMessage(''); }}>Forgot Password?</button>
+            </div>
+          )}
 
           {isSignUp && password.length > 0 && (
             <div className="pw-strength">
@@ -224,6 +281,8 @@ export default function LoginPage() {
             <span>Don't have an account? <button className="login-toggle-btn" onClick={() => { setIsSignUp(true); setError(''); setMessage(''); }}>Sign Up</button></span>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

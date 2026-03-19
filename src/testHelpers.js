@@ -93,6 +93,7 @@ export function createAuthMock(overrides = {}) {
     googleSignIn: jest.fn(),
     resendVerification: jest.fn(),
     reloadUser: jest.fn(),
+    resetPassword: jest.fn(() => Promise.resolve()),
     loading: false,
     ...overrides,
   };
