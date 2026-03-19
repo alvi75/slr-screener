@@ -1,50 +1,56 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import './App.css';
 
-// ===== 3-COLOR HIGHLIGHT SYSTEM =====
-// All keywords and patterns map to 3 categories: model (blue), task (green), method (purple)
-// Each entry carries a sublabel shown on hover tooltip
+// ===== HIGHLIGHT SYSTEM =====
+// Categories are customizable via Highlight Settings panel, stored in localStorage.
+// Each category: { name, color, cls, keywords: string[] }
 
-const KEYWORDS = [
-  // Model-related (blue) — model names
-  ...['LLM', 'LLMs', 'GPT', 'GPT-4', 'GPT-4o', 'GPT-3.5', 'GPT-3', 'CodeLlama', 'Code Llama',
-    'CodeBERT', 'GraphCodeBERT', 'StarCoder', 'StarCoder2', 'DeepSeek', 'DeepSeek-Coder',
-    'Codex', 'Copilot', 'GitHub Copilot', 'T5', 'CodeT5', 'CodeT5+', 'BERT', 'RoBERTa',
-    'Llama', 'Llama 2', 'Llama 3', 'Qwen', 'Gemini', 'Claude', 'ChatGPT', 'transformer',
-    'transformers', 'large language model', 'large language models'
-  ].map(w => ({ word: w, cls: 'hl-model', label: 'Model name' })),
-  // Model-related (blue) — model details
-  ...['parameter', 'parameters', 'billion', 'million', '7B', '13B', '34B', '70B',
-    'model size', 'fine-tuning', 'fine-tune', 'fine-tuned', 'pre-trained', 'pre-training',
-    'quantization', 'quantized', 'LoRA', 'QLoRA', 'PEFT', 'adapter', 'adapters'
-  ].map(w => ({ word: w, cls: 'hl-model', label: 'Model detail' })),
-  // SE tasks (green)
-  ...['code generation', 'code summarization', 'vulnerability detection', 'bug detection',
-    'code review', 'code completion', 'code search', 'code translation',
-    'defect prediction', 'program repair', 'test generation', 'automated program repair',
-    'code clone detection', 'code smell', 'software vulnerability'
-  ].map(w => ({ word: w, cls: 'hl-task', label: 'SE task' })),
-  // Methods (purple)
-  ...['training', 'inference', 'evaluation', 'benchmark', 'benchmarks', 'dataset', 'datasets',
-    'deep learning', 'neural network', 'neural networks', 'machine learning'
-  ].map(w => ({ word: w, cls: 'hl-method', label: 'Method' })),
+const DEFAULT_CATEGORIES = [
+  {
+    name: 'Model info', color: '#dbeafe', textColor: '#1d4ed8', cls: 'hl-cat-0',
+    keywords: 'LLM, LLMs, GPT, GPT-4, GPT-4o, GPT-3.5, GPT-3, CodeLlama, Code Llama, CodeBERT, GraphCodeBERT, StarCoder, StarCoder2, DeepSeek, DeepSeek-Coder, Codex, Copilot, GitHub Copilot, T5, CodeT5, CodeT5+, BERT, RoBERTa, Llama, Llama 2, Llama 3, Qwen, Gemini, Claude, ChatGPT, transformer, transformers, large language model, large language models, parameter, parameters, billion, million, 7B, 13B, 34B, 70B, model size, fine-tuning, fine-tune, fine-tuned, pre-trained, pre-training, quantization, quantized, LoRA, QLoRA, PEFT, adapter, adapters',
+  },
+  {
+    name: 'SE tasks', color: '#dcfce7', textColor: '#15803d', cls: 'hl-cat-1',
+    keywords: 'code generation, code summarization, vulnerability detection, bug detection, code review, code completion, code search, code translation, defect prediction, program repair, test generation, automated program repair, code clone detection, code smell, software vulnerability',
+  },
+  {
+    name: 'Methods', color: '#f3e8ff', textColor: '#7e22ce', cls: 'hl-cat-2',
+    keywords: 'training, inference, evaluation, benchmark, benchmarks, dataset, datasets, deep learning, neural network, neural networks, machine learning',
+  },
 ];
 
-// Sort longest first so longer phrases match before shorter substrings
-KEYWORDS.sort((a, b) => b.word.length - a.word.length);
+const DEFAULT_RESEARCH_GOAL = 'Identify papers that use, evaluate, or experiment with AI/ML models for software engineering tasks, especially papers that mention specific model names, model sizes, parameter counts, fine-tuning, or quantization.';
 
-function buildHighlightRegex() {
-  const escaped = KEYWORDS.map(e => e.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  // Wrap each keyword with \b word boundaries to prevent partial-word matches
+const HL_CATEGORIES_KEY = 'slr-screener-hl-categories';
+const RESEARCH_GOAL_KEY = 'slr-screener-research-goal';
+
+const PRESET_COLORS = [
+  { bg: '#dbeafe', text: '#1d4ed8' },
+  { bg: '#dcfce7', text: '#15803d' },
+  { bg: '#f3e8ff', text: '#7e22ce' },
+  { bg: '#fef3c7', text: '#b45309' },
+  { bg: '#fce7f3', text: '#be185d' },
+];
+
+function buildHighlightData(categories) {
+  const keywords = [];
+  for (const cat of categories) {
+    const words = cat.keywords.split(',').map(w => w.trim()).filter(Boolean);
+    for (const word of words) {
+      keywords.push({ word, cls: cat.cls, label: cat.name });
+    }
+  }
+  keywords.sort((a, b) => b.word.length - a.word.length);
+  if (keywords.length === 0) return { regex: null, lookup: {} };
+  const escaped = keywords.map(e => e.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const regex = new RegExp(`(\\b(?:${escaped.join('|')})\\b)`, 'gi');
   const lookup = {};
-  for (const e of KEYWORDS) {
+  for (const e of keywords) {
     lookup[e.word.toLowerCase()] = { cls: e.cls, label: e.label };
   }
   return { regex, lookup };
 }
-
-const { regex: hlRegex, lookup: hlLookup } = buildHighlightRegex();
 
 // Pattern-based rules — merged into the same 3 colors
 const PATTERNS = [
@@ -189,18 +195,17 @@ function cleanAbstractText(text) {
   return s;
 }
 
-function highlightAbstract(text) {
+function highlightAbstract(text, hlData) {
   const clean = cleanAbstractText(text);
+  if (!hlData.regex) return [clean];
   // First pass: split by keyword matches
-  const parts = clean.split(hlRegex);
+  const parts = clean.split(hlData.regex);
   const result = [];
   parts.forEach((part, i) => {
-    const entry = hlLookup[part.toLowerCase()];
+    const entry = hlData.lookup[part.toLowerCase()];
     if (entry) {
-      // Keyword match — highlight with background + hover tooltip
       result.push(<span key={`k${i}`} className={`${entry.cls} hl-tip`} data-tip={`${entry.label}: ${part}`}>{part}</span>);
     } else if (part) {
-      // Plain text — apply pattern-based highlights
       const patternParts = applyPatterns(part, i);
       patternParts.forEach((pp, j) => {
         if (typeof pp === 'string') {
@@ -215,7 +220,9 @@ function highlightAbstract(text) {
 }
 
 // ===== AI SCORING =====
-const SCORING_PROMPT = `You are helping screen papers for a systematic literature review. The research goal is: identify papers that use, evaluate, or experiment with AI/ML models for software engineering tasks, especially papers that mention specific model names, model sizes, parameter counts, fine-tuning, or quantization. Rate this abstract 0-100 for relevance and suggest Yes/No/Maybe. Respond in JSON only: {"score": number, "suggestion": "yes"|"no"|"maybe", "reason": "one sentence why"}`;
+function buildScoringPrompt(goal) {
+  return `You are helping screen papers for a systematic literature review. The research goal is: ${goal} Rate this abstract 0-100 for relevance and suggest Yes/No/Maybe. Respond in JSON only: {"score": number, "suggestion": "yes"|"no"|"maybe", "reason": "one sentence why"}`;
+}
 
 const PROXY_URL = 'http://localhost:3001/api/score';
 
@@ -231,7 +238,8 @@ function modelName(modelId) {
   return AI_MODELS.find(m => m.id === modelId)?.name || modelId;
 }
 
-async function scoreOneAbstract(apiKey, title, abstract, model) {
+async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
+  const prompt = buildScoringPrompt(goal);
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: {
@@ -242,7 +250,7 @@ async function scoreOneAbstract(apiKey, title, abstract, model) {
       model,
       max_tokens: 150,
       messages: [
-        { role: 'user', content: `${SCORING_PROMPT}\n\nTitle: ${title}\nAbstract: ${abstract}` },
+        { role: 'user', content: `${prompt}\n\nTitle: ${title}\nAbstract: ${abstract}` },
       ],
     }),
   });
@@ -311,6 +319,29 @@ function App() {
     catch { return true; }
   });
   const [aiInsightsOpen, setAiInsightsOpen] = useState(false);
+  const [hlSettingsOpen, setHlSettingsOpen] = useState(false);
+  const [hlCategories, setHlCategories] = useState(() => {
+    try { const s = localStorage.getItem(HL_CATEGORIES_KEY); return s ? JSON.parse(s) : DEFAULT_CATEGORIES; }
+    catch { return DEFAULT_CATEGORIES; }
+  });
+  const [researchGoal, setResearchGoal] = useState(() => {
+    try { return localStorage.getItem(RESEARCH_GOAL_KEY) || DEFAULT_RESEARCH_GOAL; }
+    catch { return DEFAULT_RESEARCH_GOAL; }
+  });
+  const [hlDraft, setHlDraft] = useState(null); // editing draft of categories
+  const [goalDraft, setGoalDraft] = useState('');
+  const [suggestingKeywords, setSuggestingKeywords] = useState(false);
+
+  // Build highlight data from current categories
+  const hlData = useMemo(() => buildHighlightData(hlCategories), [hlCategories]);
+
+  // Generate dynamic CSS for custom category colors
+  const hlStyleTag = useMemo(() => {
+    const rules = hlCategories.map((cat, i) =>
+      `.hl-cat-${i} { background: ${cat.color}; color: ${cat.textColor}; border-radius: 3px; padding: 0 2px; font-weight: 500; }`
+    ).join('\n');
+    return <style>{rules}</style>;
+  }, [hlCategories]);
 
   // AI scoring state
   const [aiScores, setAiScores] = useState(() => {
@@ -376,6 +407,16 @@ function App() {
   useEffect(() => {
     localStorage.setItem(MODEL_KEY, scoringModel);
   }, [scoringModel]);
+
+  // Save highlight categories
+  useEffect(() => {
+    localStorage.setItem(HL_CATEGORIES_KEY, JSON.stringify(hlCategories));
+  }, [hlCategories]);
+
+  // Save research goal
+  useEffect(() => {
+    localStorage.setItem(RESEARCH_GOAL_KEY, researchGoal);
+  }, [researchGoal]);
 
   // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
@@ -588,7 +629,7 @@ function App() {
       const results = await Promise.allSettled(
         batch.map(async (idx) => {
           const abs = cleanAbstractText(getAbstract(idx));
-          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel);
+          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal);
           return { idx, result };
         })
       );
@@ -607,12 +648,15 @@ function App() {
     }
     // Show checkmark briefly then clear
     setScoringProgress(null);
+    setScoringStopping(false);
     setScoringDone(true);
     setTimeout(() => setScoringDone(false), 2000);
-  }, [apiKey, papers, aiScores, getAbstract, scoringModel]);
+  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal]);
 
+  const [scoringStopping, setScoringStopping] = useState(false);
   const stopScoring = useCallback(() => {
     scoringAbortRef.current = true;
+    setScoringStopping(true);
   }, []);
 
   const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
@@ -629,14 +673,14 @@ function App() {
     if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
     setScoringOne(gIdx);
     try {
-      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel);
+      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel, researchGoal);
       setAiScores(prev => ({ ...prev, [gIdx]: result }));
     } catch (err) {
       console.error('[SLR] Single score error:', err);
       alert('Scoring failed: ' + err.message);
     }
     setScoringOne(null);
-  }, [apiKey, papers, getAbstract, scoringModel]);
+  }, [apiKey, papers, getAbstract, scoringModel, researchGoal]);
 
   const pendingScoreRef = useRef(false);
   const saveApiKey = useCallback((key) => {
@@ -655,11 +699,87 @@ function App() {
   }, [apiKey, startScoring]);
 
   const clearScores = useCallback(() => {
-    if (window.confirm('Clear all AI scores? This cannot be undone.')) {
+    if (window.confirm('This will delete all AI scores. Are you sure?')) {
       setAiScores({});
       localStorage.removeItem(SCORES_KEY);
     }
   }, []);
+
+  const clearErrorScores = useCallback(() => {
+    const cleaned = {};
+    let removed = 0;
+    for (const [idx, score] of Object.entries(aiScores)) {
+      if (typeof score.score === 'number' && score.suggestion && score.reason) {
+        cleaned[idx] = score;
+      } else {
+        removed++;
+      }
+    }
+    if (removed === 0) { alert('No error entries found.'); return; }
+    setAiScores(cleaned);
+    alert(`Removed ${removed} error entries.`);
+  }, [aiScores]);
+
+  // Suggest keywords via Claude API
+  const suggestKeywords = useCallback(async (goal) => {
+    if (!apiKey) { alert('Set API key first (use Score Papers button).'); return; }
+    try {
+      const health = await fetch('http://localhost:3001/api/health');
+      if (!health.ok) throw new Error();
+    } catch {
+      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
+      return;
+    }
+    setSuggestingKeywords(true);
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+        body: JSON.stringify({
+          model: scoringModel,
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: `Given this research goal for a systematic literature review:\n\n"${goal}"\n\nSuggest 3-5 keyword highlight categories for screening paper abstracts. Each category should have a descriptive name and a comprehensive list of relevant keywords/phrases to highlight.\n\nRespond in JSON only:\n[{"name": "Category Name", "keywords": "keyword1, keyword2, multi-word phrase, ..."}]`
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      if (!Array.isArray(parsed)) throw new Error('Expected array');
+      const newCats = parsed.map((cat, i) => ({
+        name: cat.name,
+        color: PRESET_COLORS[i % PRESET_COLORS.length].bg,
+        textColor: PRESET_COLORS[i % PRESET_COLORS.length].text,
+        cls: `hl-cat-${i}`,
+        keywords: cat.keywords,
+      }));
+      setHlDraft(newCats);
+    } catch (err) {
+      console.error('[SLR] Suggest keywords error:', err);
+      alert('Failed to suggest keywords: ' + err.message);
+    }
+    setSuggestingKeywords(false);
+  }, [apiKey, scoringModel]);
+
+  // Open highlight settings panel
+  const openHlSettings = useCallback(() => {
+    setHlDraft(hlCategories.map(c => ({ ...c })));
+    setGoalDraft(researchGoal);
+    setHlSettingsOpen(true);
+  }, [hlCategories, researchGoal]);
+
+  const saveHlSettings = useCallback(() => {
+    if (!hlDraft) return;
+    const cats = hlDraft.map((c, i) => ({ ...c, cls: `hl-cat-${i}` }));
+    setHlCategories(cats);
+    setResearchGoal(goalDraft);
+    setHlSettingsOpen(false);
+    setHlDraft(null);
+  }, [hlDraft, goalDraft]);
 
   // Sorted scored papers list for AI Insights sidebar
   const scoredPapersList = useMemo(() => {
@@ -699,6 +819,7 @@ function App() {
 
   return (
     <div className="app">
+      {hlStyleTag}
       {/* Header */}
       <div className="header">
         <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
@@ -708,17 +829,20 @@ function App() {
           </span>
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
-            className="header-btn btn-score hl-tip tip-down"
+            className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
             onClick={scoringProgress ? stopScoring : startScoring}
+            disabled={scoringStopping}
             data-tip={scoringProgress
               ? `${Object.keys(aiScores).length + scoringProgress.done}/${totalPapers} scored with ${modelName(scoringModel)}`
               : scoringDone
                 ? `${Object.keys(aiScores).length}/${totalPapers} scored with ${modelName(scoringModel)}`
                 : `${unscoredCount} papers unscored. Click to score them.`}
           >
-            {scoringProgress
-              ? `Scoring... ${scoringProgress.total - scoringProgress.done} left`
-              : scoringDone ? 'Score Papers \u2713' : 'Score Papers'}
+            {scoringStopping
+              ? 'Stopping...'
+              : scoringProgress
+                ? `Stop Scoring (${scoringProgress.total - scoringProgress.done} left)`
+                : scoringDone ? 'Score Papers \u2713' : 'Score Papers'}
           </button>
           <button className="header-btn btn-export" onClick={exportCSV}>Export CSV</button>
           <button className="header-btn btn-log" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
@@ -768,13 +892,18 @@ function App() {
             {v}
           </button>
         ))}
-        <button
-          className={`highlight-toggle ${highlightsOn ? 'on' : ''} hl-tip tip-down`}
-          onClick={() => setHighlightsOn(v => !v)}
-          data-tip="Toggle keyword highlights (H)"
-        >
-          Highlights {highlightsOn ? 'On' : 'Off'}
-        </button>
+        <span className={`hl-control ${highlightsOn ? 'on' : ''}`}>
+          <button
+            className={`hl-switch ${highlightsOn ? 'on' : ''}`}
+            onClick={() => setHighlightsOn(v => !v)}
+            aria-label="Toggle highlights"
+          />
+          <span className="hl-label hl-tip tip-down" data-tip="Toggle highlights (H)" onClick={() => setHighlightsOn(v => !v)}>
+            Highlights {highlightsOn ? 'On' : 'Off'}
+          </span>
+          <span className="hl-divider" />
+          <button className="hl-gear hl-tip tip-down" onClick={openHlSettings} data-tip="Highlight Settings">⚙</button>
+        </span>
         <span className="filter-label" style={{ marginLeft: 8 }}>Order:</span>
         <select
           className={`order-select ${Object.keys(aiScores).length === 0 ? 'hl-tip tip-down' : ''}`}
@@ -870,7 +999,7 @@ function App() {
                   <span style={{ marginLeft: 4 }}> — or click Edit to paste it manually.</span>
                 </div>
               ) : (
-                <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract) : cleanAbstractText(abstract)}</div>
+                <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract, hlData) : cleanAbstractText(abstract)}</div>
               )}
               {aiScores[globalIndex]?.reason && (
                 <div className="ai-reason">
@@ -978,20 +1107,15 @@ function App() {
             ))
           )}
         </div>
-        {(decidedCount > 0 || Object.keys(aiScores).length > 0) && (
+        {(decidedCount > 0 || apiKey) && (
           <div className="sidebar-footer">
             {decidedCount > 0 && (
               <button className="reset-btn full-width" onClick={() => { if (window.confirm(`Clear all ${decidedCount} decisions? This cannot be undone.`)) clearAllDecisions(); }}>
                 Reset All Decisions
               </button>
             )}
-            {Object.keys(aiScores).length > 0 && (
-              <button className="reset-btn full-width" style={{ marginTop: decidedCount > 0 ? 8 : 0 }} onClick={clearScores}>
-                Clear AI Scores ({Object.keys(aiScores).length})
-              </button>
-            )}
             {apiKey && (
-              <button className="reset-btn full-width" style={{ marginTop: 8, borderColor: '#b2bec3', color: '#636e72' }}
+              <button className="reset-btn full-width" style={{ marginTop: decidedCount > 0 ? 8 : 0, borderColor: '#b2bec3', color: '#636e72' }}
                 onClick={() => setShowApiKeyModal(true)}>
                 Change API Key
               </button>
@@ -1065,8 +1189,115 @@ function App() {
             </div>
           ))}
         </div>
+        {Object.keys(aiScores).length > 0 && (
+          <div className="sidebar-footer">
+            <button className="reset-btn full-width" onClick={clearErrorScores}>
+              Clear Errors
+            </button>
+            <div className="reset-link" onClick={clearScores}>Reset All Scores</div>
+          </div>
+        )}
       </div>
       {aiInsightsOpen && <div className="sidebar-overlay" onClick={() => setAiInsightsOpen(false)} />}
+
+      {/* Highlight Settings Panel */}
+      {hlSettingsOpen && (
+        <>
+          <div className="sidebar-overlay" onClick={() => setHlSettingsOpen(false)} />
+          <div className="hl-settings-panel">
+            <div className="hl-settings-header">
+              <h3>Highlight Settings</h3>
+              <button className="sidebar-close" onClick={() => setHlSettingsOpen(false)}>&times;</button>
+            </div>
+
+            <div className="hl-settings-body">
+              <div className="hl-settings-section">
+                <label className="hl-settings-label">Research Goal</label>
+                <textarea
+                  className="hl-goal-input"
+                  value={goalDraft}
+                  onChange={(e) => setGoalDraft(e.target.value)}
+                  rows={3}
+                />
+                <button
+                  className={`hl-suggest-btn ${!apiKey ? 'disabled' : ''}`}
+                  onClick={() => apiKey && suggestKeywords(goalDraft)}
+                  disabled={suggestingKeywords || !apiKey}
+                >
+                  {suggestingKeywords ? 'Suggesting...' : 'Suggest Keywords'}
+                </button>
+                {!apiKey && <span className="hl-hint">Set API key first (use Score Papers button)</span>}
+              </div>
+
+              <div className="hl-settings-section">
+                <label className="hl-settings-label">Keyword Categories</label>
+                {hlDraft && hlDraft.map((cat, i) => (
+                  <div key={i} className="hl-cat-row" style={{ borderLeftColor: cat.color }}>
+                    <div className="hl-cat-row-top">
+                      <input
+                        className="hl-cat-name"
+                        value={cat.name}
+                        onChange={(e) => {
+                          const next = [...hlDraft];
+                          next[i] = { ...next[i], name: e.target.value };
+                          setHlDraft(next);
+                        }}
+                        placeholder="Category name"
+                      />
+                      <div className="hl-color-picks">
+                        {PRESET_COLORS.map((pc, ci) => (
+                          <span
+                            key={ci}
+                            className={`hl-color-dot ${cat.color === pc.bg ? 'active' : ''}`}
+                            style={{ background: pc.bg, color: pc.text }}
+                            onClick={() => {
+                              const next = [...hlDraft];
+                              next[i] = { ...next[i], color: pc.bg, textColor: pc.text };
+                              setHlDraft(next);
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <button
+                        className="hl-cat-delete"
+                        onClick={() => setHlDraft(hlDraft.filter((_, j) => j !== i))}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    <textarea
+                      className="hl-cat-keywords"
+                      value={cat.keywords}
+                      onChange={(e) => {
+                        const next = [...hlDraft];
+                        next[i] = { ...next[i], keywords: e.target.value };
+                        setHlDraft(next);
+                      }}
+                      rows={2}
+                      placeholder="keyword1, keyword2, multi-word phrase, ..."
+                    />
+                  </div>
+                ))}
+                <button
+                  className="hl-add-cat-btn"
+                  onClick={() => {
+                    const idx = hlDraft ? hlDraft.length : 0;
+                    const pc = PRESET_COLORS[idx % PRESET_COLORS.length];
+                    setHlDraft([...(hlDraft || []), { name: '', color: pc.bg, textColor: pc.text, cls: `hl-cat-${idx}`, keywords: '' }]);
+                  }}
+                >
+                  + Add Category
+                </button>
+              </div>
+            </div>
+
+            <div className="hl-settings-footer">
+              <button className="save-btn" onClick={saveHlSettings}>Save & Apply</button>
+              <button className="cancel-btn" onClick={() => setHlSettingsOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* API Key Modal */}
       {showApiKeyModal && (
