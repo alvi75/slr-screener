@@ -291,6 +291,11 @@
   opacity: 1;
   transition-delay: 0s;
 }
+/* Tooltip below element (for header/filter items near top of page) */
+.hl-tip.tip-down::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
 
 /* Highlights toggle button */
 .highlight-toggle {

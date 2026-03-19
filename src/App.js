@@ -708,9 +708,9 @@ function App() {
           </span>
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
-            className="header-btn btn-score"
+            className="header-btn btn-score hl-tip tip-down"
             onClick={scoringProgress ? stopScoring : startScoring}
-            title={scoringProgress
+            data-tip={scoringProgress
               ? `${Object.keys(aiScores).length + scoringProgress.done}/${totalPapers} scored with ${modelName(scoringModel)}`
               : scoringDone
                 ? `${Object.keys(aiScores).length}/${totalPapers} scored with ${modelName(scoringModel)}`
@@ -769,18 +769,18 @@ function App() {
           </button>
         ))}
         <button
-          className={`highlight-toggle ${highlightsOn ? 'on' : ''}`}
+          className={`highlight-toggle ${highlightsOn ? 'on' : ''} hl-tip tip-down`}
           onClick={() => setHighlightsOn(v => !v)}
-          title="Toggle keyword highlights (H)"
+          data-tip="Toggle keyword highlights (H)"
         >
           Highlights {highlightsOn ? 'On' : 'Off'}
         </button>
         <span className="filter-label" style={{ marginLeft: 8 }}>Order:</span>
         <select
-          className="order-select"
+          className={`order-select ${Object.keys(aiScores).length === 0 ? 'hl-tip tip-down' : ''}`}
           value={sortByScore ? 'score' : 'default'}
           onChange={(e) => { setSortByScore(e.target.value === 'score'); setCurrentIndex(0); }}
-          title={Object.keys(aiScores).length === 0 ? 'Run AI scoring first' : ''}
+          data-tip={Object.keys(aiScores).length === 0 ? 'Run AI scoring first' : undefined}
         >
           <option value="default">Default</option>
           <option value="score" disabled={Object.keys(aiScores).length === 0}>
@@ -805,16 +805,16 @@ function App() {
                 <span className="ai-score-badge score-mid">Scoring...</span>
               ) : aiScores[globalIndex] ? (
                 <span
-                  className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'} clickable`}
-                  title={`Click to rescore with ${modelName(scoringModel)}`}
+                  className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'} clickable hl-tip`}
+                  data-tip={`Click to rescore with ${modelName(scoringModel)}`}
                   onClick={() => scoreOnePaper(globalIndex)}
                 >
                   AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
                 </span>
               ) : (
                 <span
-                  className="ai-score-badge score-unscored clickable"
-                  title={apiKey ? 'Click to score this paper' : 'Set API key first (use Score Papers button)'}
+                  className="ai-score-badge score-unscored clickable hl-tip"
+                  data-tip={apiKey ? 'Click to score this paper' : 'Set API key first (use Score Papers button)'}
                   onClick={() => scoreOnePaper(globalIndex)}
                 >
                   AI: ?
