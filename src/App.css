@@ -2218,6 +2218,36 @@
   color: #d63031;
 }
 
+/* ===== SYNC INDICATOR ===== */
+.sync-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  margin-left: 6px;
+  cursor: default;
+  transition: color 0.2s, background 0.2s;
+}
+.sync-synced {
+  color: #00b894;
+}
+.sync-syncing {
+  color: #0984e3;
+}
+.sync-error {
+  color: #d63031;
+  background: #ffeaea;
+}
+.sync-spin {
+  animation: sync-rotate 1s linear infinite;
+}
+@keyframes sync-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ===== HEADER USER ===== */
 .header-user {
   display: flex;

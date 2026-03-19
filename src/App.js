@@ -2,6 +2,19 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './LoginPage';
+import {
+  saveProject as fsSaveProject,
+  getProject as fsGetProject,
+  deleteProject as fsDeleteProject,
+  saveDecision as fsSaveDecision,
+  deleteDecision as fsDeleteDecision,
+  getDecisions as fsGetDecisions,
+  saveAllAIScores as fsSaveAllAIScores,
+  getAIScores as fsGetAIScores,
+  syncDecisionsToFirestore,
+  syncAIScoresToFirestore,
+  syncProjectToFirestore,
+} from './services/firestore';
 import './App.css';
 
 // ===== HIGHLIGHT SYSTEM =====
@@ -1303,6 +1316,32 @@ function AppMain({ currentUser, logout }) {
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
 
+  // ── Firestore sync ──────────────────────────────────────────
+  // 'synced' | 'syncing' | 'error'
+  const [syncStatus, setSyncStatus] = useState('synced');
+  const syncTimerRef = useRef(null);
+  const userId = currentUser?.uid || null;
+
+  // Derive a stable project ID from the project name
+  const projectId = useMemo(() => {
+    const raw = localStorage.getItem('slr-screener-project-name') || projectName;
+    return projectSlug(raw);
+  }, [projectName]);
+
+  // Helper: fire-and-forget Firestore write with sync indicator
+  const firestoreSync = useCallback((promiseFn) => {
+    if (!userId) return;
+    setSyncStatus('syncing');
+    clearTimeout(syncTimerRef.current);
+    Promise.resolve().then(promiseFn).then(() => {
+      setSyncStatus('synced');
+    }).catch(() => {
+      setSyncStatus('error');
+      // Auto-clear error after 10s
+      syncTimerRef.current = setTimeout(() => setSyncStatus('synced'), 10000);
+    });
+  }, [userId]);
+
   console.log('[SLR] Restored state — index:', currentIndex, 'venue:', venueFilter, 'decisions:', Object.keys(decisions).length);
 
   const PAPERS_KEY = 'slr-screener-papers';
@@ -1321,8 +1360,11 @@ function AppMain({ currentUser, logout }) {
         localStorage.setItem('slr-screener-is-demo', '1');
         localStorage.setItem('slr-screener-project-name', 'Model Sizes in SE Research 2025');
         // Demo papers are not stored in localStorage (too large), re-fetched on each load
+        // Sync demo project metadata to Firestore
+        const demoId = projectSlug('Model Sizes in SE Research 2025');
+        syncProjectToFirestore(userId, demoId, { name: 'Model Sizes in SE Research 2025', isDemo: true, createdAt: Date.now(), paperCount: data.papers.length });
       });
-  }, []);
+  }, [userId]);
 
   // Reload data: demo re-fetches JSON, imported re-reads from localStorage
   const loadData = useCallback(() => {
@@ -1361,7 +1403,10 @@ function AppMain({ currentUser, logout }) {
     setAiScores({});
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SCORES_KEY);
-  }, []);
+    // Sync new project to Firestore
+    const newProjectId = projectSlug(name);
+    firestoreSync(() => fsSaveProject(userId, newProjectId, { name, isDemo: false, createdAt: Date.now(), paperCount: importedPapers.length }));
+  }, [userId, firestoreSync]);
 
   // Append papers to existing project (dedup by title)
   const appendPapers = useCallback((newPapers) => {
@@ -1416,10 +1461,58 @@ function AppMain({ currentUser, logout }) {
     loadDemoData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save decisions
+  // On mount: fetch decisions and scores from Firestore in background, merge with localStorage.
+  // Firestore is source of truth — if it has data, it overwrites localStorage.
+  const firestoreLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!userId || firestoreLoadedRef.current) return;
+    firestoreLoadedRef.current = true;
+
+    (async () => {
+      try {
+        // Fetch project settings from Firestore
+        const fsProject = await fsGetProject(userId, projectId);
+        if (fsProject) {
+          // Merge settings from Firestore (source of truth)
+          if (fsProject.hlCategories) setHlCategories(fsProject.hlCategories);
+          if (fsProject.researchGoal) setResearchGoal(fsProject.researchGoal);
+          if (fsProject.scoringModel) setScoringModel(fsProject.scoringModel);
+        }
+
+        // Fetch decisions from Firestore
+        const fsDecisions = await fsGetDecisions(userId, projectId);
+        if (Object.keys(fsDecisions).length > 0) {
+          setDecisions(prev => {
+            // Merge: Firestore wins on conflicts
+            const merged = { ...prev, ...fsDecisions };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            return merged;
+          });
+        }
+
+        // Fetch AI scores from Firestore (shared)
+        const fsScores = await fsGetAIScores(projectId);
+        if (Object.keys(fsScores).length > 0) {
+          setAiScores(prev => {
+            const merged = { ...prev, ...fsScores };
+            localStorage.setItem(SCORES_KEY, JSON.stringify(merged));
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);
+      }
+    })();
+  }, [userId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save decisions (localStorage + Firestore)
+  const decisionsInitRef = useRef(true);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(decisions));
-  }, [decisions]);
+    // Skip Firestore sync on initial mount (already loaded from there)
+    if (decisionsInitRef.current) { decisionsInitRef.current = false; return; }
+    firestoreSync(() => syncDecisionsToFirestore(userId, projectId, decisions));
+  }, [decisions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save abstract edits
   useEffect(() => {
@@ -1438,30 +1531,41 @@ function AppMain({ currentUser, logout }) {
     localStorage.setItem('slr-screener-highlights', highlightsOn ? 'on' : 'off');
   }, [highlightsOn]);
 
-  // Save AI scores
+  // Auto-save AI scores (localStorage + Firestore)
+  const scoresInitRef = useRef(true);
   useEffect(() => {
     localStorage.setItem(SCORES_KEY, JSON.stringify(aiScores));
-  }, [aiScores]);
+    if (scoresInitRef.current) { scoresInitRef.current = false; return; }
+    firestoreSync(() => syncAIScoresToFirestore(projectId, aiScores));
+  }, [aiScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save model selection
+  // Save model selection (localStorage + Firestore project settings)
   useEffect(() => {
     localStorage.setItem(MODEL_KEY, scoringModel);
-  }, [scoringModel]);
+    firestoreSync(() => syncProjectToFirestore(userId, projectId, { scoringModel }));
+  }, [scoringModel]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save project name
+  // Save project name (localStorage + Firestore)
   useEffect(() => {
     localStorage.setItem('slr-screener-project-name', projectName);
-  }, [projectName]);
+    firestoreSync(() => syncProjectToFirestore(userId, projectId, { name: projectName, isDemo }));
+  }, [projectName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save highlight categories
+  // Save highlight categories (localStorage + Firestore project settings)
+  const hlInitRef = useRef(true);
   useEffect(() => {
     localStorage.setItem(HL_CATEGORIES_KEY, JSON.stringify(hlCategories));
-  }, [hlCategories]);
+    if (hlInitRef.current) { hlInitRef.current = false; return; }
+    firestoreSync(() => syncProjectToFirestore(userId, projectId, { hlCategories }));
+  }, [hlCategories]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save research goal
+  // Save research goal (localStorage + Firestore project settings)
+  const goalInitRef = useRef(true);
   useEffect(() => {
     localStorage.setItem(RESEARCH_GOAL_KEY, researchGoal);
-  }, [researchGoal]);
+    if (goalInitRef.current) { goalInitRef.current = false; return; }
+    firestoreSync(() => syncProjectToFirestore(userId, projectId, { researchGoal }));
+  }, [researchGoal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
@@ -1702,7 +1806,9 @@ function AppMain({ currentUser, logout }) {
     setCurrentIndex(0);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(INDEX_KEY);
-  }, []);
+    // Clear decisions in Firestore too
+    firestoreSync(() => syncDecisionsToFirestore(userId, projectId, {}));
+  }, [userId, projectId, firestoreSync]);
 
   // AI scoring — batch process unscored papers
   const startScoring = useCallback(async () => {
@@ -1813,8 +1919,9 @@ function AppMain({ currentUser, logout }) {
     if (window.confirm('This will delete all AI scores. Are you sure?')) {
       setAiScores({});
       localStorage.removeItem(SCORES_KEY);
+      firestoreSync(() => syncAIScoresToFirestore(projectId, {}));
     }
-  }, []);
+  }, [projectId, firestoreSync]);
 
   const clearErrorScores = useCallback(() => {
     const cleaned = {};
@@ -1981,6 +2088,15 @@ function AppMain({ currentUser, logout }) {
               AI Insights
             </button>
           )}
+          <span className={`sync-indicator sync-${syncStatus}`} title={
+            syncStatus === 'synced' ? 'All changes saved to cloud' :
+            syncStatus === 'syncing' ? 'Syncing to cloud...' :
+            'Sync failed — changes saved locally'
+          }>
+            {syncStatus === 'synced' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><polyline points="8 15 11 18 16 13"/></svg>}
+            {syncStatus === 'syncing' && <svg className="sync-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M12 12v3"/></svg>}
+            {syncStatus === 'error' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="15" y1="13" x2="9" y2="17"/><line x1="9" y1="13" x2="15" y2="17"/></svg>}
+          </span>
           <div className="header-user">
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
@@ -2403,6 +2519,8 @@ function AppMain({ currentUser, logout }) {
                         localStorage.removeItem(PAPERS_KEY);
                         localStorage.removeItem('slr-screener-is-demo');
                         localStorage.removeItem('slr-screener-project-name');
+                        // Delete from Firestore
+                        firestoreSync(() => fsDeleteProject(userId, projectId));
                         // Load demo as fallback after delete
                         loadDemoData();
                       }

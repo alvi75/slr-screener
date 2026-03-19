@@ -14,6 +14,23 @@ jest.mock('../contexts/AuthContext', () => ({
   }),
 }));
 
+jest.mock('../services/firestore', () => ({
+  saveProject: jest.fn(() => Promise.resolve()),
+  getProject: jest.fn(() => Promise.resolve(null)),
+  getProjects: jest.fn(() => Promise.resolve([])),
+  deleteProject: jest.fn(() => Promise.resolve()),
+  saveDecision: jest.fn(() => Promise.resolve()),
+  deleteDecision: jest.fn(() => Promise.resolve()),
+  getDecisions: jest.fn(() => Promise.resolve({})),
+  saveAllDecisions: jest.fn(() => Promise.resolve()),
+  saveAIScore: jest.fn(() => Promise.resolve()),
+  saveAllAIScores: jest.fn(() => Promise.resolve()),
+  getAIScores: jest.fn(() => Promise.resolve({})),
+  syncDecisionsToFirestore: jest.fn(),
+  syncAIScoresToFirestore: jest.fn(),
+  syncProjectToFirestore: jest.fn(),
+}));
+
 jest.mock('xlsx', () => ({
   read: jest.fn(),
   utils: { sheet_to_json: jest.fn() },
