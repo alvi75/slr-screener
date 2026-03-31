@@ -531,9 +531,9 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
       try {
         // Step 1: Extract text from first 2 pages
         const arrayBuffer = await file.arrayBuffer();
-        const pdfjsLib = await import('pdfjs-dist/build/pdf');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         let fullText = '';
         for (let p = 1; p <= Math.min(pdf.numPages, 2); p++) {
           const page = await pdf.getPage(p);

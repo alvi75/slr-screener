@@ -13,7 +13,7 @@ A general-purpose Systematic Literature Review (SLR) paper screening platform. B
 - **localStorage** — local cache layer, dual-write with Firestore for instant reads
 - **Express** — lightweight proxy server (`server.js` on port 3001) for Claude API and Semantic Scholar API calls
 - **SheetJS (`xlsx`)** — CSV/Excel parsing for spreadsheet imports
-- **pdfjs-dist** — client-side PDF text extraction
+- **pdfjs-dist** — client-side PDF text extraction (worker served from `public/pdf.worker.min.js`)
 
 ## Data
 
@@ -236,6 +236,7 @@ slr-screener/
 ├── public/
 │   ├── enriched_papers_2025.json   # Demo data (1100 papers, 1092 abstracts)
 │   ├── favicon.svg                 # Blue "SLR" + green checkmark badge
+│   ├── pdf.worker.min.js           # pdfjs-dist worker (copied from node_modules)
 │   └── index.html
 ├── src/
 │   ├── App.js                      # All application logic (single component)
