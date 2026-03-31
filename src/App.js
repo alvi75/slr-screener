@@ -2447,7 +2447,7 @@ function AppMain({ currentUser, logout }) {
     : '';
 
   return (
-    <div className="app">
+    <div className="app screening-view">
       {hlStyleTag}
 
       {/* Append result notification */}

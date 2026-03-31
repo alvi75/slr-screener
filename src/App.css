@@ -5,6 +5,13 @@
   padding: 24px 20px;
   position: relative;
 }
+.app.screening-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
 
 /* Header */
 .header {
@@ -13,6 +20,7 @@
   align-items: center;
   margin-bottom: 20px;
   gap: 12px;
+  flex-shrink: 0;
 }
 .hamburger-btn {
   background: none;
@@ -397,6 +405,7 @@
 /* Progress bar */
 .progress-section {
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 .progress-stats {
   display: flex;
@@ -430,6 +439,7 @@
   margin-bottom: 20px;
   flex-wrap: nowrap;
   align-items: center;
+  flex-shrink: 0;
 }
 .filter-btn {
   padding: 5px 10px;
@@ -467,6 +477,11 @@
   padding: 28px 32px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 .paper-meta {
   display: flex;
@@ -474,6 +489,7 @@
   gap: 12px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .venue-badge {
   display: inline-block;
@@ -510,18 +526,21 @@
   line-height: 1.4;
   margin-bottom: 8px;
   color: #2d3436;
+  flex-shrink: 0;
 }
 .paper-authors {
   font-size: 14px;
   color: #636e72;
   margin-bottom: 16px;
   line-height: 1.5;
+  flex-shrink: 0;
 }
 .paper-links {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .link-btn {
   display: inline-block;
@@ -542,7 +561,14 @@
 /* Abstract */
 .abstract-section {
   margin-bottom: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
+.abstract-section::-webkit-scrollbar { width: 6px; }
+.abstract-section::-webkit-scrollbar-thumb { background: #dfe6e9; border-radius: 3px; }
+.abstract-section::-webkit-scrollbar-thumb:hover { background: #b2bec3; }
 .abstract-label {
   font-size: 12px;
   font-weight: 600;
@@ -732,6 +758,7 @@
   justify-content: center;
   gap: 16px;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 .decision-btn {
   padding: 12px 36px;
@@ -762,6 +789,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 .nav-btn {
   padding: 10px 24px;
@@ -987,6 +1015,7 @@
   margin-bottom: 8px;
   border-radius: 2px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 .scoring-progress-fill {
   height: 100%;

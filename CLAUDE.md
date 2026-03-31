@@ -128,7 +128,7 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Paper Screening
 
-- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract
+- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Fixed viewport-height layout: title, buttons, and navigation always visible; long abstracts scroll inside the abstract area only
 - **Triage buttons** — Two big buttons: Yes (green) / No (red) with visual feedback (current decision highlighted)
 - **Auto-advance** — moves to next paper after new decision; stays when changing existing decision
 - **Keyboard shortcuts** — `Y` Yes, `N` No, `H` Toggle highlights, `←` Previous, `→` Next
