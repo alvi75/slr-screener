@@ -25,6 +25,9 @@ import {
   getSharedProjects as fsGetSharedProjects,
   saveFinalDecision as fsSaveFinalDecision,
   getFinalDecisions as fsGetFinalDecisions,
+  saveAIDisagreement as fsSaveAIDisagreement,
+  getAIDisagreements as fsGetAIDisagreements,
+  deleteAIDisagreement as fsDeleteAIDisagreement,
 } from './services/firestore';
 import { analyzeConflicts, interpretKappa } from './utils/kappa';
 import './App.css';
@@ -351,6 +354,7 @@ const INDEX_KEY = 'slr-screener-index';
 const VENUE_KEY = 'slr-screener-venue';
 const SCORES_KEY = 'slr-screener-scores';
 const APIKEY_KEY = 'slr-screener-apikey';
+const DISAGREEMENTS_KEY = 'slr-screener-disagreements';
 
 function venueCls(conf) {
   if (conf.includes('ICSE')) return 'icse';
@@ -1311,6 +1315,11 @@ function AppMain({ currentUser, logout }) {
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [scoringDone, setScoringDone] = useState(false);
+  const [aiDisagreements, setAiDisagreements] = useState(() => {
+    try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  });
+  const [disagreementPopup, setDisagreementPopup] = useState(null); // { paperIndex, aiSuggestion, aiScore, userDecision }
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
     try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
@@ -1722,6 +1731,16 @@ function AppMain({ currentUser, logout }) {
             return merged;
           });
         }
+        // Fetch AI disagreements from Firestore
+        const fsDisagreements = await fsGetAIDisagreements(userId, projectId);
+        if (Object.keys(fsDisagreements).length > 0) {
+          setAiDisagreements(prev => {
+            const merged = { ...prev, ...fsDisagreements };
+            localStorage.setItem(DISAGREEMENTS_KEY, JSON.stringify(merged));
+            return merged;
+          });
+        }
+
         // Fetch collaborators for current project (for Team badge)
         const collabs = await fsGetCollaborators(projectId);
         setCollaborators(collabs);
@@ -1789,6 +1808,11 @@ function AppMain({ currentUser, logout }) {
     firestoreSync(() => syncAIScoresToFirestore(projectId, aiScores));
   }, [aiScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-save AI disagreements (localStorage)
+  useEffect(() => {
+    localStorage.setItem(DISAGREEMENTS_KEY, JSON.stringify(aiDisagreements));
+  }, [aiDisagreements]);
+
   // Save model selection (localStorage + Firestore project settings)
   useEffect(() => {
     localStorage.setItem(MODEL_KEY, scoringModel);
@@ -1850,11 +1874,27 @@ function AppMain({ currentUser, logout }) {
     return papers[gIdx]?.abstract || '';
   }, [papers, abstractEdits]);
 
-  const makeDecision = useCallback((d) => {
-    if (globalIndex === undefined) return;
-    const prevDecision = decisions[globalIndex] || null;
+  const applyDecision = useCallback((d, idx) => {
+    const gIdx = idx !== undefined ? idx : globalIndex;
+    if (gIdx === undefined) return;
+    const prevDecision = decisions[gIdx] || null;
 
-    setDecisions((prev) => ({ ...prev, [globalIndex]: d }));
+    setDecisions((prev) => ({ ...prev, [gIdx]: d }));
+
+    // Check if this resolves a previous disagreement (user now agrees with AI)
+    const aiData = aiScores[gIdx];
+    if (aiData && aiData.suggestion) {
+      const aiSug = aiData.suggestion.charAt(0).toUpperCase() + aiData.suggestion.slice(1);
+      if (d === aiSug) {
+        // Agreement — remove any existing disagreement
+        setAiDisagreements((prev) => {
+          const next = { ...prev };
+          delete next[gIdx];
+          return next;
+        });
+        fsDeleteAIDisagreement(userId, projectId, String(gIdx)).catch(() => {});
+      }
+    }
 
     // Only auto-advance if this is a NEW decision (no previous decision)
     if (!prevDecision) {
@@ -1863,7 +1903,60 @@ function AppMain({ currentUser, logout }) {
         return prev < maxIdx ? prev + 1 : prev;
       });
     }
-  }, [globalIndex, decisions, filteredIndices.length, currentIndex]);
+  }, [globalIndex, decisions, filteredIndices.length, currentIndex, aiScores, userId, projectId]);
+
+  const makeDecision = useCallback((d) => {
+    if (globalIndex === undefined) return;
+    const aiData = aiScores[globalIndex];
+
+    // Check for AI disagreement
+    if (aiData && aiData.suggestion) {
+      const aiSug = aiData.suggestion.charAt(0).toUpperCase() + aiData.suggestion.slice(1);
+      if (aiSug !== d && (aiSug === 'Yes' || aiSug === 'No')) {
+        setDisagreementPopup({
+          paperIndex: globalIndex,
+          aiSuggestion: aiSug,
+          aiScore: aiData.score,
+          aiReason: aiData.reason,
+          userDecision: d,
+        });
+        return;
+      }
+    }
+    applyDecision(d);
+  }, [globalIndex, aiScores, applyDecision]);
+
+  const confirmDisagreement = useCallback(() => {
+    if (!disagreementPopup) return;
+    const { paperIndex, aiSuggestion, aiScore, aiReason, userDecision } = disagreementPopup;
+    const paper = papers[paperIndex];
+
+    // Apply the user's decision
+    applyDecision(userDecision, paperIndex);
+
+    // Log disagreement
+    const record = {
+      title: paper?.title || '',
+      venue: paper?.conf || '',
+      aiScore,
+      aiSuggestion,
+      aiReason: aiReason || '',
+      userDecision,
+      timestamp: new Date().toISOString(),
+    };
+    setAiDisagreements((prev) => ({ ...prev, [paperIndex]: record }));
+
+    // Sync to Firestore
+    fsSaveAIDisagreement(userId, projectId, String(paperIndex), record).catch(() => {});
+
+    setDisagreementPopup(null);
+  }, [disagreementPopup, papers, applyDecision, userId, projectId]);
+
+  const acceptAISuggestion = useCallback(() => {
+    if (!disagreementPopup) return;
+    applyDecision(disagreementPopup.aiSuggestion, disagreementPopup.paperIndex);
+    setDisagreementPopup(null);
+  }, [disagreementPopup, applyDecision]);
 
   const jumpToPaper = useCallback((gIdx) => {
     const pos = filteredIndices.indexOf(gIdx);
@@ -2014,6 +2107,29 @@ function AppMain({ currentUser, logout }) {
     a.click();
     URL.revokeObjectURL(url);
   }, [papers, decisions, getAbstract, aiScores, projectName]);
+
+  const exportDisagreements = useCallback(() => {
+    const entries = Object.entries(aiDisagreements);
+    if (entries.length === 0) return;
+    const escapeCSV = (s) => {
+      if (!s) return '';
+      const str = String(s);
+      return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const header = 'paper_title,venue,ai_score,ai_suggestion,ai_rationale,user_decision,timestamp';
+    const rows = entries.map(([, r]) =>
+      [r.title, r.venue, r.aiScore, r.aiSuggestion, r.aiReason, r.userDecision, r.timestamp].map(escapeCSV).join(',')
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = projectSlug(projectName) + '_ai_disagreements.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [aiDisagreements, projectName]);
 
   const clearAllDecisions = useCallback(() => {
     setDecisions({});
@@ -2875,15 +2991,42 @@ function AppMain({ currentUser, logout }) {
             </div>
           ))}
         </div>
-        {Object.keys(aiScores).length > 0 && (
+        {(Object.keys(aiScores).length > 0 || Object.keys(aiDisagreements).length > 0) && (
           <div className="sidebar-footer">
-            <button className="reset-btn full-width" onClick={clearErrorScores}>
-              Clear Errors
-            </button>
-            <div className="reset-link" onClick={clearScores}>Reset All Scores</div>
+            {Object.keys(aiDisagreements).length > 0 && (
+              <button className="reset-btn full-width dis-export-btn" onClick={exportDisagreements}>
+                Export AI Disagreements ({Object.keys(aiDisagreements).length})
+              </button>
+            )}
+            {Object.keys(aiScores).length > 0 && (
+              <button className="reset-btn full-width" onClick={clearErrorScores}>
+                Clear Errors
+              </button>
+            )}
+            {Object.keys(aiScores).length > 0 && (
+              <div className="reset-link" onClick={clearScores}>Reset All Scores</div>
+            )}
           </div>
         )}
       </div>
+      {/* AI Disagreement Confirmation Popup */}
+      {disagreementPopup && (
+        <div className="disagreement-overlay">
+          <div className="disagreement-popup">
+            <div className="disagreement-title">AI Disagrees</div>
+            <div className="disagreement-body">
+              AI suggested <strong className={`dis-${disagreementPopup.aiSuggestion.toLowerCase()}`}>{disagreementPopup.aiSuggestion}</strong> with
+              score <strong>{disagreementPopup.aiScore}</strong>.
+              You chose <strong className={`dis-${disagreementPopup.userDecision.toLowerCase()}`}>{disagreementPopup.userDecision}</strong>.
+              Confirm your decision?
+            </div>
+            <div className="disagreement-actions">
+              <button className="dis-btn dis-keep" onClick={confirmDisagreement}>Keep my decision</button>
+              <button className="dis-btn dis-change" onClick={acceptAISuggestion}>Change to AI suggestion</button>
+            </div>
+          </div>
+        </div>
+      )}
       {aiInsightsOpen && <div className="sidebar-overlay" onClick={() => setAiInsightsOpen(false)} />}
 
       {/* Project Sidebar (left) */}

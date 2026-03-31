@@ -355,6 +355,47 @@ export async function getSharedProjects(userEmail) {
   });
 }
 
+// ─── AI Disagreements ───────────────────────────────────────
+
+/**
+ * Save an AI disagreement record for a paper.
+ * @param {string} userId
+ * @param {string} projectId
+ * @param {string} paperId
+ * @param {object} data - { title, venue, aiScore, aiSuggestion, aiReason, userDecision, timestamp }
+ */
+export async function saveAIDisagreement(userId, projectId, paperId, data) {
+  const ref = doc(db, 'users', userId, 'projects', projectId, 'aiDisagreements', String(paperId));
+  await setDoc(ref, { ...data, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Get all AI disagreements for a project.
+ * @param {string} userId
+ * @param {string} projectId
+ * @returns {Promise<object>} { paperId: { title, venue, aiScore, aiSuggestion, aiReason, userDecision, timestamp }, ... }
+ */
+export async function getAIDisagreements(userId, projectId) {
+  const colRef = collection(db, 'users', userId, 'projects', projectId, 'aiDisagreements');
+  const snap = await getDocs(colRef);
+  const results = {};
+  snap.docs.forEach(d => {
+    results[d.id] = d.data();
+  });
+  return results;
+}
+
+/**
+ * Delete an AI disagreement (e.g. when user changes decision to agree with AI).
+ * @param {string} userId
+ * @param {string} projectId
+ * @param {string} paperId
+ */
+export async function deleteAIDisagreement(userId, projectId, paperId) {
+  const ref = doc(db, 'users', userId, 'projects', projectId, 'aiDisagreements', String(paperId));
+  await deleteDoc(ref);
+}
+
 // ─── Final Decisions (Conflict Resolution) ───────────────────
 
 /**

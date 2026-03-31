@@ -67,6 +67,7 @@ Dual-write architecture: localStorage (instant cache) + Cloud Firestore (source 
 users/{userId}/
   projects/{projectId}           # Project metadata and settings
     decisions/{paperId}          # Triage decisions (Yes/No)
+    aiDisagreements/{paperId}    # Human-AI disagreement logs
 
 projects/{projectId}/
   meta                           # Owner info for sharing lookup (ownerId, ownerEmail, projectName)
@@ -91,6 +92,7 @@ projects/{projectId}/
 - **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`
 - **Sharing**: `saveProjectMeta`, `getProjectMeta`, `addCollaborator`, `removeCollaborator`, `updateCollaboratorRole`, `getCollaborators`, `acceptInvite`, `declineInvite`, `getSharedProjects`
 - **Final Decisions**: `saveFinalDecision`, `getFinalDecisions`, `deleteFinalDecision`
+- **AI Disagreements**: `saveAIDisagreement`, `getAIDisagreements`, `deleteAIDisagreement`
 - **Sync helpers**: `syncDecisionsToFirestore`, `syncAIScoresToFirestore`, `syncProjectToFirestore` — fire-and-forget wrappers that log warnings but never throw
 - Batch writes chunked at 500 (Firestore limit); all writes include `serverTimestamp()`
 
@@ -165,12 +167,16 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **AI suggestion glow** — decision buttons get subtle purple glow when matching AI suggestion
 - **Sort by Score** — toggle to sort papers by relevance score instead of default order
 - **API key management** — stored in localStorage, configurable via modal, proxy health check before scoring
+- **AI Disagreement Detection** — when user's triage decision disagrees with AI suggestion, a confirmation popup appears: "AI suggested [Yes/No] with score [X]. You chose [No/Yes]. Confirm your decision?" with "Keep my decision" / "Change to AI suggestion" buttons
+- **Disagreement Logging** — confirmed disagreements stored in localStorage (`slr-screener-disagreements`) and Firestore (`users/{userId}/projects/{projectId}/aiDisagreements/{paperId}`) with title, venue, AI score, AI suggestion, AI rationale, user decision, and timestamp
+- **Disagreement Export** — "Export AI Disagreements" button in AI Insights sidebar exports CSV with all human-AI disagreements
 
 ### AI Insights Sidebar
 
 - Model selector dropdown
 - Current paper's score, suggestion, and reason
 - Suggested Yes/No tabs with paper lists
+- Export AI Disagreements button (when disagreements exist)
 - Clear errors and reset scores buttons
 - Click-to-jump navigation
 
@@ -270,7 +276,7 @@ slr-screener/
 
 ## Testing
 
-112 tests across 8 suites (binary Yes/No triage only — Maybe and Undo removed):
+115 tests across 8 suites:
 
 ```bash
 npm test         # Run all tests
@@ -284,7 +290,7 @@ npm test         # Run all tests
 | export | 3 | CSV format, decision log, search filter |
 | project | 8 | Sidebar, new project, switch back, screened count, menu, sharing modal, validation |
 | auth | 23 | Login/sign-up forms, password validation, verification flow, Google sign-in, forgot password |
-| firestore | 31 | CRUD, batch writes, sync helpers, sharing, decline invite, final decisions |
+| firestore | 34 | CRUD, batch writes, sync helpers, sharing, decline invite, final decisions, AI disagreements |
 | kappa | 27 | Cohen's Kappa, Fleiss' Kappa, interpretation, conflict detection, edge cases |
 
 All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests use `jest.useFakeTimers()` for countdown/polling.
@@ -295,7 +301,7 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
-npm test         # Run test suite (112 tests)
+npm test         # Run test suite (115 tests)
 npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
 ```
 

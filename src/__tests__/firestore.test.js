@@ -63,6 +63,9 @@ import {
   saveFinalDecision,
   getFinalDecisions,
   deleteFinalDecision,
+  saveAIDisagreement,
+  getAIDisagreements,
+  deleteAIDisagreement,
 } from '../services/firestore';
 
 beforeEach(() => {
@@ -536,6 +539,45 @@ describe('Firestore Service', () => {
     test('deletes the correct document', async () => {
       await deleteFinalDecision('proj1', '5');
       expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'finalDecisions', '5');
+      expect(mockDeleteDoc).toHaveBeenCalled();
+    });
+  });
+
+  // ─── AI Disagreements ─────────────────────────────────────
+
+  describe('saveAIDisagreement', () => {
+    test('saves disagreement to correct path with serverTimestamp', async () => {
+      const data = { title: 'Test Paper', venue: 'ICSE 2025', aiScore: 85, aiSuggestion: 'Yes', aiReason: 'relevant', userDecision: 'No', timestamp: '2025-01-01T00:00:00.000Z' };
+      await saveAIDisagreement('user1', 'proj1', '3', data);
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'users', 'user1', 'projects', 'proj1', 'aiDisagreements', '3');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        { ...data, updatedAt: 'SERVER_TIMESTAMP' }
+      );
+    });
+  });
+
+  describe('getAIDisagreements', () => {
+    test('returns disagreements as a map', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          mockDocSnap('3', { title: 'Paper A', aiScore: 85, aiSuggestion: 'Yes', userDecision: 'No' }),
+          mockDocSnap('7', { title: 'Paper B', aiScore: 30, aiSuggestion: 'No', userDecision: 'Yes' }),
+        ],
+      });
+      const result = await getAIDisagreements('user1', 'proj1');
+      expect(mockCollectionFn).toHaveBeenCalledWith('MOCK_DB', 'users', 'user1', 'projects', 'proj1', 'aiDisagreements');
+      expect(result).toEqual({
+        '3': { title: 'Paper A', aiScore: 85, aiSuggestion: 'Yes', userDecision: 'No' },
+        '7': { title: 'Paper B', aiScore: 30, aiSuggestion: 'No', userDecision: 'Yes' },
+      });
+    });
+  });
+
+  describe('deleteAIDisagreement', () => {
+    test('deletes the correct document', async () => {
+      await deleteAIDisagreement('user1', 'proj1', '5');
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'users', 'user1', 'projects', 'proj1', 'aiDisagreements', '5');
       expect(mockDeleteDoc).toHaveBeenCalled();
     });
   });

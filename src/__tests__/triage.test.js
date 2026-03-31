@@ -41,6 +41,9 @@ jest.mock('../services/firestore', () => ({
   saveFinalDecision: jest.fn(() => Promise.resolve()),
   getFinalDecisions: jest.fn(() => Promise.resolve({})),
   deleteFinalDecision: jest.fn(() => Promise.resolve()),
+  saveAIDisagreement: jest.fn(() => Promise.resolve()),
+  getAIDisagreements: jest.fn(() => Promise.resolve({})),
+  deleteAIDisagreement: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('xlsx', () => ({

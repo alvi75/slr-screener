@@ -859,6 +859,71 @@
   z-index: 99;
 }
 
+/* AI Disagreement Popup */
+.disagreement-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.disagreement-popup {
+  background: white;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.disagreement-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3436;
+  margin-bottom: 12px;
+}
+.disagreement-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #636e72;
+  margin-bottom: 20px;
+}
+.disagreement-body strong { color: #2d3436; }
+.dis-yes { color: #00b894; }
+.dis-no { color: #d63031; }
+.disagreement-actions {
+  display: flex;
+  gap: 12px;
+}
+.dis-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid;
+  transition: all 0.15s;
+}
+.dis-keep {
+  background: #2d3436;
+  color: white;
+  border-color: #2d3436;
+}
+.dis-keep:hover { background: #1a1e1f; }
+.dis-change {
+  background: white;
+  color: #0984e3;
+  border-color: #74b9ff;
+}
+.dis-change:hover { background: #dfe6e9; }
+.dis-export-btn {
+  border-color: #a29bfe;
+  color: #6c5ce7;
+}
+.dis-export-btn:hover { background: #a29bfe22; }
+
 /* Sidebar panel */
 .sidebar {
   position: fixed;
