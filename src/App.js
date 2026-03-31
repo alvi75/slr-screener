@@ -5,6 +5,7 @@ import LoginPage from './LoginPage';
 import {
   saveProject as fsSaveProject,
   getProject as fsGetProject,
+  getProjects as fsGetProjects,
   deleteProject as fsDeleteProject,
   saveDecision as fsSaveDecision,
   deleteDecision as fsDeleteDecision,
@@ -1240,9 +1241,12 @@ function App() {
 }
 
 function AppMain({ currentUser, logout }) {
-  // App view: 'setup' or 'screener'
-  // Always start in screener — first-time users get the demo auto-loaded
-  const [appView, setAppView] = useState('screener');
+  // App view: 'home', 'setup', 'screener', or 'conflicts'
+  // Show home dashboard for first-time users; returning users go straight to screener
+  const [appView, setAppView] = useState(() => {
+    return localStorage.getItem('slr-screener-has-data') === '1' ? 'screener' : 'home';
+  });
+  const [dashboardProjects, setDashboardProjects] = useState([]);
 
   // Initialize state from localStorage synchronously to avoid race conditions
   const [papers, setPapers] = useState([]);
@@ -1573,13 +1577,13 @@ function AppMain({ currentUser, logout }) {
   const PAPERS_KEY = 'slr-screener-papers';
 
   // Load demo data from JSON file
-  const loadDemoData = useCallback(() => {
+  const loadDemoData = useCallback((navigateToScreener = true) => {
     fetch(process.env.PUBLIC_URL + '/enriched_papers_2025.json?t=' + Date.now())
       .then((r) => r.json())
       .then((data) => {
         setPapers(data.papers);
         setLoading(false);
-        setAppView('screener');
+        if (navigateToScreener) setAppView('screener');
         setIsDemo(true);
         setProjectName('Model Sizes in SE Research 2025');
         localStorage.setItem('slr-screener-has-data', '1');
@@ -1671,10 +1675,57 @@ function AppMain({ currentUser, logout }) {
     }
   }, [papers, isDemo]);
 
+  // Open a project from the dashboard
+  const openProject = useCallback(async (proj) => {
+    if (proj.isDemo) {
+      loadDemoData();
+      return;
+    }
+    // Load this project's papers from localStorage or Firestore
+    setProjectName(proj.name || proj.id);
+    setIsDemo(false);
+    localStorage.setItem('slr-screener-project-name', proj.name || proj.id);
+    localStorage.setItem('slr-screener-is-demo', '0');
+    setProjectRole('owner');
+    setProjectOwnerId(null);
+    try {
+      const saved = localStorage.getItem(PAPERS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPapers(parsed);
+        }
+      }
+      // Load decisions + scores from Firestore
+      const decs = await fsGetDecisions(userId, proj.id);
+      if (Object.keys(decs).length > 0) {
+        setDecisions(decs);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(decs));
+      }
+      const scores = await fsGetAIScores(proj.id);
+      if (Object.keys(scores).length > 0) {
+        setAiScores(scores);
+        localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+      }
+    } catch (e) { console.warn('[Dashboard] Failed to load project:', e.message); }
+    setLoading(false);
+    setAppView('screener');
+    setCurrentIndex(0);
+  }, [userId, loadDemoData]);
+
+  // Navigate back to home dashboard
+  const goHome = useCallback(async () => {
+    setAppView('home');
+    // Refresh project list
+    try {
+      const projects = await fsGetProjects(userId);
+      setDashboardProjects(projects);
+    } catch (e) { /* ignore */ }
+  }, [userId]);
+
   // On mount: restore saved project or auto-load demo for first-time users.
   useEffect(() => {
     const savedIsDemo = localStorage.getItem('slr-screener-is-demo');
-    // If user has a non-demo project with saved papers, restore them
     if (savedIsDemo === '0') {
       try {
         const saved = localStorage.getItem(PAPERS_KEY);
@@ -1683,15 +1734,27 @@ function AppMain({ currentUser, logout }) {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setPapers(parsed);
             setLoading(false);
-            setAppView('screener');
             return;
           }
         }
       } catch (e) { /* fall through to demo */ }
     }
-    // First visit or demo project — load demo data
-    loadDemoData();
+    // First visit or demo project — load demo data (don't navigate, respect initial appView)
+    loadDemoData(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load dashboard projects list from Firestore
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const projects = await fsGetProjects(userId);
+        setDashboardProjects(projects);
+      } catch (e) {
+        console.warn('[Dashboard] Failed to load projects:', e.message);
+      }
+    })();
+  }, [userId]);
 
   // On mount: fetch decisions and scores from Firestore in background, merge with localStorage.
   // Firestore is source of truth — if it has data, it overwrites localStorage.
@@ -2354,10 +2417,138 @@ function AppMain({ currentUser, logout }) {
   const noCount = Object.values(decisions).filter((d) => d === 'No').length;
   const decidedCount = yesCount + noCount;
 
+  // ===== HOME DASHBOARD VIEW =====
+  if (appView === 'home') {
+    const hasActiveProject = totalPapers > 0 && decidedCount < totalPapers;
+    const activeProjectProgress = totalPapers > 0 ? Math.round((decidedCount / totalPapers) * 100) : 0;
+
+    return (
+      <div className="app home-view">
+        {/* Top bar with user */}
+        <div className="home-topbar">
+          <div className="home-brand-small">SLR Screener</div>
+          <div className="header-user">
+            {currentUser.photoURL ? (
+              <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="header-avatar-placeholder">{(currentUser.email || '?')[0].toUpperCase()}</span>
+            )}
+            <button className="header-btn btn-signout" onClick={logout}>Sign Out</button>
+          </div>
+        </div>
+
+        {/* Branding */}
+        <div className="home-hero">
+          <h1 className="home-title">SLR Screener</h1>
+          <p className="home-subtitle">What would you like to screen today?</p>
+        </div>
+
+        {/* Quick Action Cards */}
+        <div className="home-actions">
+          <div className="home-action-card" onClick={() => { setAppView('setup'); localStorage.removeItem('slr-screener-has-data'); }}>
+            <div className="home-action-icon">+</div>
+            <div className="home-action-label">New Project</div>
+            <div className="home-action-desc">Import CSV, JSON, PDFs, or add papers manually</div>
+          </div>
+
+          {hasActiveProject && (
+            <div className="home-action-card home-action-resume" onClick={() => setAppView('screener')}>
+              <div className="home-action-icon">&#9654;</div>
+              <div className="home-action-label">Continue Screening</div>
+              <div className="home-action-desc">{projectName}</div>
+              <div className="home-resume-progress">
+                <div className="home-resume-bar">
+                  <div className="home-resume-fill" style={{ width: `${activeProjectProgress}%` }} />
+                </div>
+                <span className="home-resume-text">{decidedCount}/{totalPapers} screened</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Projects */}
+        {(dashboardProjects.length > 0 || sharedProjects.length > 0) && (
+          <div className="home-recent">
+            <h2 className="home-section-title">Recent Projects</h2>
+            <div className="home-projects-grid">
+              {dashboardProjects.map(proj => {
+                const pName = proj.name || proj.id;
+                const pCount = proj.paperCount || 0;
+                const pCreated = proj.createdAt ? new Date(typeof proj.createdAt === 'number' ? proj.createdAt : proj.createdAt.seconds * 1000) : null;
+                return (
+                  <div key={proj.id} className="home-project-card" onClick={() => openProject(proj)}>
+                    <div className="home-project-name">
+                      {pName}
+                      {proj.isDemo && <span className="project-demo-badge">Demo</span>}
+                    </div>
+                    <div className="home-project-meta">
+                      {pCount > 0 && <span>{pCount} papers</span>}
+                      {pCreated && <span>{pCreated.toLocaleDateString()}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {sharedProjects.map(sp => (
+                <div key={sp.projectId} className="home-project-card" onClick={async () => {
+                  setProjectRole(sp.role);
+                  setProjectOwnerId(sp.ownerId);
+                  setProjectName(sp.projectName);
+                  setIsDemo(false);
+                  localStorage.setItem('slr-screener-project-name', sp.projectName);
+                  localStorage.setItem('slr-screener-is-demo', '0');
+                  try {
+                    const ownerProject = await fsGetProject(sp.ownerId, sp.projectId);
+                    if (ownerProject) {
+                      if (ownerProject.hlCategories) setHlCategories(ownerProject.hlCategories);
+                      if (ownerProject.researchGoal) setResearchGoal(ownerProject.researchGoal);
+                    }
+                    const myDecisions = await fsGetDecisions(userId, sp.projectId);
+                    setDecisions(myDecisions);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(myDecisions));
+                    const scores = await fsGetAIScores(sp.projectId);
+                    setAiScores(scores);
+                    setAppView('screener');
+                  } catch (err) {
+                    console.warn('[Sharing] Failed to load shared project:', err.message);
+                  }
+                }}>
+                  <div className="home-project-name">
+                    {sp.projectName}
+                    <span className="project-shared-badge">Shared</span>
+                  </div>
+                  <div className="home-project-meta">
+                    <span>by {sp.ownerEmail}</span>
+                    <span>{sp.role}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* If no projects and no data, show a hint */}
+        {dashboardProjects.length === 0 && sharedProjects.length === 0 && totalPapers === 0 && (
+          <div className="home-empty">
+            <p>No projects yet. Create a new project or explore the built-in demo dataset.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ===== SETUP VIEW =====
   if (appView === 'setup') {
-    return <SetupView onImport={importPapers} onLoadDemo={loadData} apiKey={apiKey} setApiKey={setApiKey}
-      appendMode={appendMode} onAppend={appendPapers} />;
+    return (
+      <div>
+        {!appendMode && (
+          <div className="setup-back-bar">
+            <button className="setup-back-btn" onClick={goHome}>&larr; Back to Home</button>
+          </div>
+        )}
+        <SetupView onImport={importPapers} onLoadDemo={loadData} apiKey={apiKey} setApiKey={setApiKey}
+          appendMode={appendMode} onAppend={appendPapers} />
+      </div>
+    );
   }
 
   // ===== CONFLICT RESOLUTION VIEW =====
@@ -2581,7 +2772,7 @@ function AppMain({ currentUser, logout }) {
       {/* Header */}
       <div className="header">
         <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
-        <h1><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
+        <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button

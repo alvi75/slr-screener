@@ -13,6 +13,175 @@
   box-sizing: border-box;
 }
 
+/* ===== HOME DASHBOARD ===== */
+.home-view {
+  max-width: 720px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+}
+.home-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 48px;
+}
+.home-brand-small {
+  font-size: 14px;
+  font-weight: 700;
+  color: #b2bec3;
+  letter-spacing: 0.5px;
+}
+.home-hero {
+  text-align: center;
+  margin-bottom: 40px;
+}
+.home-title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #2d3436;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.home-subtitle {
+  font-size: 17px;
+  color: #636e72;
+  font-weight: 400;
+}
+
+/* Quick Action Cards */
+.home-actions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 48px;
+}
+.home-action-card {
+  flex: 1;
+  background: white;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 14px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.home-action-card:hover {
+  border-color: #74b9ff;
+  box-shadow: 0 4px 16px rgba(116,185,255,0.15);
+  transform: translateY(-2px);
+}
+.home-action-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #636e72;
+  margin-bottom: 14px;
+}
+.home-action-card:hover .home-action-icon { background: #74b9ff22; color: #0984e3; }
+.home-action-resume .home-action-icon { background: #00b89422; color: #00b894; }
+.home-action-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d3436;
+  margin-bottom: 4px;
+}
+.home-action-desc {
+  font-size: 13px;
+  color: #636e72;
+  line-height: 1.4;
+}
+.home-resume-progress { margin-top: 12px; }
+.home-resume-bar {
+  height: 6px;
+  background: #dfe6e9;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.home-resume-fill {
+  height: 100%;
+  background: #00b894;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.home-resume-text {
+  font-size: 12px;
+  color: #636e72;
+}
+
+/* Recent Projects Section */
+.home-recent { margin-bottom: 40px; }
+.home-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #636e72;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+.home-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.home-project-card {
+  background: white;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 12px;
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.home-project-card:hover {
+  border-color: #74b9ff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.home-project-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3436;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.home-project-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #b2bec3;
+}
+.home-empty {
+  text-align: center;
+  color: #b2bec3;
+  padding: 40px 0;
+  font-size: 15px;
+}
+
+/* Setup back button */
+.setup-back-bar {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px 20px 0;
+}
+.setup-back-btn {
+  background: none;
+  border: none;
+  color: #0984e3;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 0;
+  font-weight: 500;
+}
+.setup-back-btn:hover { text-decoration: underline; }
+
 /* Header */
 .header {
   display: flex;

@@ -58,6 +58,10 @@ export const MOCK_USER = {
  * Returns a jest.fn() for fetch so tests can inspect calls.
  */
 export function setupFetchMock() {
+  // Pre-set has-data so the app goes directly to screener view (not home dashboard)
+  localStorage.setItem('slr-screener-has-data', '1');
+  localStorage.setItem('slr-screener-is-demo', '1');
+
   const fetchMock = jest.fn((url) => {
     if (typeof url === 'string' && url.includes('enriched_papers_2025.json')) {
       return Promise.resolve({

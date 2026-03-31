@@ -108,6 +108,19 @@ projects/{projectId}/
 
 ## Features
 
+### Home Dashboard
+
+Modern landing page shown on first login (returning users go directly to screener):
+
+- **Branding** — centered "SLR Screener" title with subtitle "What would you like to screen today?"
+- **User avatar + Sign Out** — top-right corner
+- **Quick action cards**:
+  - **New Project** — navigates to the import/setup page
+  - **Continue Screening** — shown when active project has unscreened papers, with project name, progress bar, and screened count
+- **Recent Projects** — grid of project cards from Firestore, showing name, paper count, date, and badges (Demo, Shared)
+- **Navigation** — clicking the "SLR Screener" title in the screening header returns to the dashboard; setup page has "Back to Home" link
+- **View state** — `appView` can be `'home'`, `'setup'`, `'screener'`, or `'conflicts'`; initialized from localStorage (`has-data` flag)
+
 ### Multi-Format Data Import (Setup Page)
 
 Four import methods, each with project name field:
