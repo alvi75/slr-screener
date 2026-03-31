@@ -249,7 +249,7 @@ function highlightAbstract(text, hlData) {
 
 // ===== AI SCORING =====
 function buildScoringPrompt(goal) {
-  return `You are helping screen papers for a systematic literature review. The research goal is: ${goal} Rate this abstract 0-100 for relevance and suggest Yes/No/Maybe. Respond in JSON only: {"score": number, "suggestion": "yes"|"no"|"maybe", "reason": "one sentence why"}`;
+  return `You are helping screen papers for a systematic literature review. The research goal is: ${goal} Rate this abstract 0-100 for relevance and suggest Yes/No. Respond in JSON only: {"score": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
 }
 
 const PROXY_URL = 'http://localhost:3001/api/score';
@@ -1266,7 +1266,6 @@ function AppMain({ currentUser, logout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarFilter, setSidebarFilter] = useState('All');
-  const [undoStack, setUndoStack] = useState([]);
   const [highlightsOn, setHighlightsOn] = useState(() => {
     try { return localStorage.getItem('slr-screener-highlights') !== 'off'; }
     catch { return true; }
@@ -1851,20 +1850,10 @@ function AppMain({ currentUser, logout }) {
     return papers[gIdx]?.abstract || '';
   }, [papers, abstractEdits]);
 
-  // Store undo stack in a ref so callbacks always see the latest value
-  const undoStackRef = useRef(undoStack);
-  undoStackRef.current = undoStack;
-
   const makeDecision = useCallback((d) => {
     if (globalIndex === undefined) return;
     const prevDecision = decisions[globalIndex] || null;
 
-    // Push to undo stack (with index we came from, so undo can navigate back)
-    setUndoStack((stack) => [...stack.slice(-50), {
-      globalIndex,
-      previousDecision: prevDecision,
-      fromIndex: currentIndex,
-    }]);
     setDecisions((prev) => ({ ...prev, [globalIndex]: d }));
 
     // Only auto-advance if this is a NEW decision (no previous decision)
@@ -1875,28 +1864,6 @@ function AppMain({ currentUser, logout }) {
       });
     }
   }, [globalIndex, decisions, filteredIndices.length, currentIndex]);
-
-  const undoDecision = useCallback(() => {
-    const stack = undoStackRef.current;
-    if (stack.length === 0) return;
-    const last = stack[stack.length - 1];
-
-    setUndoStack(stack.slice(0, -1));
-    setDecisions((prev) => {
-      const next = { ...prev };
-      if (last.previousDecision) {
-        next[last.globalIndex] = last.previousDecision;
-      } else {
-        delete next[last.globalIndex];
-      }
-      return next;
-    });
-
-    // Navigate back to the paper where the decision was made
-    if (last.fromIndex !== undefined) {
-      setCurrentIndex(last.fromIndex);
-    }
-  }, []);
 
   const jumpToPaper = useCallback((gIdx) => {
     const pos = filteredIndices.indexOf(gIdx);
@@ -1917,7 +1884,6 @@ function AppMain({ currentUser, logout }) {
       .filter(([, d]) => {
         if (sidebarFilter === 'Yes' && d !== 'Yes') return false;
         if (sidebarFilter === 'No' && d !== 'No') return false;
-        if (sidebarFilter === 'Maybe' && d !== 'Maybe') return false;
         return true;
       })
       .map(([idx, d]) => ({ idx: Number(idx), decision: d, paper: papers[Number(idx)] }))
@@ -1941,8 +1907,6 @@ function AppMain({ currentUser, logout }) {
       switch (e.key.toLowerCase()) {
         case 'y': if (projectRole !== 'viewer') makeDecision('Yes'); break;
         case 'n': if (projectRole !== 'viewer') makeDecision('No'); break;
-        case 'm': if (projectRole !== 'viewer') makeDecision('Maybe'); break;
-        case 'u': if (projectRole !== 'viewer') undoDecision(); break;
         case 'h': setHighlightsOn(v => !v); break;
         case 'arrowright': goNext(); break;
         case 'arrowleft': goPrev(); break;
@@ -1951,7 +1915,7 @@ function AppMain({ currentUser, logout }) {
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [editing, makeDecision, undoDecision, goNext, goPrev]);
+  }, [editing, makeDecision, goNext, goPrev]);
 
   // Export CSV
   const exportCSV = useCallback(() => {
@@ -2053,7 +2017,6 @@ function AppMain({ currentUser, logout }) {
 
   const clearAllDecisions = useCallback(() => {
     setDecisions({});
-    setUndoStack([]);
     setCurrentIndex(0);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(INDEX_KEY);
@@ -2273,8 +2236,7 @@ function AppMain({ currentUser, logout }) {
   const totalPapers = papers.length;
   const yesCount = Object.values(decisions).filter((d) => d === 'Yes').length;
   const noCount = Object.values(decisions).filter((d) => d === 'No').length;
-  const maybeCount = Object.values(decisions).filter((d) => d === 'Maybe').length;
-  const decidedCount = yesCount + noCount + maybeCount;
+  const decidedCount = yesCount + noCount;
 
   // ===== SETUP VIEW =====
   if (appView === 'setup') {
@@ -2446,7 +2408,6 @@ function AppMain({ currentUser, logout }) {
                         <option value="">— Resolve —</option>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
-                        <option value="Maybe">Maybe</option>
                       </select>
                       <input
                         className="conflict-comment-input"
@@ -2598,14 +2559,12 @@ function AppMain({ currentUser, logout }) {
       <div className="progress-section">
         <div className="progress-stats">
           <span>Yes: {yesCount}</span>
-          <span>Maybe: {maybeCount}</span>
           <span>No: {noCount}</span>
           <span>Remaining: {totalPapers - decidedCount}</span>
         </div>
         <div className="progress-bar-track">
           <div className="progress-bar-segments">
             {yesCount > 0 && <div className="progress-bar-fill fill-yes" style={{ width: `${(yesCount / totalPapers) * 100}%` }} />}
-            {maybeCount > 0 && <div className="progress-bar-fill fill-maybe" style={{ width: `${(maybeCount / totalPapers) * 100}%` }} />}
             {noCount > 0 && <div className="progress-bar-fill fill-no" style={{ width: `${(noCount / totalPapers) * 100}%` }} />}
           </div>
         </div>
@@ -2753,33 +2712,18 @@ function AppMain({ currentUser, logout }) {
             )}
             {projectRole !== 'viewer' && (() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
             <button
-              className={`decision-btn btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
+              className={`decision-btn decision-btn-big btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('Yes')}
             >
               Yes <span className="shortcut">Y</span>
             </button>
             <button
-              className={`decision-btn btn-maybe ${decisions[globalIndex] === 'Maybe' ? 'selected' : ''} ${sug === 'maybe' ? 'ai-suggested' : ''}`}
-              onClick={() => makeDecision('Maybe')}
-            >
-              Maybe <span className="shortcut">M</span>
-            </button>
-            <button
-              className={`decision-btn btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''} ${sug === 'no' ? 'ai-suggested' : ''}`}
+              className={`decision-btn decision-btn-big btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''} ${sug === 'no' ? 'ai-suggested' : ''}`}
               onClick={() => makeDecision('No')}
             >
               No <span className="shortcut">N</span>
             </button>
             </>; })()}
-            {projectRole !== 'viewer' && (
-              <button
-                className="decision-btn btn-undo"
-                onClick={undoDecision}
-                disabled={undoStack.length === 0}
-              >
-                Undo <span className="shortcut">U</span>
-              </button>
-            )}
           </div>
 
           {/* Navigation */}
@@ -2813,10 +2757,10 @@ function AppMain({ currentUser, logout }) {
           onChange={(e) => setSidebarSearch(e.target.value)}
         />
         <div className="sidebar-filters">
-          {['All', 'Yes', 'No', 'Maybe'].map((f) => {
+          {['All', 'Yes', 'No'].map((f) => {
             const count = f === 'All' ? decidedCount
               : f === 'Yes' ? yesCount
-              : f === 'No' ? noCount : maybeCount;
+              : noCount;
             return (
               <button
                 key={f}

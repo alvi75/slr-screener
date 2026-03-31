@@ -418,7 +418,6 @@
 }
 .fill-yes { background: #00b894; }
 .fill-no { background: #d63031; }
-.fill-maybe { background: #fdcb6e; }
 .progress-bar-segments {
   display: flex;
   height: 100%;
@@ -504,7 +503,6 @@
 }
 .decision-badge.yes { background: #00b89422; color: #00b894; }
 .decision-badge.no { background: #d6303122; color: #d63031; }
-.decision-badge.maybe { background: #fdcb6e44; color: #e17055; }
 
 .paper-title {
   font-size: 20px;
@@ -757,12 +755,7 @@
 .btn-yes:hover, .btn-yes.selected { background: #00b894; color: white; }
 .btn-no { border-color: #d63031; color: #d63031; }
 .btn-no:hover, .btn-no.selected { background: #d63031; color: white; }
-.btn-maybe { border-color: #fdcb6e; color: #e17055; }
-.btn-maybe:hover, .btn-maybe.selected { background: #fdcb6e; color: #2d3436; }
-.btn-undo { border-color: #b2bec3; color: #636e72; }
-.btn-undo:hover { background: #dfe6e9; color: #2d3436; }
-.btn-undo:disabled { opacity: 0.3; cursor: not-allowed; }
-.btn-undo:disabled:hover { background: white; color: #636e72; }
+.decision-btn-big { flex: 1; justify-content: center; padding: 14px 32px; font-size: 18px; }
 
 /* Navigation */
 .navigation {
@@ -914,7 +907,6 @@
 .sidebar-filter-btn.active.sf-all { background: #636e72; border-color: #636e72; }
 .sidebar-filter-btn.active.sf-yes { background: #00b894; border-color: #00b894; }
 .sidebar-filter-btn.active.sf-no { background: #d63031; border-color: #d63031; }
-.sidebar-filter-btn.active.sf-maybe { background: #fdcb6e; border-color: #fdcb6e; color: #2d3436; }
 
 /* Sidebar list */
 .sidebar-list {
@@ -959,7 +951,6 @@
 }
 .sidebar-decision.yes { background: #00b89422; color: #00b894; }
 .sidebar-decision.no { background: #d6303122; color: #d63031; }
-.sidebar-decision.maybe { background: #fdcb6e44; color: #e17055; }
 .sidebar-item-title {
   font-size: 13px;
   line-height: 1.4;
@@ -2851,7 +2842,6 @@
 }
 .conflict-decision-chip.yes { background: #dcfce7; color: #15803d; }
 .conflict-decision-chip.no { background: #ffeef0; color: #d63031; }
-.conflict-decision-chip.maybe { background: #fef3c7; color: #b45309; }
 .conflict-decision-chip.none { background: #f5f6fa; color: #b2bec3; }
 .conflict-decision-chip.agreed { background: #dfe6e9; color: #636e72; }
 .conflict-resolve-controls {

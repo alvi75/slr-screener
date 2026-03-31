@@ -66,7 +66,7 @@ Dual-write architecture: localStorage (instant cache) + Cloud Firestore (source 
 ```
 users/{userId}/
   projects/{projectId}           # Project metadata and settings
-    decisions/{paperId}          # Triage decisions (Yes/No/Maybe)
+    decisions/{paperId}          # Triage decisions (Yes/No)
 
 projects/{projectId}/
   meta                           # Owner info for sharing lookup (ownerId, ownerEmail, projectName)
@@ -129,10 +129,9 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 ### Paper Screening
 
 - **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract
-- **Triage buttons** — Yes / No / Maybe with visual feedback (current decision highlighted)
+- **Triage buttons** — Two big buttons: Yes (green) / No (red) with visual feedback (current decision highlighted)
 - **Auto-advance** — moves to next paper after new decision; stays when changing existing decision
-- **Undo** — `U` key or button, 50-deep stack with position restore
-- **Keyboard shortcuts** — `Y` Yes, `N` No, `M` Maybe, `U` Undo, `H` Toggle highlights, `←` Previous, `→` Next
+- **Keyboard shortcuts** — `Y` Yes, `N` No, `H` Toggle highlights, `←` Previous, `→` Next
 
 ### Venue Filtering
 
@@ -157,7 +156,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 ### AI Scoring (Optional)
 
-- **Claude API integration** — scores each abstract 0–100 for relevance with Yes/No/Maybe suggestion and one-sentence explanation
+- **Claude API integration** — scores each abstract 0–100 for relevance with Yes/No suggestion and one-sentence explanation
 - **Model selector** — Claude Haiku 4.5, Sonnet 4.6, Opus 4.6 (configurable in AI Insights sidebar)
 - **Research goal** — customizable prompt that drives scoring relevance
 - **Batch scoring** — batched in groups of 5 with `Promise.allSettled`, stoppable mid-run
@@ -171,14 +170,14 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 - Model selector dropdown
 - Current paper's score, suggestion, and reason
-- Suggested Yes/Maybe/No tabs with paper lists
+- Suggested Yes/No tabs with paper lists
 - Clear errors and reset scores buttons
 - Click-to-jump navigation
 
 ### Decision Log Sidebar
 
 - Searchable by title
-- Filterable by decision (All/Yes/No/Maybe with counts)
+- Filterable by decision (All/Yes/No with counts)
 - Click-to-jump navigation
 - Reset All Decisions button in footer
 
@@ -198,7 +197,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 ### Export & Progress
 
 - **CSV export** — downloads with columns: conf, title, author, decision, ai_score, ai_suggestion, ai_reason, abstract, doi, pdf_url, arxiv_id
-- **Progress bar** — segmented bar showing Yes (green), Maybe (yellow), No (red) counts with remaining
+- **Progress bar** — segmented bar showing Yes (green), No (red) counts with remaining
 - **Auto-save** — all state persists in localStorage
 
 ### Project Sharing
@@ -252,7 +251,7 @@ slr-screener/
 │   ├── testHelpers.js              # Shared test utilities (mock data, fetch mock)
 │   ├── __tests__/
 │   │   ├── dataAndNavigation.test.js  # Navigation and data loading (12 tests)
-│   │   ├── triage.test.js             # Triage decisions and undo (7 tests)
+│   │   ├── triage.test.js             # Triage decisions (5 tests)
 │   │   ├── highlights.test.js         # Keyword highlighting (3 tests)
 │   │   ├── export.test.js             # CSV export and decision log (3 tests)
 │   │   ├── project.test.js            # Project management and sharing (8 tests)
@@ -270,7 +269,7 @@ slr-screener/
 
 ## Testing
 
-114 tests across 8 suites:
+112 tests across 8 suites (binary Yes/No triage only — Maybe and Undo removed):
 
 ```bash
 npm test         # Run all tests
@@ -279,7 +278,7 @@ npm test         # Run all tests
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | dataAndNavigation | 12 | Paper loading, navigation, arrow keys, progress bar |
-| triage | 7 | Y/N/M decisions, undo, re-decision, badges, counts |
+| triage | 5 | Y/N decisions, re-decision, badges, counts |
 | highlights | 3 | Toggle on/off, whole-word matching, hover tooltips |
 | export | 3 | CSV format, decision log, search filter |
 | project | 8 | Sidebar, new project, switch back, screened count, menu, sharing modal, validation |
@@ -295,7 +294,7 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 npm start        # React dev server at http://localhost:3000
 npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
 npm run build    # Production build
-npm test         # Run test suite (114 tests)
+npm test         # Run test suite (112 tests)
 npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
 ```
 

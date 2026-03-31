@@ -93,44 +93,6 @@ describe('Triage', () => {
     expect(decisions['0']).toBe('No');
   });
 
-  test('Pressing M marks paper as Maybe and advances', async () => {
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
-    });
-
-    fireEvent.keyDown(document, { key: 'm' });
-
-    await waitFor(() => {
-      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
-    });
-
-    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
-    expect(decisions['0']).toBe('Maybe');
-  });
-
-  test('Pressing U undoes last decision', async () => {
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
-    });
-
-    // Make a decision (advances to paper 2)
-    fireEvent.keyDown(document, { key: 'y' });
-    await waitFor(() => {
-      expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument();
-    });
-
-    // Undo (should go back to paper 1 and remove the decision)
-    fireEvent.keyDown(document, { key: 'u' });
-    await waitFor(() => {
-      expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
-    });
-
-    const decisions = JSON.parse(localStorage.getItem('slr-screener-decisions'));
-    expect(decisions['0']).toBeUndefined();
-  });
-
   test('Changing decision on already-decided paper works without advancing', async () => {
     render(<App />);
     await waitFor(() => {
@@ -194,7 +156,6 @@ describe('Triage', () => {
     // Initial state
     expect(screen.getByText('Yes: 0')).toBeInTheDocument();
     expect(screen.getByText('No: 0')).toBeInTheDocument();
-    expect(screen.getByText('Maybe: 0')).toBeInTheDocument();
     expect(screen.getByText('Remaining: 5')).toBeInTheDocument();
 
     // Make Yes decision
@@ -209,13 +170,6 @@ describe('Triage', () => {
     await waitFor(() => {
       expect(screen.getByText('No: 1')).toBeInTheDocument();
       expect(screen.getByText('Remaining: 3')).toBeInTheDocument();
-    });
-
-    // Make Maybe decision on paper 3
-    fireEvent.keyDown(document, { key: 'm' });
-    await waitFor(() => {
-      expect(screen.getByText('Maybe: 1')).toBeInTheDocument();
-      expect(screen.getByText('Remaining: 2')).toBeInTheDocument();
     });
   });
 });

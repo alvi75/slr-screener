@@ -131,7 +131,7 @@ describe('Export', () => {
     await waitFor(() => expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument());
     fireEvent.keyDown(document, { key: 'n' }); // Paper 2 = No
     await waitFor(() => expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument());
-    fireEvent.keyDown(document, { key: 'm' }); // Paper 3 = Maybe
+    fireEvent.keyDown(document, { key: 'n' }); // Paper 3 = No
 
     // Open Decision Log via the header button (use selector to avoid matching h2)
     const logBtn = document.querySelector('.header-btn.btn-log');
@@ -141,8 +141,7 @@ describe('Export', () => {
     await waitFor(() => {
       expect(screen.getByText('All (3)')).toBeInTheDocument();
       expect(screen.getByText('Yes (1)')).toBeInTheDocument();
-      expect(screen.getByText('No (1)')).toBeInTheDocument();
-      expect(screen.getByText('Maybe (1)')).toBeInTheDocument();
+      expect(screen.getByText('No (2)')).toBeInTheDocument();
     });
 
     // Paper titles should appear in sidebar items
