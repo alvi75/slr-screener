@@ -1279,6 +1279,7 @@
 .ai-score-badge.clickable { cursor: pointer; transition: opacity 0.15s; }
 .ai-score-badge.clickable:hover { opacity: 0.7; }
 .score-unscored { background: #dfe6e9; color: #636e72; }
+.score-unavailable { background: #ffeaa744; color: #b45309; font-size: 11px; }
 .rescore-icon { display: none; }
 .ai-score-badge.clickable:hover .rescore-icon { display: inline; }
 

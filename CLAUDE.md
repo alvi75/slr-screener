@@ -180,7 +180,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **AI score badge** — color-coded (green ≥70, yellow ≥40, red <40) with hover tooltip
 - **AI suggestion glow** — decision buttons get subtle purple glow when matching AI suggestion
 - **Sort by Score** — toggle to sort papers by relevance score instead of default order
-- **API key management** — stored in localStorage, configurable via modal, proxy health check before scoring
+- **API key management** — stored in localStorage, configurable via modal, proxy health check before scoring. No alert popups — shows inline "AI: unavailable" badge with tooltip when proxy is down.
 - **AI Disagreement Detection** — when user's triage decision disagrees with AI suggestion, a confirmation popup appears: "AI suggested [Yes/No] with score [X]. You chose [No/Yes]. Confirm your decision?" with "Keep my decision" / "Change to AI suggestion" buttons
 - **Disagreement Logging** — confirmed disagreements stored in localStorage (`slr-screener-disagreements`) and Firestore (`users/{userId}/projects/{projectId}/aiDisagreements/{paperId}`) with title, venue, AI score, AI suggestion, AI rationale, user decision, and timestamp
 - **Disagreement Export** — "Export AI Disagreements" button in AI Insights sidebar exports CSV with all human-AI disagreements

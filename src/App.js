@@ -1320,6 +1320,7 @@ function AppMain({ currentUser, logout }) {
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [scoringDone, setScoringDone] = useState(false);
+  const [proxyUnavailable, setProxyUnavailable] = useState(false);
   const [aiDisagreements, setAiDisagreements] = useState(() => {
     try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
@@ -2196,18 +2197,23 @@ function AppMain({ currentUser, logout }) {
     firestoreSync(() => syncDecisionsToFirestore(userId, projectId, {}));
   }, [userId, projectId, firestoreSync]);
 
-  // AI scoring — batch process unscored papers
-  const startScoring = useCallback(async () => {
-    if (!apiKey) { setShowApiKeyModal(true); return; }
-
-    // Check proxy is running
+  // Check if proxy server is available
+  const checkProxy = useCallback(async () => {
     try {
       const health = await fetch('http://localhost:3001/api/health');
       if (!health.ok) throw new Error();
+      setProxyUnavailable(false);
+      return true;
     } catch {
-      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
-      return;
+      setProxyUnavailable(true);
+      return false;
     }
+  }, []);
+
+  // AI scoring — batch process unscored papers
+  const startScoring = useCallback(async () => {
+    if (!apiKey) { setShowApiKeyModal(true); return; }
+    if (!(await checkProxy())) return;
 
     // Find papers not scored by the current model
     const unscored = [];
@@ -2254,7 +2260,7 @@ function AppMain({ currentUser, logout }) {
     setScoringStopping(false);
     setScoringDone(true);
     setTimeout(() => setScoringDone(false), 2000);
-  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal]);
+  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal, checkProxy]);
 
   const [scoringStopping, setScoringStopping] = useState(false);
   const stopScoring = useCallback(() => {
@@ -2265,13 +2271,7 @@ function AppMain({ currentUser, logout }) {
   const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
   const scoreOnePaper = useCallback(async (gIdx) => {
     if (!apiKey) { setShowApiKeyModal(true); return; }
-    try {
-      const health = await fetch('http://localhost:3001/api/health');
-      if (!health.ok) throw new Error();
-    } catch {
-      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
-      return;
-    }
+    if (!(await checkProxy())) return;
     const abs = getAbstract(gIdx);
     if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
     setScoringOne(gIdx);
@@ -2283,7 +2283,7 @@ function AppMain({ currentUser, logout }) {
       alert('Scoring failed: ' + err.message);
     }
     setScoringOne(null);
-  }, [apiKey, papers, getAbstract, scoringModel, researchGoal]);
+  }, [apiKey, papers, getAbstract, scoringModel, researchGoal, checkProxy]);
 
   const pendingScoreRef = useRef(false);
   const saveApiKey = useCallback((key) => {
@@ -2327,13 +2327,7 @@ function AppMain({ currentUser, logout }) {
   // Suggest keywords via Claude API
   const suggestKeywords = useCallback(async (goal) => {
     if (!apiKey) { alert('Set API key first (use Score Papers button).'); return; }
-    try {
-      const health = await fetch('http://localhost:3001/api/health');
-      if (!health.ok) throw new Error();
-    } catch {
-      alert('Proxy server is not running.\n\nStart it in a separate terminal:\n  node server.js');
-      return;
-    }
+    if (!(await checkProxy())) return;
     setSuggestingKeywords(true);
     try {
       const res = await fetch(PROXY_URL, {
@@ -2367,7 +2361,7 @@ function AppMain({ currentUser, logout }) {
       alert('Failed to suggest keywords: ' + err.message);
     }
     setSuggestingKeywords(false);
-  }, [apiKey, scoringModel]);
+  }, [apiKey, scoringModel, checkProxy]);
 
   // Open highlight settings panel
   const openHlSettings = useCallback(() => {
@@ -3020,6 +3014,10 @@ function AppMain({ currentUser, logout }) {
                   onClick={() => scoreOnePaper(globalIndex)}
                 >
                   AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
+                </span>
+              ) : proxyUnavailable ? (
+                <span className="ai-score-badge score-unavailable hl-tip" data-tip="Proxy server not running. Start with: node server.js">
+                  AI: unavailable
                 </span>
               ) : (
                 <span
