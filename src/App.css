@@ -1279,7 +1279,6 @@
 .ai-score-badge.clickable { cursor: pointer; transition: opacity 0.15s; }
 .ai-score-badge.clickable:hover { opacity: 0.7; }
 .score-unscored { background: #dfe6e9; color: #636e72; }
-.score-unavailable { background: #ffeaa744; color: #b45309; font-size: 11px; }
 .rescore-icon { display: none; }
 .ai-score-badge.clickable:hover .rescore-icon { display: inline; }
 
@@ -1349,6 +1348,14 @@
   transition: border-color 0.15s;
 }
 .api-key-input:focus { border-color: #6c5ce7; }
+.api-key-link {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #0984e3;
+  text-decoration: none;
+}
+.api-key-link:hover { text-decoration: underline; }
 
 
 /* AI Insights sidebar — reuses .sidebar base styles */

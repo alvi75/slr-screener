@@ -1320,7 +1320,6 @@ function AppMain({ currentUser, logout }) {
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [scoringDone, setScoringDone] = useState(false);
-  const [proxyUnavailable, setProxyUnavailable] = useState(false);
   const [aiDisagreements, setAiDisagreements] = useState(() => {
     try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
@@ -2202,10 +2201,8 @@ function AppMain({ currentUser, logout }) {
     try {
       const health = await fetch('http://localhost:3001/api/health');
       if (!health.ok) throw new Error();
-      setProxyUnavailable(false);
       return true;
     } catch {
-      setProxyUnavailable(true);
       return false;
     }
   }, []);
@@ -3015,19 +3012,7 @@ function AppMain({ currentUser, logout }) {
                 >
                   AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
                 </span>
-              ) : proxyUnavailable ? (
-                <span className="ai-score-badge score-unavailable hl-tip" data-tip="Proxy server not running. Start with: node server.js">
-                  AI: unavailable
-                </span>
-              ) : (
-                <span
-                  className="ai-score-badge score-unscored clickable hl-tip"
-                  data-tip={apiKey ? 'Click to score this paper' : 'Set API key first (use Score Papers button)'}
-                  onClick={() => scoreOnePaper(globalIndex)}
-                >
-                  AI: ?
-                </span>
-              )}
+              ) : null}
             </div>
             <div className="paper-title">{paper.title}</div>
             <div className="paper-authors">{paper.author}</div>
@@ -3643,6 +3628,7 @@ function AppMain({ currentUser, logout }) {
               }}>Save & Start Scoring</button>
               <button className="cancel-btn" onClick={() => setShowApiKeyModal(false)}>Cancel</button>
             </div>
+            <a className="api-key-link" href="https://console.anthropic.com" target="_blank" rel="noreferrer">Get an API key at console.anthropic.com</a>
           </div>
         </>
       )}
