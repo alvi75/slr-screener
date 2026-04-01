@@ -3097,38 +3097,36 @@ function AppMain({ currentUser, logout }) {
             </div>
           </div>
 
-          {/* Pinned bottom bar: Decision buttons + Navigation */}
-          <div className="screening-bottom-bar">
-            <div className="screening-bottom-bar-inner">
-              <div className="decision-section">
-                {projectRole === 'viewer' && (
-                  <div className="viewer-readonly-notice">You have view-only access to this project.</div>
-                )}
-                {projectRole !== 'viewer' && (() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
-                <button
-                  className={`decision-btn decision-btn-big btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
-                  onClick={() => makeDecision('Yes')}
-                >
-                  Yes <span className="shortcut">Y</span>
-                </button>
-                <button
-                  className={`decision-btn decision-btn-big btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''} ${sug === 'no' ? 'ai-suggested' : ''}`}
-                  onClick={() => makeDecision('No')}
-                >
-                  No <span className="shortcut">N</span>
-                </button>
-                </>; })()}
-              </div>
-              <div className="navigation">
-                <button className="nav-btn" onClick={goPrev} disabled={safeIndex === 0}>
-                  &larr; Previous
-                </button>
-                <span className="nav-info">{safeIndex + 1} / {filteredIndices.length}</span>
-                <button className="nav-btn" onClick={goNext} disabled={safeIndex >= filteredIndices.length - 1}>
-                  Next &rarr;
-                </button>
-              </div>
-            </div>
+          {/* Decision buttons */}
+          <div className="decision-section">
+            {projectRole === 'viewer' && (
+              <div className="viewer-readonly-notice">You have view-only access to this project.</div>
+            )}
+            {projectRole !== 'viewer' && (() => { const sug = aiScores[globalIndex]?.suggestion?.toLowerCase(); return <>
+            <button
+              className={`decision-btn decision-btn-big btn-yes ${decisions[globalIndex] === 'Yes' ? 'selected' : ''} ${sug === 'yes' ? 'ai-suggested' : ''}`}
+              onClick={() => makeDecision('Yes')}
+            >
+              Yes <span className="shortcut">Y</span>
+            </button>
+            <button
+              className={`decision-btn decision-btn-big btn-no ${decisions[globalIndex] === 'No' ? 'selected' : ''} ${sug === 'no' ? 'ai-suggested' : ''}`}
+              onClick={() => makeDecision('No')}
+            >
+              No <span className="shortcut">N</span>
+            </button>
+            </>; })()}
+          </div>
+
+          {/* Navigation */}
+          <div className="navigation">
+            <button className="nav-btn" onClick={goPrev} disabled={safeIndex === 0}>
+              &larr; Previous
+            </button>
+            <span className="nav-info">{safeIndex + 1} / {filteredIndices.length}</span>
+            <button className="nav-btn" onClick={goNext} disabled={safeIndex >= filteredIndices.length - 1}>
+              Next &rarr;
+            </button>
           </div>
         </>
       ) : (

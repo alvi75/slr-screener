@@ -146,7 +146,7 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Paper Screening
 
-- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Card is natural height (no forced stretch). Abstract area capped at `max-height: 350px` with `overflow-y: auto` — short abstracts show without whitespace, long ones scroll. Yes/No buttons and Previous/Next navigation pinned at viewport bottom via `position: fixed` bottom bar. Page never scrolls.
+- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Natural height card — no forced stretch or min-height. Abstract area capped at `max-height: 350px` with `overflow-y: auto` (short abstracts compact, long ones scroll). Yes/No buttons and navigation sit directly below the card with small margins, no gap.
 - **Triage buttons** — Two big buttons: Yes (green) / No (red) with visual feedback (current decision highlighted)
 - **Auto-advance** — moves to next paper after new decision; stays when changing existing decision
 - **Keyboard shortcuts** — `Y` Yes, `N` No, `H` Toggle highlights, `←` Previous, `→` Next
