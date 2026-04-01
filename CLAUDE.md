@@ -227,7 +227,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Share modal** — invite collaborators by email with role selection (Annotator or Viewer). Always fetches fresh collaborator status from Firestore server (bypasses cache via `getDocsFromServer`) when opened (with loading indicator). Status badges: pending (yellow), accepted (green), declined (red). Console logging traces accept/read flow for debugging.
 - **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
 - **Collaborator list** — shows email, role (editable), status badge (pending yellow, accepted green, declined red), remove button
-- **Auto-discovery** — on login, collectionGroup query finds all projects where user's email is a collaborator
+- **Auto-discovery** — on every app load, collectionGroup query finds all projects where user's email is a collaborator (case-insensitive). All collaborator emails normalized to lowercase in Firestore.
 - **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines
 - **Notification bell** — header icon with red badge showing pending invite count; clicking opens dropdown with invite cards (owner email, project name, role, Accept/Decline buttons)
 - **Accept** — moves project to "Shared with me" sidebar, updates Firestore status to `accepted`

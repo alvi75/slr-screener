@@ -274,9 +274,10 @@ export async function getProjectMeta(projectId) {
  * @param {string} invitedByUserId - UID of the inviting user
  */
 export async function addCollaborator(projectId, email, role, invitedByUserId) {
-  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  const normalizedEmail = email.toLowerCase();
+  const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
   await setDoc(ref, {
-    email,
+    email: normalizedEmail,
     role,
     status: 'pending',
     invitedBy: invitedByUserId,
@@ -290,7 +291,7 @@ export async function addCollaborator(projectId, email, role, invitedByUserId) {
  * @param {string} email
  */
 export async function removeCollaborator(projectId, email) {
-  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  const ref = doc(db, 'projects', projectId, 'collaborators', email.toLowerCase());
   await deleteDoc(ref);
 }
 
@@ -301,7 +302,7 @@ export async function removeCollaborator(projectId, email) {
  * @param {string} newRole - "annotator" | "viewer"
  */
 export async function updateCollaboratorRole(projectId, email, newRole) {
-  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  const ref = doc(db, 'projects', projectId, 'collaborators', email.toLowerCase());
   await setDoc(ref, { role: newRole, updatedAt: serverTimestamp() }, { merge: true });
 }
 
@@ -331,9 +332,10 @@ export async function getCollaborators(projectId) {
  * @param {string} email
  */
 export async function acceptInvite(projectId, email) {
-  const path = `projects/${projectId}/collaborators/${email}`;
+  const normalizedEmail = email.toLowerCase();
+  const path = `projects/${projectId}/collaborators/${normalizedEmail}`;
   console.log('[Sharing] acceptInvite writing status=accepted to', path);
-  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
   await setDoc(ref, { status: 'accepted', acceptedAt: serverTimestamp() }, { merge: true });
   console.log('[Sharing] acceptInvite completed for', path);
 }
@@ -344,7 +346,7 @@ export async function acceptInvite(projectId, email) {
  * @param {string} email
  */
 export async function declineInvite(projectId, email) {
-  const ref = doc(db, 'projects', projectId, 'collaborators', email);
+  const ref = doc(db, 'projects', projectId, 'collaborators', email.toLowerCase());
   await setDoc(ref, { status: 'declined', declinedAt: serverTimestamp() }, { merge: true });
 }
 
@@ -358,7 +360,7 @@ export async function getSharedProjects(userEmail) {
   if (!userEmail) return [];
   const q = query(
     collectionGroup(db, 'collaborators'),
-    where('email', '==', userEmail)
+    where('email', '==', userEmail.toLowerCase())
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => {

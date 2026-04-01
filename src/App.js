@@ -1803,10 +1803,19 @@ function AppMain({ currentUser, logout }) {
         const collabs = await fsGetCollaborators(projectId);
         setCollaborators(collabs);
 
-        // Fetch shared projects (projects where this user is a collaborator)
-        const shared = await fsGetSharedProjects(currentUser?.email);
+      } catch (err) {
+        console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);
+      }
+    })();
+  }, [userId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch shared projects and pending invites on every load (not gated by firestoreLoadedRef)
+  useEffect(() => {
+    if (!userId || !currentUser?.email) return;
+    (async () => {
+      try {
+        const shared = await fsGetSharedProjects(currentUser.email);
         if (shared.length > 0) {
-          // Enrich with project meta (owner info, project name)
           const enrichedAccepted = [];
           const enrichedPending = [];
           for (const s of shared) {
@@ -1819,7 +1828,6 @@ function AppMain({ currentUser, logout }) {
                 } else if (s.status === 'pending') {
                   enrichedPending.push(enriched);
                 }
-                // declined invites are not shown
               }
             } catch { /* skip inaccessible projects */ }
           }
@@ -1827,10 +1835,10 @@ function AppMain({ currentUser, logout }) {
           setPendingInvites(enrichedPending);
         }
       } catch (err) {
-        console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);
+        console.warn('[Sharing] Failed to load shared projects:', err.message);
       }
     })();
-  }, [userId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save decisions (localStorage + Firestore)
   const decisionsInitRef = useRef(true);
