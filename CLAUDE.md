@@ -122,7 +122,7 @@ Modern landing page shown on first login (returning users go directly to screene
   - **Continue Screening** — shown when active project has unscreened papers, with project name, progress bar, and screened count
 - **Recent Projects** — grid of project cards from Firestore, showing name, paper count, date, and badges (Demo, Shared)
 - **Navigation** — clicking the "SLR Screener" title in the screening header returns to the dashboard; setup page has "Back to Home" link
-- **View state** — `appView` can be `'home'`, `'setup'`, `'screener'`, or `'conflicts'`; initialized from localStorage (`has-data` flag)
+- **View state** — `appView` can be `'home'`, `'setup'`, `'screener'`, or `'dashboard'`; always starts on `'home'` after login — user chooses which project to open
 
 ### Multi-Format Data Import (Setup Page)
 

@@ -1239,8 +1239,10 @@ function App() {
 function AppMain({ currentUser, logout }) {
   // App view: 'home', 'setup', 'screener', or 'conflicts'
   // Show home dashboard for first-time users; returning users go straight to screener
+  // Always start on home — user chooses which project to open.
+  // Tests set slr-screener-start-view=screener to bypass home.
   const [appView, setAppView] = useState(() => {
-    return localStorage.getItem('slr-screener-has-data') === '1' ? 'screener' : 'home';
+    return localStorage.getItem('slr-screener-start-view') || 'home';
   });
   const [dashboardProjects, setDashboardProjects] = useState([]);
 
