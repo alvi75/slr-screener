@@ -1335,7 +1335,6 @@ function AppMain({ currentUser, logout }) {
     catch { return false; }
   });
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
   const [renamingProject, setRenamingProject] = useState(false);
   const [appendMode, setAppendMode] = useState(null); // null or project name string
   const [appendResult, setAppendResult] = useState(null); // { added, skipped, total }
@@ -2850,7 +2849,7 @@ function AppMain({ currentUser, logout }) {
           )}
         </div>
         <div className="header-right">
-          <button className="header-btn btn-reload" onClick={loadData}>Reload</button>
+          <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
             onClick={scoringProgress ? stopScoring : startScoring}
@@ -2861,25 +2860,21 @@ function AppMain({ currentUser, logout }) {
                 ? `${Object.keys(aiScores).length}/${totalPapers} scored with ${modelName(scoringModel)}`
                 : `${unscoredCount} papers unscored. Click to score them.`}
           >
-            {scoringStopping ? 'Stopping...' : scoringProgress ? `Stop (${scoringProgress.total - scoringProgress.done})` : scoringDone ? 'Score \u2713' : 'Score'}
+            {scoringStopping
+              ? 'Stopping...'
+              : scoringProgress
+                ? `Stop Scoring (${scoringProgress.total - scoringProgress.done} left)`
+                : scoringDone ? 'Score Papers \u2713' : 'Score Papers'}
           </button>
-          {/* More dropdown for secondary actions */}
-          <div className="header-more-wrap">
-            <button className="header-btn btn-more" onClick={() => setHeaderMoreOpen(v => !v)}>More ▾</button>
-            {headerMoreOpen && (
-              <>
-                <div className="header-more-overlay" onClick={() => setHeaderMoreOpen(false)} />
-                <div className="header-more-dropdown">
-                  <button onClick={() => { setHeaderMoreOpen(false); exportCSV(); }}>Export CSV</button>
-                  <button onClick={() => { setHeaderMoreOpen(false); setSidebarOpen(v => !v); setAiInsightsOpen(false); }}>Decision Log</button>
-                  {Object.keys(aiScores).length > 0 && (
-                    <button onClick={() => { setHeaderMoreOpen(false); setAiInsightsOpen(v => !v); setSidebarOpen(false); }}>AI Insights</button>
-                  )}
-                  <button onClick={() => { setHeaderMoreOpen(false); loadData(); }}>Reload Data</button>
-                </div>
-              </>
-            )}
-          </div>
+          <button className="header-btn btn-export" onClick={exportCSV}>Export CSV</button>
+          <button className="header-btn btn-log" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
+            Decision Log
+          </button>
+          {Object.keys(aiScores).length > 0 && (
+            <button className="header-btn btn-insights" onClick={() => { setAiInsightsOpen((v) => !v); setSidebarOpen(false); }}>
+              AI Insights
+            </button>
+          )}
           <span className={`sync-indicator sync-${syncStatus}`} title={
             syncStatus === 'synced' ? 'All changes saved to cloud' :
             syncStatus === 'syncing' ? 'Syncing to cloud...' :

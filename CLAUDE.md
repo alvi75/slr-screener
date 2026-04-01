@@ -54,7 +54,7 @@ Firebase Auth with two sign-in methods:
   - "Use Google sign-in instead" button
   - "Sign out and use a different account" link
 - **Auth gating** — login required to access the app; unauthenticated users see LoginPage
-- **Header integration** — full-width layout: left side (hamburger + logo + Dashboard button), right side (Reload + Score buttons + "More" dropdown for Export CSV/Decision Log/AI Insights + sync icon + notifications + user avatar + Sign Out). Avatar always visible.
+- **Header integration** — left side (hamburger + logo + Dashboard button), right side (Reload Data, Score Papers, Export CSV, Decision Log, AI Insights + sync icon + notifications + user avatar + Sign Out). All buttons visible individually. App container max-width 1100px.
 - **Forgot password** — "Forgot Password?" link on sign-in form, shows email input + "Send Reset Link" button, uses Firebase `sendPasswordResetEmail()`, success/error messages, "Back to Sign In" link
 - **Auth context** (`src/contexts/AuthContext.js`) — provides `currentUser`, `signup`, `login`, `logout`, `googleSignIn`, `resendVerification`, `reloadUser`, `resetPassword`, `loading`
 
