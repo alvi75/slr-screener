@@ -257,7 +257,7 @@ function buildScoringPrompt(goal) {
   return `You are helping screen papers for a systematic literature review. The research goal is: ${goal} Rate this abstract 0-100 for relevance and suggest Yes/No. Respond in JSON only: {"score": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
 }
 
-const PROXY_URL = 'http://localhost:3001/api/score';
+const PROXY_URL = '/api/claude-proxy';
 
 const AI_MODELS = [
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', desc: 'Fast & cheap, good for bulk scoring' },
@@ -348,7 +348,7 @@ function projectSlug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'project';
 }
 
-const S2_PROXY = 'http://localhost:3001/api/semantic-scholar';
+const S2_PROXY = '/api/semantic-scholar';
 
 const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
 const STORAGE_KEY = 'slr-screener-decisions';
@@ -551,7 +551,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
         // Step 2: If API key available, extract with AI
         if (currentApiKey) {
           try {
-            const res = await fetch('http://localhost:3001/api/score', {
+            const res = await fetch('/api/claude-proxy', {
               method: 'POST',
               headers: { 'content-type': 'application/json', 'x-api-key': currentApiKey },
               body: JSON.stringify({
@@ -2200,7 +2200,7 @@ function AppMain({ currentUser, logout }) {
   // Check if proxy server is available
   const checkProxy = useCallback(async () => {
     try {
-      const health = await fetch('http://localhost:3001/api/health');
+      const health = await fetch('/api/health');
       if (!health.ok) throw new Error();
       return true;
     } catch {

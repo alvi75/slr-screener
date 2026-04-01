@@ -11,7 +11,8 @@ A general-purpose Systematic Literature Review (SLR) paper screening platform. B
 - **Firebase Auth** — Google sign-in and email/password authentication
 - **Cloud Firestore** — cloud persistence for projects, decisions, AI scores, and settings
 - **localStorage** — local cache layer, dual-write with Firestore for instant reads
-- **Express** — lightweight proxy server (`server.js` on port 3001) for Claude API and Semantic Scholar API calls
+- **Vercel Serverless Functions** — API proxy (`api/claude-proxy.js`, `api/semantic-scholar.js`, `api/semantic-scholar-batch.js`, `api/health.js`) for Claude API and Semantic Scholar calls. Works both locally (`vercel dev`) and deployed.
+- **Express** — legacy local proxy server (`server.js` on port 3001), kept for reference
 - **SheetJS (`xlsx`)** — CSV/Excel parsing for spreadsheet imports
 - **pdfjs-dist** — client-side PDF text extraction (worker served from `public/pdf.worker.min.js`)
 - **Recharts** — pie charts, bar charts, and stacked bars for the team dashboard
@@ -104,8 +105,9 @@ projects/{projectId}/
 - **Firestore location**: nam5 (US)
 - **Auth providers**: Google + Email/Password
 - **Config file**: `src/firebase.js`
-- **Hosting**: Firebase Hosting at https://slr-screener.web.app
-- **Hosting config**: `firebase.json` (build dir, SPA rewrites), `.firebaserc` (project alias)
+- **Hosting**: Vercel (migrated from Firebase Hosting)
+- **Firebase config**: `firebase.json` (Firestore rules only), `.firebaserc` (project alias)
+- **Vercel config**: `vercel.json` (SPA rewrites, API routes)
 
 ## Features
 
@@ -291,7 +293,13 @@ slr-screener/
 │   ├── index.js                    # Entry point
 │   └── index.css                   # Base/reset styles
 ├── server.js                       # Express proxy (Claude API + Semantic Scholar)
-├── firebase.json                   # Firebase Hosting config (build dir, SPA rewrites)
+├── api/
+│   ├── claude-proxy.js             # Vercel serverless: Anthropic API proxy
+│   ├── semantic-scholar.js         # Vercel serverless: single paper lookup
+│   ├── semantic-scholar-batch.js   # Vercel serverless: batch paper lookup
+│   └── health.js                   # Vercel serverless: health check
+├── vercel.json                     # Vercel config (SPA rewrites, API routes)
+├── firebase.json                   # Firebase config (Firestore rules only)
 ├── .firebaserc                     # Firebase project alias (slr-screener)
 ├── package.json
 └── CLAUDE.md
@@ -322,16 +330,16 @@ All test files mock `AuthContext`, `firestore` service, and `xlsx`. Auth tests u
 
 ```bash
 npm start        # React dev server at http://localhost:3000
-npm run proxy    # Proxy server at http://localhost:3001 (separate terminal)
+npm run proxy    # Legacy local proxy server at http://localhost:3001
 npm run build    # Production build
 npm test         # Run test suite (115 tests)
-npm run deploy   # Build + deploy to Firebase Hosting (https://slr-screener.web.app)
+npm run deploy   # Deploy to Vercel (vercel --prod)
 ```
 
-**Live deployment**: https://slr-screener.web.app
-
-The proxy server (`server.js`) must be running for AI scoring and Semantic Scholar lookups. It proxies:
-- `POST /api/score` — Claude API (`api.anthropic.com/v1/messages`)
-- `POST /api/semantic-scholar/search` — single title lookup
-- `POST /api/semantic-scholar/batch` — batch title lookup with 1s rate limiting
+**Hosting**: Vercel (API routes served as serverless functions):
+- `POST /api/claude-proxy` — Anthropic API proxy (`api.anthropic.com/v1/messages`)
+- `POST /api/semantic-scholar` — single title lookup
+- `POST /api/semantic-scholar-batch` — batch title lookup with 1s rate limiting
 - `GET /api/health` — health check
+
+For local dev, use `vercel dev` (serves both React app and API routes) or `npm start` + `npm run proxy` (legacy Express server — note: app now calls `/api/*` paths, not `localhost:3001`).
