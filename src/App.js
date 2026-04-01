@@ -1389,8 +1389,10 @@ function AppMain({ currentUser, logout }) {
   const loadCollaborators = useCallback(async () => {
     if (!projectId) return;
     setCollabsLoading(true);
+    console.log('[Sharing] loadCollaborators called for projectId:', projectId);
     try {
       const collabs = await fsGetCollaborators(projectId);
+      console.log('[Sharing] loadCollaborators result:', collabs.map(c => `${c.email}=${c.status}`));
       setCollaborators(collabs);
     } catch (err) {
       console.warn('[Sharing] Failed to load collaborators:', err.message);
@@ -1444,7 +1446,9 @@ function AppMain({ currentUser, logout }) {
 
   const handleAcceptInvite = useCallback(async (invite) => {
     try {
+      console.log('[Sharing] Accepting invite for project:', invite.projectId, 'email:', currentUser?.email);
       await fsAcceptInvite(invite.projectId, currentUser?.email);
+      console.log('[Sharing] Invite accepted successfully');
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
       setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
     } catch (err) {

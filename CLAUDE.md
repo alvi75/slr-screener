@@ -224,7 +224,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 ### Project Sharing
 
-- **Share modal** — invite collaborators by email with role selection (Annotator or Viewer). Always fetches fresh collaborator status from Firestore when opened (with loading indicator). Status badges: pending (yellow), accepted (green), declined (red).
+- **Share modal** — invite collaborators by email with role selection (Annotator or Viewer). Always fetches fresh collaborator status from Firestore server (bypasses cache via `getDocsFromServer`) when opened (with loading indicator). Status badges: pending (yellow), accepted (green), declined (red). Console logging traces accept/read flow for debugging.
 - **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
 - **Collaborator list** — shows email, role (editable), status badge (pending yellow, accepted green, declined red), remove button
 - **Auto-discovery** — on login, collectionGroup query finds all projects where user's email is a collaborator

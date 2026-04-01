@@ -4,6 +4,7 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   deleteDoc,
   writeBatch,
   serverTimestamp,
@@ -311,8 +312,17 @@ export async function updateCollaboratorRole(projectId, email, newRole) {
  */
 export async function getCollaborators(projectId) {
   const colRef = collection(db, 'projects', projectId, 'collaborators');
-  const snap = await getDocs(colRef);
-  return snap.docs.map(d => ({ email: d.id, ...d.data() }));
+  // Always fetch from server to avoid stale cache showing "pending" after accept
+  let snap;
+  try {
+    snap = await getDocsFromServer(colRef);
+  } catch {
+    // Fallback to cache if offline
+    snap = await getDocs(colRef);
+  }
+  const results = snap.docs.map(d => ({ email: d.id, ...d.data() }));
+  console.log('[Sharing] getCollaborators for', projectId, ':', results.map(c => `${c.email}=${c.status}`));
+  return results;
 }
 
 /**
@@ -321,8 +331,11 @@ export async function getCollaborators(projectId) {
  * @param {string} email
  */
 export async function acceptInvite(projectId, email) {
+  const path = `projects/${projectId}/collaborators/${email}`;
+  console.log('[Sharing] acceptInvite writing status=accepted to', path);
   const ref = doc(db, 'projects', projectId, 'collaborators', email);
   await setDoc(ref, { status: 'accepted', acceptedAt: serverTimestamp() }, { merge: true });
+  console.log('[Sharing] acceptInvite completed for', path);
 }
 
 /**
