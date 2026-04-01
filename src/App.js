@@ -31,6 +31,7 @@ import {
   deleteAIDisagreement as fsDeleteAIDisagreement,
 } from './services/firestore';
 import { analyzeConflicts, interpretKappa } from './utils/kappa';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import './App.css';
 
 // ===== HIGHLIGHT SYSTEM =====
@@ -1359,6 +1360,7 @@ function AppMain({ currentUser, logout }) {
   const [conflictSearch, setConflictSearch] = useState('');
   const [conflictVenueFilter, setConflictVenueFilter] = useState('All');
   const [conflictStatusFilter, setConflictStatusFilter] = useState('all'); // 'all' | 'resolved' | 'unresolved'
+  const [dashboardPhase, setDashboardPhase] = useState('screening'); // 'screening' | 'resolution'
 
   // ── Firestore sync ──────────────────────────────────────────
   // 'synced' | 'syncing' | 'error'
@@ -1464,41 +1466,23 @@ function AppMain({ currentUser, logout }) {
   const hasCollaborators = (collaborators || []).length > 0;
 
   // ── Conflict Resolution helpers ──────────────────────────────
-  const openConflictDashboard = useCallback(async () => {
-    if (!projectId || projectRole !== 'owner') return;
+  const openTeamDashboard = useCallback(async (forcePhase) => {
+    if (!projectId) return;
     setProjectMenuOpen(false);
     setProjectSidebarOpen(false);
 
     try {
-      // Fetch each annotator's decisions
       const collabs = await fsGetCollaborators(projectId);
       const annotators = [
         { id: userId, email: currentUser?.email, role: 'owner' },
         ...collabs.filter(c => c.role === 'annotator' && c.status === 'accepted').map(c => ({ id: null, email: c.email, role: 'annotator' })),
       ];
 
-      // We need annotator userIds. For the owner, we have it.
-      // For collaborators, we need to look them up. Since we don't store userId in collaborators,
-      // we'll fetch decisions for each annotator by their userId if available.
-      // For now, we use the owner's userId and look for collaborator decisions.
-      // Actually, collaborators store decisions under their own userId. We need their UIDs.
-      // We'll store annotator progress by email and fetch by known patterns.
-
-      // Fetch owner's decisions
       const annotatorDecisions = {};
       const ownerDecisions = await fsGetDecisions(userId, projectId);
       annotatorDecisions[userId] = ownerDecisions;
 
-      // For collaborators, we need their UIDs. Store them in the collaborator doc when they accept.
-      // For now, fetch via project meta approach — collaborators' decisions use their own UID path.
-      // We'll use a placeholder approach: fetch from the collabs' acceptedUid if stored.
-      // Since we don't have collaborator UIDs yet, we only show owner's decisions in v1.
-      // TODO: In a future update, store collaborator UIDs when they accept invites.
-
-      // Fetch final decisions
       const finalDecisions = await fsGetFinalDecisions(projectId);
-
-      // Run analysis
       const analysis = analyzeConflicts(annotatorDecisions);
 
       setConflictData({ annotatorDecisions, annotators, finalDecisions, analysis });
@@ -1506,11 +1490,17 @@ function AppMain({ currentUser, logout }) {
       setConflictSearch('');
       setConflictVenueFilter('All');
       setConflictStatusFilter('all');
-      setAppView('conflicts');
+      if (forcePhase) {
+        setDashboardPhase(forcePhase);
+      }
+      setAppView('dashboard');
     } catch (err) {
-      console.warn('[Conflicts] Failed to load conflict data:', err.message);
+      console.warn('[Dashboard] Failed to load team data:', err.message);
     }
-  }, [projectId, projectRole, userId, currentUser]);
+  }, [projectId, userId, currentUser]);
+
+  // Alias for backwards compat with menu items
+  const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
 
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
@@ -2507,7 +2497,7 @@ function AppMain({ currentUser, logout }) {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(myDecisions));
                     const scores = await fsGetAIScores(sp.projectId);
                     setAiScores(scores);
-                    setAppView('screener');
+                    openTeamDashboard('screening');
                   } catch (err) {
                     console.warn('[Sharing] Failed to load shared project:', err.message);
                   }
@@ -2551,194 +2541,274 @@ function AppMain({ currentUser, logout }) {
     );
   }
 
-  // ===== CONFLICT RESOLUTION VIEW =====
-  if (appView === 'conflicts' && conflictData) {
+  // ===== TEAM DASHBOARD VIEW =====
+  if (appView === 'dashboard' && conflictData) {
     const { annotatorDecisions, annotators, finalDecisions, analysis } = conflictData;
     const annotatorIds = Object.keys(annotatorDecisions);
-    const totalPapers = papers.length;
+    const dbTotalPapers = papers.length;
 
-    // Compute venues for filter
+    // My progress
+    const myDecs = decisions;
+    const myYes = Object.values(myDecs).filter(d => d === 'Yes').length;
+    const myNo = Object.values(myDecs).filter(d => d === 'No').length;
+    const myScreened = myYes + myNo;
+    const myRemaining = dbTotalPapers - myScreened;
+
+    // My venue breakdown
+    const venueStats = {};
+    papers.forEach((p, i) => {
+      const v = p.conf || 'Unknown';
+      if (!venueStats[v]) venueStats[v] = { venue: v, yes: 0, no: 0, remaining: 0 };
+      const d = myDecs[String(i)];
+      if (d === 'Yes') venueStats[v].yes++;
+      else if (d === 'No') venueStats[v].no++;
+      else venueStats[v].remaining++;
+    });
+    const venueData = Object.values(venueStats);
+
+    // Pie chart data
+    const pieData = [
+      { name: 'Yes', value: myYes, color: '#00b894' },
+      { name: 'No', value: myNo, color: '#d63031' },
+      { name: 'Remaining', value: myRemaining, color: '#dfe6e9' },
+    ].filter(d => d.value > 0);
+
+    // Bar chart: Yes/No counts
+    const barData = [
+      { name: 'Yes', count: myYes, fill: '#00b894' },
+      { name: 'No', count: myNo, fill: '#d63031' },
+    ];
+
+    // Team progress (counts only — no decisions shown, bias protection)
+    const teamProgress = annotators.map((a, i) => {
+      const aid = annotatorIds[i] || a.id;
+      const count = aid ? Object.keys(annotatorDecisions[aid] || {}).length : 0;
+      return { email: a.email, role: a.role, count, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+    });
+    const allDone = teamProgress.length > 1 && teamProgress.every(t => t.count >= dbTotalPapers);
+
+    // AI disagreements count
+    const disCount = Object.keys(aiDisagreements).length;
+
+    // Conflict resolution data
     const conflictVenues = ['All', ...new Set(papers.map(p => p.conf).filter(Boolean))];
-
-    // Get papers for current tab
     let tabPaperIds;
     if (conflictTab === 'conflicts') tabPaperIds = analysis.conflicts;
     else if (conflictTab === 'agreed') tabPaperIds = analysis.agreed;
     else tabPaperIds = analysis.screened;
-
-    // Apply filters
     let filteredPapers = tabPaperIds.map(id => ({ paperId: id, paper: papers[parseInt(id)] })).filter(p => p.paper);
-    if (conflictVenueFilter !== 'All') {
-      filteredPapers = filteredPapers.filter(p => p.paper.conf === conflictVenueFilter);
-    }
-    if (conflictSearch) {
-      const q = conflictSearch.toLowerCase();
-      filteredPapers = filteredPapers.filter(p => p.paper.title?.toLowerCase().includes(q));
-    }
+    if (conflictVenueFilter !== 'All') filteredPapers = filteredPapers.filter(p => p.paper.conf === conflictVenueFilter);
+    if (conflictSearch) { const q = conflictSearch.toLowerCase(); filteredPapers = filteredPapers.filter(p => p.paper.title?.toLowerCase().includes(q)); }
     if (conflictTab === 'conflicts' && conflictStatusFilter !== 'all') {
-      if (conflictStatusFilter === 'resolved') {
-        filteredPapers = filteredPapers.filter(p => finalDecisions[p.paperId]);
-      } else {
-        filteredPapers = filteredPapers.filter(p => !finalDecisions[p.paperId]);
-      }
+      filteredPapers = conflictStatusFilter === 'resolved' ? filteredPapers.filter(p => finalDecisions[p.paperId]) : filteredPapers.filter(p => !finalDecisions[p.paperId]);
     }
-
     const kappaInfo = interpretKappa(analysis.kappa);
     const resolvedCount = analysis.conflicts.filter(id => finalDecisions[id]).length;
 
     return (
-      <div className="app conflict-view">
-        <div className="conflict-header">
+      <div className="app dash-view">
+        <div className="dash-header">
           <button className="conflict-back-btn" onClick={() => setAppView('screener')}>&larr; Back to Screener</button>
-          <h2>Conflict Resolution — {projectName}</h2>
-          <button className="conflict-export-btn" onClick={exportResolved}>Export Resolved</button>
+          <h2>Team Dashboard — {projectName}</h2>
+          <button className="conflict-export-btn" onClick={exportResolved}>Export</button>
         </div>
 
-        {/* Annotator Progress */}
-        <div className="conflict-section">
-          <h3>Annotator Progress</h3>
-          <div className="conflict-annotator-grid">
-            {annotators.map((a, i) => {
-              const aid = annotatorIds[i] || a.id;
-              const decs = aid ? annotatorDecisions[aid] || {} : {};
-              const count = Object.keys(decs).length;
-              const pct = totalPapers > 0 ? Math.round((count / totalPapers) * 100) : 0;
-              return (
-                <div key={a.email} className="conflict-annotator-card">
-                  <div className="conflict-annotator-info">
-                    <span className="conflict-annotator-email">{a.email}</span>
-                    <span className="conflict-annotator-role">{a.role}</span>
+        {/* Phase Indicator */}
+        <div className="dash-phase-bar">
+          <button className={`dash-phase-btn ${dashboardPhase === 'screening' ? 'active' : ''}`} onClick={() => setDashboardPhase('screening')}>
+            Screening {allDone ? '(Complete)' : '(In Progress)'}
+          </button>
+          <button className={`dash-phase-btn ${dashboardPhase === 'resolution' ? 'active' : ''}`} onClick={() => {
+            if (projectRole === 'owner' || allDone) setDashboardPhase('resolution');
+          }} disabled={projectRole !== 'owner' && !allDone}>
+            Conflict Resolution {allDone ? '(Ready)' : ''}
+          </button>
+          {projectRole === 'owner' && dashboardPhase === 'screening' && (
+            <button className="dash-start-resolution" onClick={() => setDashboardPhase('resolution')}>
+              Start Resolution
+            </button>
+          )}
+        </div>
+
+        {/* ─── SCREENING PHASE ─── */}
+        {dashboardPhase === 'screening' && (
+          <>
+            {/* My Progress */}
+            <div className="dash-section">
+              <h3>My Progress</h3>
+              <div className="dash-charts-row">
+                <div className="dash-chart-card">
+                  <div className="dash-chart-label">Screened vs Remaining</div>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2}>
+                        {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="dash-chart-legend">
+                    {pieData.map(d => <span key={d.name} className="dash-legend-item"><span className="dash-legend-dot" style={{ background: d.color }} />{d.name}: {d.value}</span>)}
                   </div>
-                  <div className="conflict-progress-bar">
-                    <div className="conflict-progress-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="conflict-progress-label">{count} / {totalPapers} ({pct}%)</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <div className="dash-chart-card">
+                  <div className="dash-chart-label">Yes / No Breakdown</div>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" width={35} tick={{ fontSize: 13 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                        {barData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              {/* Venue breakdown */}
+              {venueData.length > 1 && (
+                <div className="dash-chart-card dash-venue-chart">
+                  <div className="dash-chart-label">Venue Breakdown</div>
+                  <ResponsiveContainer width="100%" height={Math.max(120, venueData.length * 36)}>
+                    <BarChart data={venueData} layout="vertical" margin={{ left: 80, right: 20 }}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="venue" width={75} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="yes" stackId="a" fill="#00b894" name="Yes" />
+                      <Bar dataKey="no" stackId="a" fill="#d63031" name="No" />
+                      <Bar dataKey="remaining" stackId="a" fill="#dfe6e9" name="Remaining" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
 
-        {/* Agreement Summary */}
-        <div className="conflict-section">
-          <h3>Agreement Summary</h3>
-          <div className="conflict-stats-grid">
-            <div className="conflict-stat">
-              <span className="conflict-stat-value">{analysis.screened.length}</span>
-              <span className="conflict-stat-label">Screened by 2+</span>
-            </div>
-            <div className="conflict-stat">
-              <span className="conflict-stat-value">{analysis.agreementRate.toFixed(1)}%</span>
-              <span className="conflict-stat-label">Agreement Rate</span>
-            </div>
-            {analysis.kappaType !== 'none' && (
-              <div className="conflict-stat">
-                <span className="conflict-stat-value">{analysis.kappa.toFixed(3)}</span>
-                <span className="conflict-stat-label">{analysis.kappaType} Kappa</span>
-                <span className="conflict-kappa-badge" style={{ background: kappaInfo.color }}>{kappaInfo.label}</span>
+            {/* Team Progress (counts only) */}
+            {teamProgress.length > 1 && (
+              <div className="dash-section">
+                <h3>Team Progress</h3>
+                <div className="dash-team-grid">
+                  {teamProgress.map(t => (
+                    <div key={t.email} className="dash-team-card">
+                      <div className="dash-team-info">
+                        <span className="dash-team-email">{t.email}</span>
+                        <span className="dash-team-role">{t.role}</span>
+                      </div>
+                      <div className="conflict-progress-bar">
+                        <div className="conflict-progress-fill" style={{ width: `${t.pct}%` }} />
+                      </div>
+                      <span className="conflict-progress-label">{t.count} / {dbTotalPapers}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            <div className="conflict-stat">
-              <span className="conflict-stat-value conflict-stat-conflict">{analysis.conflicts.length}</span>
-              <span className="conflict-stat-label">Conflicts ({resolvedCount} resolved)</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="conflict-tabs">
-          <button className={`conflict-tab ${conflictTab === 'conflicts' ? 'active' : ''}`} onClick={() => setConflictTab('conflicts')}>
-            Conflicts ({analysis.conflicts.length})
-          </button>
-          <button className={`conflict-tab ${conflictTab === 'agreed' ? 'active' : ''}`} onClick={() => setConflictTab('agreed')}>
-            Agreed ({analysis.agreed.length})
-          </button>
-          <button className={`conflict-tab ${conflictTab === 'all' ? 'active' : ''}`} onClick={() => setConflictTab('all')}>
-            All ({analysis.screened.length})
-          </button>
-        </div>
-
-        {/* Filters */}
-        <div className="conflict-filters">
-          <input
-            className="conflict-search"
-            type="text"
-            placeholder="Search by title..."
-            value={conflictSearch}
-            onChange={(e) => setConflictSearch(e.target.value)}
-          />
-          <select className="conflict-venue-filter" value={conflictVenueFilter} onChange={(e) => setConflictVenueFilter(e.target.value)}>
-            {conflictVenues.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-          {conflictTab === 'conflicts' && (
-            <select className="conflict-status-filter" value={conflictStatusFilter} onChange={(e) => setConflictStatusFilter(e.target.value)}>
-              <option value="all">All conflicts</option>
-              <option value="unresolved">Unresolved</option>
-              <option value="resolved">Resolved</option>
-            </select>
-          )}
-        </div>
-
-        {/* Paper List */}
-        <div className="conflict-paper-list">
-          {filteredPapers.length === 0 && (
-            <div className="conflict-empty">No papers match the current filters.</div>
-          )}
-          {filteredPapers.map(({ paperId, paper }) => {
-            const fd = finalDecisions[paperId];
-            const isConflict = analysis.conflicts.includes(paperId);
-            return (
-              <div key={paperId} className={`conflict-paper-row ${fd ? 'resolved' : ''}`}>
-                <div className="conflict-paper-info">
-                  <span className="conflict-paper-venue">{paper.conf}</span>
-                  <span className="conflict-paper-title">{paper.title?.length > 100 ? paper.title.slice(0, 100) + '...' : paper.title}</span>
-                </div>
-                <div className="conflict-decisions-row">
-                  {annotatorIds.map((aid, i) => {
-                    const d = annotatorDecisions[aid]?.[paperId];
-                    return (
-                      <span key={aid} className={`conflict-decision-chip ${d ? d.toLowerCase() : 'none'}`} title={annotators[i]?.email}>
-                        {d || '—'}
-                      </span>
-                    );
-                  })}
-                  {isConflict && (
-                    <div className="conflict-resolve-controls">
-                      <select
-                        className="conflict-final-select"
-                        value={fd?.decision || ''}
-                        onChange={(e) => {
-                          const comment = fd?.comment || '';
-                          handleFinalDecision(paperId, e.target.value, comment);
-                        }}
-                      >
-                        <option value="">— Resolve —</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                      <input
-                        className="conflict-comment-input"
-                        type="text"
-                        placeholder="Comment..."
-                        defaultValue={fd?.comment || ''}
-                        onBlur={(e) => {
-                          if (fd?.decision) {
-                            handleFinalDecision(paperId, fd.decision, e.target.value);
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                  {!isConflict && (
-                    <span className={`conflict-decision-chip agreed ${(annotatorDecisions[annotatorIds[0]]?.[paperId] || '').toLowerCase()}`}>
-                      Agreed
-                    </span>
-                  )}
+            {/* AI Disagreements Summary */}
+            {disCount > 0 && (
+              <div className="dash-section">
+                <h3>My AI Disagreements</h3>
+                <div className="dash-dis-summary">
+                  <span className="dash-dis-count">{disCount}</span>
+                  <span className="dash-dis-label">papers where you disagreed with AI</span>
+                  <button className="dash-dis-export" onClick={exportDisagreements}>Export CSV</button>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </>
+        )}
+
+        {/* ─── CONFLICT RESOLUTION PHASE ─── */}
+        {dashboardPhase === 'resolution' && (
+          <>
+            {/* Agreement Summary */}
+            <div className="conflict-section">
+              <h3>Agreement Summary</h3>
+              <div className="conflict-stats-grid">
+                <div className="conflict-stat">
+                  <span className="conflict-stat-value">{analysis.screened.length}</span>
+                  <span className="conflict-stat-label">Screened by 2+</span>
+                </div>
+                <div className="conflict-stat">
+                  <span className="conflict-stat-value">{analysis.agreementRate.toFixed(1)}%</span>
+                  <span className="conflict-stat-label">Agreement Rate</span>
+                </div>
+                {analysis.kappaType !== 'none' && (
+                  <div className="conflict-stat">
+                    <span className="conflict-stat-value">{analysis.kappa.toFixed(3)}</span>
+                    <span className="conflict-stat-label">{analysis.kappaType} Kappa</span>
+                    <span className="conflict-kappa-badge" style={{ background: kappaInfo.color }}>{kappaInfo.label}</span>
+                  </div>
+                )}
+                <div className="conflict-stat">
+                  <span className="conflict-stat-value conflict-stat-conflict">{analysis.conflicts.length}</span>
+                  <span className="conflict-stat-label">Conflicts ({resolvedCount} resolved)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="conflict-tabs">
+              <button className={`conflict-tab ${conflictTab === 'conflicts' ? 'active' : ''}`} onClick={() => setConflictTab('conflicts')}>Conflicts ({analysis.conflicts.length})</button>
+              <button className={`conflict-tab ${conflictTab === 'agreed' ? 'active' : ''}`} onClick={() => setConflictTab('agreed')}>Agreed ({analysis.agreed.length})</button>
+              <button className={`conflict-tab ${conflictTab === 'all' ? 'active' : ''}`} onClick={() => setConflictTab('all')}>All ({analysis.screened.length})</button>
+            </div>
+
+            {/* Filters */}
+            <div className="conflict-filters">
+              <input className="conflict-search" type="text" placeholder="Search by title..." value={conflictSearch} onChange={(e) => setConflictSearch(e.target.value)} />
+              <select className="conflict-venue-filter" value={conflictVenueFilter} onChange={(e) => setConflictVenueFilter(e.target.value)}>
+                {conflictVenues.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              {conflictTab === 'conflicts' && (
+                <select className="conflict-status-filter" value={conflictStatusFilter} onChange={(e) => setConflictStatusFilter(e.target.value)}>
+                  <option value="all">All conflicts</option>
+                  <option value="unresolved">Unresolved</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+              )}
+            </div>
+
+            {/* Paper List */}
+            <div className="conflict-paper-list">
+              {filteredPapers.length === 0 && <div className="conflict-empty">No papers match the current filters.</div>}
+              {filteredPapers.map(({ paperId, paper }) => {
+                const fd = finalDecisions[paperId];
+                const isConflict = analysis.conflicts.includes(paperId);
+                return (
+                  <div key={paperId} className={`conflict-paper-row ${fd ? 'resolved' : ''}`}>
+                    <div className="conflict-paper-info">
+                      <span className="conflict-paper-venue">{paper.conf}</span>
+                      <span className="conflict-paper-title">{paper.title?.length > 100 ? paper.title.slice(0, 100) + '...' : paper.title}</span>
+                    </div>
+                    <div className="conflict-decisions-row">
+                      {annotatorIds.map((aid, i) => {
+                        const d = annotatorDecisions[aid]?.[paperId];
+                        return <span key={aid} className={`conflict-decision-chip ${d ? d.toLowerCase() : 'none'}`} title={annotators[i]?.email}>{d || '—'}</span>;
+                      })}
+                      {isConflict && projectRole === 'owner' && (
+                        <div className="conflict-resolve-controls">
+                          <select className="conflict-final-select" value={fd?.decision || ''} onChange={(e) => handleFinalDecision(paperId, e.target.value, fd?.comment || '')}>
+                            <option value="">— Resolve —</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                          <input className="conflict-comment-input" type="text" placeholder="Comment..." defaultValue={fd?.comment || ''} onBlur={(e) => { if (fd?.decision) handleFinalDecision(paperId, fd.decision, e.target.value); }} />
+                        </div>
+                      )}
+                      {isConflict && projectRole !== 'owner' && (
+                        <span className="conflict-decision-chip conflict-pending">{fd ? fd.decision : 'Unresolved'}</span>
+                      )}
+                      {!isConflict && (
+                        <span className={`conflict-decision-chip agreed ${(annotatorDecisions[annotatorIds[0]]?.[paperId] || '').toLowerCase()}`}>Agreed</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -2774,6 +2844,9 @@ function AppMain({ currentUser, logout }) {
         <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
         <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
         <div className="header-actions">
+          {(hasCollaborators || projectRole !== 'owner') && (
+            <button className="header-btn btn-dashboard" onClick={() => openTeamDashboard('screening')}>Dashboard</button>
+          )}
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
@@ -3331,7 +3404,8 @@ function AppMain({ currentUser, logout }) {
                       // Load shared AI scores
                       const scores = await fsGetAIScores(sp.projectId);
                       setAiScores(scores);
-                      setAppView('screener');
+                      // Open team dashboard for shared projects
+                      openTeamDashboard('screening');
                     } catch (err) {
                       console.warn('[Sharing] Failed to load shared project:', err.message);
                     }

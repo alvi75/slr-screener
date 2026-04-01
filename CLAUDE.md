@@ -14,6 +14,7 @@ A general-purpose Systematic Literature Review (SLR) paper screening platform. B
 - **Express** — lightweight proxy server (`server.js` on port 3001) for Claude API and Semantic Scholar API calls
 - **SheetJS (`xlsx`)** — CSV/Excel parsing for spreadsheet imports
 - **pdfjs-dist** — client-side PDF text extraction (worker served from `public/pdf.worker.min.js`)
+- **Recharts** — pie charts, bar charts, and stacked bars for the team dashboard
 
 ## Data
 
@@ -232,18 +233,27 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
 - **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
 
-### Conflict Resolution Dashboard
+### Team Dashboard (`appView='dashboard'`)
 
-Owner-only view for shared projects, accessible via "Resolve Conflicts" in three-dot menu:
+Two-phase dashboard accessible to ALL annotators (not just owner). Opens automatically when clicking a shared project. Also accessible via "Dashboard" button in the screening header for team projects.
 
-- **Annotator Progress** — cards showing each annotator's email, role, screened count, and progress bar
+**Phase 1 — Screening:**
+- **My Progress** — Recharts pie chart (screened vs remaining), bar chart (Yes/No counts), stacked venue breakdown
+- **Team Progress** — progress bars showing each annotator's screened count (e.g., "120/1100"). NO decisions shown — bias protection
+- **My AI Disagreements** — summary count with export button
+- **Phase indicator** — "Screening (In Progress)" or "Screening (Complete)" toggle
+
+**Phase 2 — Conflict Resolution:**
+- **Phase trigger** — activates when owner clicks "Start Resolution" or all annotators finish. Non-owners can only view resolution phase when owner starts it or all are done.
 - **Agreement Summary** — total screened by 2+, agreement rate %, Kappa score with interpretation badge, conflict count
   - **Cohen's Kappa** — for exactly 2 annotators
   - **Fleiss' Kappa** — for 3+ annotators
   - **Interpretation labels**: Poor (<0.2), Fair (0.2–0.4), Moderate (0.4–0.6), Substantial (0.6–0.8), Almost Perfect (>0.8)
 - **Three tabs** — Conflicts (disagreements), Agreed (unanimous), All (every screened paper)
 - **Filters** — search by title, filter by venue, filter by resolution status (resolved/unresolved)
-- **Conflict rows** — venue badge, truncated title, color-coded decision chips per annotator, final decision dropdown, comment input
+- **Conflict rows** — venue badge, truncated title, color-coded decision chips per annotator
+  - **Owner**: final decision dropdown + comment input
+  - **Non-owner**: read-only view of conflicts and resolutions
 - **Final decisions** — stored at `projects/{projectId}/finalDecisions/{paperId}` with decision, resolvedBy, resolvedAt, comment
 - **Export Resolved** — CSV with title, author, venue, abstract, doi, each annotator's decision columns, final_decision, conflict_comment, resolved_by, resolved_at
 - **Kappa utility** (`src/utils/kappa.js`) — pure functions: `cohensKappa`, `fleissKappa`, `interpretKappa`, `analyzeConflicts`
