@@ -1,3 +1,7 @@
+import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { render } from '@testing-library/react';
+
 // Shared test helpers and mock data for SLR Screener tests
 
 export const MOCK_PAPERS = [
@@ -57,11 +61,22 @@ export const MOCK_USER = {
  * Set up global fetch mock to return demo data for the enriched_papers JSON URL.
  * Returns a jest.fn() for fetch so tests can inspect calls.
  */
+/**
+ * Render App inside a MemoryRouter at a project route so tests land on the screener.
+ */
+export function renderApp(App, options = {}) {
+  const route = options.route || '/project/model_sizes_in_se_research_2025';
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <App />
+    </MemoryRouter>
+  );
+}
+
 export function setupFetchMock() {
-  // Pre-set flags so the app goes directly to screener view (not home dashboard)
+  // Pre-set flags so the app loads demo data
   localStorage.setItem('slr-screener-has-data', '1');
   localStorage.setItem('slr-screener-is-demo', '1');
-  localStorage.setItem('slr-screener-start-view', 'screener');
 
   const fetchMock = jest.fn((url) => {
     if (typeof url === 'string' && url.includes('enriched_papers_2025.json')) {

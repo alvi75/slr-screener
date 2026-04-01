@@ -6,7 +6,7 @@ A general-purpose Systematic Literature Review (SLR) paper screening platform. B
 
 ## Tech Stack
 
-- **React** (Create React App) — single-page app, all logic in `src/App.js`
+- **React** (Create React App) + **React Router v6** — SPA with URL-based routing, all logic in `src/App.js`
 - **Pure CSS** — no UI framework, custom styles in `src/App.css`
 - **Firebase Auth** — Google sign-in and email/password authentication
 - **Cloud Firestore** — cloud persistence for projects, decisions, AI scores, and settings
@@ -122,7 +122,15 @@ Modern landing page shown on first login (returning users go directly to screene
   - **Continue Screening** — shown when active project has unscreened papers, with project name, progress bar, and screened count
 - **Recent Projects** — grid of project cards from Firestore, showing name, paper count, date, and badges (Demo, Shared)
 - **Navigation** — clicking the "SLR Screener" title in the screening header returns to the dashboard; setup page has "Back to Home" link
-- **View state** — `appView` can be `'home'`, `'setup'`, `'screener'`, or `'dashboard'`; always starts on `'home'` after login — user chooses which project to open
+- **React Router** — URL-based navigation with `react-router-dom` v6:
+  - `/` — Home dashboard (project list)
+  - `/project/:projectId` — Screening view
+  - `/project/:projectId/dashboard` — Team dashboard
+  - `/project/:projectId/conflicts` — Conflict resolution (resolution phase)
+  - `/login` — Login page (redirects to `/` if authenticated)
+  - `/setup` — New project setup
+  - Browser back/forward, trackpad gestures, and shareable URLs all work
+  - `AuthGate` component redirects unauthenticated users to `/login`
 
 ### Multi-Format Data Import (Setup Page)
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './LoginPage';
@@ -1216,34 +1217,51 @@ function VerificationPage() {
   );
 }
 
-function App() {
-  const { currentUser, logout, loading: authLoading } = useAuth();
+function AuthGate({ children }) {
+  const { currentUser, loading: authLoading } = useAuth();
+  const location = useLocation();
 
-  // Auth gate: show login page if not logged in
   if (authLoading) {
     return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading...</div>;
   }
   if (!currentUser) {
-    return <LoginPage />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
-
-  // Email/password users must verify their email before accessing the app.
-  // Google sign-in users are always verified, so skip this check for them.
   if (!currentUser.emailVerified && currentUser.providerData?.[0]?.providerId === 'password') {
     return <VerificationPage />;
   }
+  return children;
+}
 
-  return <AppMain currentUser={currentUser} logout={logout} />;
+function App() {
+  const { currentUser, logout } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/login" element={currentUser ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/*" element={
+        <AuthGate>
+          <AppMain currentUser={currentUser} logout={logout} />
+        </AuthGate>
+      } />
+    </Routes>
+  );
 }
 
 function AppMain({ currentUser, logout }) {
-  // App view: 'home', 'setup', 'screener', or 'conflicts'
-  // Show home dashboard for first-time users; returning users go straight to screener
-  // Always start on home — user chooses which project to open.
-  // Tests set slr-screener-start-view=screener to bypass home.
-  const [appView, setAppView] = useState(() => {
-    return localStorage.getItem('slr-screener-start-view') || 'home';
-  });
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Derive appView from URL path
+  const appView = useMemo(() => {
+    const path = location.pathname;
+    if (path === '/setup') return 'setup';
+    if (path.startsWith('/project/') && path.endsWith('/dashboard')) return 'dashboard';
+    if (path.startsWith('/project/') && path.endsWith('/conflicts')) return 'dashboard'; // conflicts is resolution phase of dashboard
+    if (path.startsWith('/project/')) return 'screener';
+    return 'home';
+  }, [location.pathname]);
+
   const [dashboardProjects, setDashboardProjects] = useState([]);
 
   // Initialize state from localStorage synchronously to avoid race conditions
@@ -1328,6 +1346,8 @@ function AppMain({ currentUser, logout }) {
     try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
     catch { return 'Model Sizes in SE Research 2025'; }
   });
+  const projectNameRef = useRef(projectName);
+  projectNameRef.current = projectName;
   const [isDemo, setIsDemo] = useState(() => {
     try { return localStorage.getItem('slr-screener-is-demo') === '1'; }
     catch { return false; }
@@ -1498,11 +1518,11 @@ function AppMain({ currentUser, logout }) {
       if (forcePhase) {
         setDashboardPhase(forcePhase);
       }
-      setAppView('dashboard');
+      navigate(`/project/${projectId}/dashboard`);
     } catch (err) {
       console.warn('[Dashboard] Failed to load team data:', err.message);
     }
-  }, [projectId, userId, currentUser]);
+  }, [projectId, userId, currentUser, navigate]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -1578,9 +1598,9 @@ function AppMain({ currentUser, logout }) {
       .then((data) => {
         setPapers(data.papers);
         setLoading(false);
-        if (navigateToScreener) setAppView('screener');
         setIsDemo(true);
         setProjectName('Model Sizes in SE Research 2025');
+        if (navigateToScreener) navigate(`/project/${projectSlug('Model Sizes in SE Research 2025')}`);
         localStorage.setItem('slr-screener-has-data', '1');
         localStorage.setItem('slr-screener-is-demo', '1');
         localStorage.setItem('slr-screener-project-name', 'Model Sizes in SE Research 2025');
@@ -1592,7 +1612,7 @@ function AppMain({ currentUser, logout }) {
         setProjectRole('owner');
         setProjectOwnerId(null);
       });
-  }, [userId, currentUser]);
+  }, [userId, currentUser, navigate]);
 
   // Reload data: demo re-fetches JSON, imported re-reads from localStorage
   const loadData = useCallback(() => {
@@ -1616,7 +1636,6 @@ function AppMain({ currentUser, logout }) {
   const importPapers = useCallback((importedPapers, customName) => {
     setPapers(importedPapers);
     setLoading(false);
-    setAppView('screener');
     setIsDemo(false);
     const name = customName || 'Untitled Project';
     setProjectName(name);
@@ -1637,14 +1656,15 @@ function AppMain({ currentUser, logout }) {
     try { fsSaveProjectMeta(newProjectId, { ownerId: userId, ownerEmail: currentUser?.email, projectName: name })?.catch(() => {}); } catch (e) { /* ignore */ }
     setProjectRole('owner');
     setProjectOwnerId(null);
-  }, [userId, currentUser, firestoreSync]);
+    navigate(`/project/${projectSlug(name)}`);
+  }, [userId, currentUser, firestoreSync, navigate]);
 
   // Append papers to existing project (dedup by title)
   const appendPapers = useCallback((newPapers) => {
     if (!Array.isArray(newPapers) || newPapers.length === 0) {
       // Called with no args = cancel
       setAppendMode(null);
-      setAppView('screener');
+      navigate(`/project/${projectSlug(projectNameRef.current)}`);
       return;
     }
     const existingTitles = new Set(papers.map(p => (p.title || '').toLowerCase().trim()));
@@ -1662,13 +1682,13 @@ function AppMain({ currentUser, logout }) {
     const merged = [...papers, ...unique];
     setPapers(merged);
     setAppendMode(null);
-    setAppView('screener');
     setAppendResult({ added: unique.length, skipped, total: merged.length });
+    navigate(`/project/${projectSlug(projectNameRef.current)}`);
     // Persist updated papers (skip for demo — too large)
     if (!isDemo) {
       try { localStorage.setItem(PAPERS_KEY, JSON.stringify(merged)); } catch (e) { console.warn('Could not save papers:', e.message); }
     }
-  }, [papers, isDemo]);
+  }, [papers, isDemo, navigate]);
 
   // Open a project from the dashboard
   const openProject = useCallback(async (proj) => {
@@ -1704,19 +1724,19 @@ function AppMain({ currentUser, logout }) {
       }
     } catch (e) { console.warn('[Dashboard] Failed to load project:', e.message); }
     setLoading(false);
-    setAppView('screener');
+    navigate(`/project/${proj.id}`);
     setCurrentIndex(0);
-  }, [userId, loadDemoData]);
+  }, [userId, loadDemoData, navigate]);
 
   // Navigate back to home dashboard
   const goHome = useCallback(async () => {
-    setAppView('home');
+    navigate('/');
     // Refresh project list
     try {
       const projects = await fsGetProjects(userId);
       setDashboardProjects(projects);
     } catch (e) { /* ignore */ }
-  }, [userId]);
+  }, [userId, navigate]);
 
   // On mount: restore saved project or auto-load demo for first-time users.
   useEffect(() => {
@@ -2449,14 +2469,14 @@ function AppMain({ currentUser, logout }) {
 
         {/* Quick Action Cards */}
         <div className="home-actions">
-          <div className="home-action-card" onClick={() => { setAppView('setup'); localStorage.removeItem('slr-screener-has-data'); }}>
+          <div className="home-action-card" onClick={() => { navigate('/setup'); localStorage.removeItem('slr-screener-has-data'); }}>
             <div className="home-action-icon">+</div>
             <div className="home-action-label">New Project</div>
             <div className="home-action-desc">Import CSV, JSON, PDFs, or add papers manually</div>
           </div>
 
           {hasActiveProject && (
-            <div className="home-action-card home-action-resume" onClick={() => setAppView('screener')}>
+            <div className="home-action-card home-action-resume" onClick={() => navigate(`/project/${projectSlug(projectName)}`)}>
               <div className="home-action-icon">&#9654;</div>
               <div className="home-action-label">Continue Screening</div>
               <div className="home-action-desc">{projectName}</div>
@@ -2622,7 +2642,7 @@ function AppMain({ currentUser, logout }) {
     return (
       <div className="app dash-view">
         <div className="dash-header">
-          <button className="conflict-back-btn" onClick={() => setAppView('screener')}>&larr; Back to Screener</button>
+          <button className="conflict-back-btn" onClick={() => navigate(`/project/${projectId}`)}>&larr; Back to Screener</button>
           <h2>Team Dashboard — {projectName}</h2>
           <button className="conflict-export-btn" onClick={exportResolved}>Export</button>
         </div>
@@ -3353,7 +3373,7 @@ function AppMain({ currentUser, logout }) {
                     setProjectMenuOpen(false);
                     setProjectSidebarOpen(false);
                     setAppendMode(projectName);
-                    setAppView('setup');
+                    navigate('/setup');
                   }}>Add Papers</button>
                   <div className="project-menu-sep" />
                   <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
@@ -3451,7 +3471,7 @@ function AppMain({ currentUser, logout }) {
         <div className="project-sidebar-footer">
           <button className="project-new-btn" onClick={() => {
             setProjectSidebarOpen(false);
-            setAppView('setup');
+            navigate('/setup');
             localStorage.removeItem('slr-screener-has-data');
           }}>
             + New Project

@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import '@testing-library/jest-dom';
 import App from '../App';
 import LoginPage from '../LoginPage';
-import { setupFetchMock, clearStorage, MOCK_PAPERS, createAuthMock } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, createAuthMock, renderApp } from '../testHelpers';
 
 // Default: not authenticated (renders LoginPage)
 const mockAuth = createAuthMock({ currentUser: null });
@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe('Auth Flow', () => {
   test('Login page renders when user is not authenticated', () => {
-    render(<App />);
+    renderApp(App);
     expect(screen.getByText('SLR')).toBeInTheDocument();
     expect(screen.getByText('Screener')).toBeInTheDocument();
     expect(screen.getByText('Sign in with Google')).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('Auth Flow', () => {
   });
 
   test('Login page shows sign-up form when toggled', () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Sign Up'));
 
@@ -92,7 +92,7 @@ describe('Auth Flow', () => {
   });
 
   test('Sign-up form shows error when passwords do not match', async () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Sign Up'));
 
@@ -108,7 +108,7 @@ describe('Auth Flow', () => {
   });
 
   test('Sign-up form shows error when password does not meet requirements', async () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Sign Up'));
 
@@ -124,7 +124,7 @@ describe('Auth Flow', () => {
   });
 
   test('Password strength indicator shows weak/medium/strong', () => {
-    render(<App />);
+    renderApp(App);
     fireEvent.click(screen.getByText('Sign Up'));
 
     // Weak password
@@ -141,7 +141,7 @@ describe('Auth Flow', () => {
   });
 
   test('Password validation hints update in real-time', () => {
-    render(<App />);
+    renderApp(App);
     fireEvent.click(screen.getByText('Sign Up'));
 
     fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'a' } });
@@ -163,7 +163,7 @@ describe('Auth Flow', () => {
   });
 
   test('Show/hide password toggle works', () => {
-    render(<App />);
+    renderApp(App);
 
     const pwInput = screen.getByPlaceholderText('Password');
     expect(pwInput.type).toBe('password');
@@ -180,7 +180,7 @@ describe('Auth Flow', () => {
   });
 
   test('Validation hints hidden during sign-in mode', () => {
-    render(<App />);
+    renderApp(App);
 
     // In sign-in mode, type a password
     fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'test' } });
@@ -191,7 +191,7 @@ describe('Auth Flow', () => {
   });
 
   test('Google sign-in button calls googleSignIn', () => {
-    render(<App />);
+    renderApp(App);
 
     const googleBtn = screen.getByText('Sign in with Google');
     fireEvent.click(googleBtn);
@@ -202,7 +202,7 @@ describe('Auth Flow', () => {
   test('App renders screener when user is verified', async () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null, emailVerified: true, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
@@ -214,7 +214,7 @@ describe('Auth Flow', () => {
   test('Loading state shows loading indicator', () => {
     mockAuth.loading = true;
 
-    render(<App />);
+    renderApp(App);
 
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
@@ -222,7 +222,7 @@ describe('Auth Flow', () => {
   test('Header shows user avatar placeholder when no photoURL', async () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'test@example.com', displayName: 'Test User', photoURL: null, emailVerified: true, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
@@ -236,7 +236,7 @@ describe('Auth Flow', () => {
   test('Unverified email user sees verification screen with countdown', () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     expect(screen.getByText('Check Your Email')).toBeInTheDocument();
     expect(screen.getByText(/unverified@example.com/)).toBeInTheDocument();
@@ -250,7 +250,7 @@ describe('Auth Flow', () => {
   test('Countdown timer ticks down and enables resend', () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     expect(screen.getByText(/Resend available in 60s/)).toBeInTheDocument();
 
@@ -267,7 +267,7 @@ describe('Auth Flow', () => {
   test('Resend button calls resendVerification and resets countdown', async () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     // Expire the countdown
     act(() => { jest.advanceTimersByTime(60000); });
@@ -287,7 +287,7 @@ describe('Auth Flow', () => {
   test('Auto-poll calls reloadUser every 5 seconds', () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     expect(mockAuth.reloadUser).not.toHaveBeenCalled();
 
@@ -303,7 +303,7 @@ describe('Auth Flow', () => {
   test('Google sign-in button on verification screen calls googleSignIn', async () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     await act(async () => {
       fireEvent.click(screen.getByText('Use Google sign-in instead'));
@@ -315,7 +315,7 @@ describe('Auth Flow', () => {
   test('Google sign-in users bypass email verification', async () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'google@example.com', displayName: 'Google User', photoURL: 'https://photo.url', emailVerified: true, providerData: [{ providerId: 'google.com' }] };
 
-    render(<App />);
+    renderApp(App);
 
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
@@ -325,7 +325,7 @@ describe('Auth Flow', () => {
   test('Sign out from verification screen calls logout', () => {
     mockAuth.currentUser = { uid: 'test-uid-123', email: 'unverified@example.com', displayName: 'Test User', photoURL: null, emailVerified: false, providerData: [{ providerId: 'password' }] };
 
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Sign out and use a different account'));
 
@@ -333,7 +333,7 @@ describe('Auth Flow', () => {
   });
 
   test('Forgot Password link shows reset form', () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Forgot Password?'));
 
@@ -345,7 +345,7 @@ describe('Auth Flow', () => {
   });
 
   test('Forgot Password sends reset email and shows success', async () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Forgot Password?'));
     fireEvent.change(screen.getByPlaceholderText('Email address'), { target: { value: 'reset@example.com' } });
@@ -361,7 +361,7 @@ describe('Auth Flow', () => {
   test('Forgot Password shows error for invalid email', async () => {
     mockAuth.resetPassword = jest.fn(() => Promise.reject({ code: 'auth/invalid-email' }));
 
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Forgot Password?'));
     fireEvent.change(screen.getByPlaceholderText('Email address'), { target: { value: 'bad-email' } });
@@ -374,7 +374,7 @@ describe('Auth Flow', () => {
   });
 
   test('Back to Sign In returns from forgot password view', () => {
-    render(<App />);
+    renderApp(App);
 
     fireEvent.click(screen.getByText('Forgot Password?'));
     expect(screen.getByText('Reset Password')).toBeInTheDocument();

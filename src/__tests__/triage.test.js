@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
-import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, renderApp } from '../testHelpers';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe('Triage', () => {
   test('Pressing Y marks paper as Yes and advances', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -81,7 +81,7 @@ describe('Triage', () => {
   });
 
   test('Pressing N marks paper as No and advances', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -97,7 +97,7 @@ describe('Triage', () => {
   });
 
   test('Changing decision on already-decided paper works without advancing', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
     });
@@ -126,7 +126,7 @@ describe('Triage', () => {
   });
 
   test('Decision badge shows on decided papers', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(document.querySelector('.paper-title').textContent).toBe(MOCK_PAPERS[0].title);
     });
@@ -151,7 +151,7 @@ describe('Triage', () => {
   });
 
   test('Decision counts update correctly in progress bar', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });

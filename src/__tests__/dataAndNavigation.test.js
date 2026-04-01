@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
-import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, renderApp } from '../testHelpers';
 
 // Mock auth so the app renders the screener instead of LoginPage
 jest.mock('../contexts/AuthContext', () => ({
@@ -66,7 +66,7 @@ afterEach(() => {
 
 describe('Data & Navigation', () => {
   test('App loads and displays first paper from demo data', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -75,7 +75,7 @@ describe('Data & Navigation', () => {
   });
 
   test('Right arrow key advances to next paper', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -89,7 +89,7 @@ describe('Data & Navigation', () => {
   });
 
   test('Left arrow key goes to previous paper', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -108,7 +108,7 @@ describe('Data & Navigation', () => {
   });
 
   test('Previous/Next buttons navigate correctly', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -132,7 +132,7 @@ describe('Data & Navigation', () => {
   });
 
   test('Paper position saves to localStorage and restores on reload', async () => {
-    const { unmount } = render(<App />);
+    const { unmount } = renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -149,7 +149,7 @@ describe('Data & Navigation', () => {
 
     // Unmount and remount
     unmount();
-    render(<App />);
+    renderApp(App);
 
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('Data & Navigation', () => {
   });
 
   test('Venue filter shows only papers from selected venue', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });

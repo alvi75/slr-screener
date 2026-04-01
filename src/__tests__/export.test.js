@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
-import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, renderApp } from '../testHelpers';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe('Export', () => {
   test('Export CSV generates correct format with decisions', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -124,7 +124,7 @@ describe('Export', () => {
   });
 
   test('Decision Log shows all decided papers', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -153,7 +153,7 @@ describe('Export', () => {
   });
 
   test('Decision Log search filters by title', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });

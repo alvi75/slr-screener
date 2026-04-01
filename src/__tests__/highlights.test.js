@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
-import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, renderApp } from '../testHelpers';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe('Highlights', () => {
   test('Highlight toggle shows/hides keyword highlights', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -107,7 +107,7 @@ describe('Highlights', () => {
   });
 
   test('Keywords match whole words only (no partial matches)', async () => {
-    render(<App />);
+    renderApp(App);
 
     // Navigate to paper 4 (index 3): "Test Generation Using Machine Learning"
     // Abstract: "automated test generation using deep learning and training on evaluation benchmarks"
@@ -139,7 +139,7 @@ describe('Highlights', () => {
   });
 
   test('Hover tooltip appears on highlighted words', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });

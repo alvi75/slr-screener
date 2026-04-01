@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from '../App';
-import { setupFetchMock, clearStorage, MOCK_PAPERS } from '../testHelpers';
+import { setupFetchMock, clearStorage, MOCK_PAPERS, renderApp } from '../testHelpers';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe('Project Management', () => {
   test('Sidebar shows demo project with Demo badge', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -86,7 +86,7 @@ describe('Project Management', () => {
   });
 
   test('New project creation navigates to setup page', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -115,7 +115,7 @@ describe('Project Management', () => {
   });
 
   test('Switching back to demo after new project loads correct data', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -141,7 +141,7 @@ describe('Project Management', () => {
   });
 
   test('Project sidebar shows correct screened count after decisions', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -163,7 +163,7 @@ describe('Project Management', () => {
   });
 
   test('Three-dot menu shows project actions', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -191,7 +191,7 @@ describe('Project Management', () => {
   });
 
   test('Share Project opens share modal', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -219,7 +219,7 @@ describe('Project Management', () => {
   });
 
   test('Share modal shows validation error for empty email', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
@@ -242,7 +242,7 @@ describe('Project Management', () => {
   });
 
   test('Share modal shows validation error for self-invite', async () => {
-    render(<App />);
+    renderApp(App);
     await waitFor(() => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
