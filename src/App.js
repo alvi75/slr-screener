@@ -1389,14 +1389,17 @@ function AppMain({ currentUser, logout }) {
   }, [userId]);
 
   // ── Sharing helpers ─────────────────────────────────────────────
+  const [collabsLoading, setCollabsLoading] = useState(false);
   const loadCollaborators = useCallback(async () => {
     if (!projectId) return;
+    setCollabsLoading(true);
     try {
       const collabs = await fsGetCollaborators(projectId);
       setCollaborators(collabs);
     } catch (err) {
       console.warn('[Sharing] Failed to load collaborators:', err.message);
     }
+    setCollabsLoading(false);
   }, [projectId]);
 
   const handleSendInvite = useCallback(async () => {
@@ -3484,8 +3487,12 @@ function AppMain({ currentUser, logout }) {
                   <span className="share-role-badge owner">Owner</span>
                   <span className="share-status-badge accepted">You</span>
                 </div>
+                {/* Loading indicator */}
+                {collabsLoading && (
+                  <div className="share-empty" style={{ color: '#0984e3' }}>Loading collaborators...</div>
+                )}
                 {/* Collaborator rows */}
-                {(collaborators || []).map(c => (
+                {!collabsLoading && (collaborators || []).map(c => (
                   <div key={c.email} className="share-collaborator-row">
                     <span className="share-collab-email">{c.email}</span>
                     <select
@@ -3496,7 +3503,7 @@ function AppMain({ currentUser, logout }) {
                       <option value="annotator">Annotator</option>
                       <option value="viewer">Viewer</option>
                     </select>
-                    <span className={`share-status-badge ${c.status}`}>{c.status}</span>
+                    <span className={`share-status-badge ${c.status || 'pending'}`}>{c.status || 'pending'}</span>
                     <button
                       className="share-remove-btn"
                       onClick={() => handleRemoveCollaborator(c.email)}
@@ -3504,7 +3511,7 @@ function AppMain({ currentUser, logout }) {
                     >&times;</button>
                   </div>
                 ))}
-                {(!collaborators || collaborators.length === 0) && (
+                {!collabsLoading && (!collaborators || collaborators.length === 0) && (
                   <div className="share-empty">No collaborators yet. Invite someone above.</div>
                 )}
               </div>
