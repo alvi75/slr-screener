@@ -4,6 +4,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
@@ -39,7 +41,14 @@ export function AuthProvider({ children }) {
     return signOut(auth);
   }
 
+  function isMobile() {
+    return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  }
+
   function googleSignIn() {
+    if (isMobile()) {
+      return signInWithRedirect(auth, googleProvider);
+    }
     return signInWithPopup(auth, googleProvider);
   }
 
@@ -64,6 +73,8 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Handle redirect result from mobile Google sign-in
+    getRedirectResult(auth).catch(() => {});
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setLoading(false);

@@ -47,7 +47,7 @@ All fields except `title` are optional. Missing fields are normalized to `"not_f
 
 Firebase Auth with two sign-in methods:
 
-- **Google sign-in** — one-click OAuth, bypasses email verification
+- **Google sign-in** — one-click OAuth, bypasses email verification. Uses `signInWithPopup` on desktop, `signInWithRedirect` on mobile (detected via viewport width < 768 or user agent). `getRedirectResult` called on mount to complete mobile redirect flow.
 - **Email/password** — sign-up with password strength validation (8+ chars, uppercase, lowercase, number, special character), real-time strength indicator (Weak/Medium/Strong), show/hide password toggle
 - **Email verification flow** — after sign-up, shows "Check Your Email" screen with:
   - Auto-polling every 5 seconds (calls `reloadUser()` to check verification status)
