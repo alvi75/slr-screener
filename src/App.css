@@ -731,7 +731,7 @@
 /* Abstract */
 .abstract-section {
   margin-bottom: 0;
-  max-height: 350px;
+  height: 400px;
   overflow-y: auto;
   padding-right: 4px;
 }
