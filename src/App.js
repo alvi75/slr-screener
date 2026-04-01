@@ -1335,6 +1335,7 @@ function AppMain({ currentUser, logout }) {
     catch { return false; }
   });
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
   const [renamingProject, setRenamingProject] = useState(false);
   const [appendMode, setAppendMode] = useState(null); // null or project name string
   const [appendResult, setAppendResult] = useState(null); // { added, skipped, total }
@@ -2841,13 +2842,15 @@ function AppMain({ currentUser, logout }) {
 
       {/* Header */}
       <div className="header">
-        <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
-        <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
-        <div className="header-actions">
+        <div className="header-left">
+          <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
+          <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
           {(hasCollaborators || projectRole !== 'owner') && (
             <button className="header-btn btn-dashboard" onClick={() => openTeamDashboard('screening')}>Dashboard</button>
           )}
-          <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
+        </div>
+        <div className="header-right">
+          <button className="header-btn btn-reload" onClick={loadData}>Reload</button>
           <button
             className={`header-btn hl-tip tip-down ${scoringProgress ? 'btn-stop' : 'btn-score'}`}
             onClick={scoringProgress ? stopScoring : startScoring}
@@ -2858,21 +2861,25 @@ function AppMain({ currentUser, logout }) {
                 ? `${Object.keys(aiScores).length}/${totalPapers} scored with ${modelName(scoringModel)}`
                 : `${unscoredCount} papers unscored. Click to score them.`}
           >
-            {scoringStopping
-              ? 'Stopping...'
-              : scoringProgress
-                ? `Stop Scoring (${scoringProgress.total - scoringProgress.done} left)`
-                : scoringDone ? 'Score Papers \u2713' : 'Score Papers'}
+            {scoringStopping ? 'Stopping...' : scoringProgress ? `Stop (${scoringProgress.total - scoringProgress.done})` : scoringDone ? 'Score \u2713' : 'Score'}
           </button>
-          <button className="header-btn btn-export" onClick={exportCSV}>Export CSV</button>
-          <button className="header-btn btn-log" onClick={() => { setSidebarOpen((v) => !v); setAiInsightsOpen(false); }}>
-            Decision Log
-          </button>
-          {Object.keys(aiScores).length > 0 && (
-            <button className="header-btn btn-insights" onClick={() => { setAiInsightsOpen((v) => !v); setSidebarOpen(false); }}>
-              AI Insights
-            </button>
-          )}
+          {/* More dropdown for secondary actions */}
+          <div className="header-more-wrap">
+            <button className="header-btn btn-more" onClick={() => setHeaderMoreOpen(v => !v)}>More ▾</button>
+            {headerMoreOpen && (
+              <>
+                <div className="header-more-overlay" onClick={() => setHeaderMoreOpen(false)} />
+                <div className="header-more-dropdown">
+                  <button onClick={() => { setHeaderMoreOpen(false); exportCSV(); }}>Export CSV</button>
+                  <button onClick={() => { setHeaderMoreOpen(false); setSidebarOpen(v => !v); setAiInsightsOpen(false); }}>Decision Log</button>
+                  {Object.keys(aiScores).length > 0 && (
+                    <button onClick={() => { setHeaderMoreOpen(false); setAiInsightsOpen(v => !v); setSidebarOpen(false); }}>AI Insights</button>
+                  )}
+                  <button onClick={() => { setHeaderMoreOpen(false); loadData(); }}>Reload Data</button>
+                </div>
+              </>
+            )}
+          </div>
           <span className={`sync-indicator sync-${syncStatus}`} title={
             syncStatus === 'synced' ? 'All changes saved to cloud' :
             syncStatus === 'syncing' ? 'Syncing to cloud...' :

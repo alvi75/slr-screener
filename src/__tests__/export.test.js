@@ -96,7 +96,9 @@ describe('Export', () => {
       return el;
     });
 
-    // Click Export CSV
+    // Open "More" dropdown, then click Export CSV
+    const moreBtn = screen.getByText('More ▾');
+    fireEvent.click(moreBtn);
     const exportBtn = screen.getByText('Export CSV');
     fireEvent.click(exportBtn);
 
@@ -136,8 +138,10 @@ describe('Export', () => {
     await waitFor(() => expect(screen.getByText(MOCK_PAPERS[2].title)).toBeInTheDocument());
     fireEvent.keyDown(document, { key: 'n' }); // Paper 3 = No
 
-    // Open Decision Log via the header button (use selector to avoid matching h2)
-    const logBtn = document.querySelector('.header-btn.btn-log');
+    // Open "More" dropdown, then click Decision Log button
+    fireEvent.click(screen.getByText('More ▾'));
+    const dropdownBtns = document.querySelectorAll('.header-more-dropdown button');
+    const logBtn = Array.from(dropdownBtns).find(b => b.textContent === 'Decision Log');
     fireEvent.click(logBtn);
 
     // Should show all 3 decided papers
@@ -163,8 +167,10 @@ describe('Export', () => {
     await waitFor(() => expect(screen.getByText(MOCK_PAPERS[1].title)).toBeInTheDocument());
     fireEvent.keyDown(document, { key: 'n' }); // Paper 2 = No
 
-    // Open Decision Log via header button
-    const logBtn = document.querySelector('.header-btn.btn-log');
+    // Open "More" dropdown, then click Decision Log button
+    fireEvent.click(screen.getByText('More ▾'));
+    const dropdownBtns = document.querySelectorAll('.header-more-dropdown button');
+    const logBtn = Array.from(dropdownBtns).find(b => b.textContent === 'Decision Log');
     fireEvent.click(logBtn);
 
     await waitFor(() => {
