@@ -1267,6 +1267,26 @@
   transition: width 0.4s ease;
   border-radius: 2px;
 }
+.scoring-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffeaa7;
+  color: #2d3436;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.scoring-error-banner button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #636e72;
+  padding: 0 4px;
+}
 
 /* AI score badge on paper card */
 .ai-score-badge {

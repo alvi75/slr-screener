@@ -1320,6 +1320,7 @@ function AppMain({ currentUser, logout }) {
   });
   const [scoringProgress, setScoringProgress] = useState(null); // { done, total, errors }
   const [scoringDone, setScoringDone] = useState(false);
+  const [scoringError, setScoringError] = useState(null);
   const [aiDisagreements, setAiDisagreements] = useState(() => {
     try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
@@ -2210,7 +2211,12 @@ function AppMain({ currentUser, logout }) {
   // AI scoring — batch process unscored papers
   const startScoring = useCallback(async () => {
     if (!apiKey) { setShowApiKeyModal(true); return; }
-    if (!(await checkProxy())) return;
+    setScoringError(null);
+    if (!(await checkProxy())) {
+      setScoringError('Proxy server not running. Start it with: node server.js');
+      setTimeout(() => setScoringError(null), 8000);
+      return;
+    }
 
     // Find papers not scored by the current model
     const unscored = [];
@@ -2268,7 +2274,12 @@ function AppMain({ currentUser, logout }) {
   const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
   const scoreOnePaper = useCallback(async (gIdx) => {
     if (!apiKey) { setShowApiKeyModal(true); return; }
-    if (!(await checkProxy())) return;
+    setScoringError(null);
+    if (!(await checkProxy())) {
+      setScoringError('Proxy server not running. Start it with: node server.js');
+      setTimeout(() => setScoringError(null), 8000);
+      return;
+    }
     const abs = getAbstract(gIdx);
     if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
     setScoringOne(gIdx);
@@ -2930,6 +2941,12 @@ function AppMain({ currentUser, logout }) {
           <div className="scoring-progress-fill" style={{ width: `${(scoringProgress.done / scoringProgress.total) * 100}%` }} />
         </div>
       )}
+      {scoringError && (
+        <div className="scoring-error-banner">
+          {scoringError}
+          <button onClick={() => setScoringError(null)}>&times;</button>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="progress-section">
@@ -3012,7 +3029,15 @@ function AppMain({ currentUser, logout }) {
                 >
                   AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
                 </span>
-              ) : null}
+              ) : (
+                <span
+                  className="ai-score-badge score-unscored clickable hl-tip"
+                  data-tip={apiKey ? 'Click to score this paper' : 'Click to set API key'}
+                  onClick={() => apiKey ? scoreOnePaper(globalIndex) : setShowApiKeyModal(true)}
+                >
+                  AI: ?
+                </span>
+              )}
             </div>
             <div className="paper-title">{paper.title}</div>
             <div className="paper-authors">{paper.author}</div>
