@@ -6,13 +6,11 @@
   position: relative;
 }
 .app.screening-view {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
   overflow: hidden;
   box-sizing: border-box;
   padding-top: 16px;
-  padding-bottom: 16px;
+  padding-bottom: 130px; /* space for fixed bottom bar */
 }
 
 /* ===== HOME DASHBOARD ===== */
@@ -656,11 +654,6 @@
   padding: 20px 28px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
 }
 .paper-meta {
   display: flex;
@@ -740,8 +733,7 @@
 /* Abstract */
 .abstract-section {
   margin-bottom: 0;
-  flex: 1;
-  min-height: 0;
+  max-height: 350px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -932,13 +924,28 @@
 }
 .order-select:hover, .order-select:focus { border-color: #74b9ff; }
 
+/* Bottom bar (decision + navigation) */
+.screening-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #f5f6fa;
+  border-top: 1px solid #dfe6e9;
+  padding: 14px 28px 18px;
+  z-index: 50;
+}
+.screening-bottom-bar-inner {
+  max-width: 1170px;
+  margin: 0 auto;
+}
+
 /* Decision buttons */
 .decision-section {
   display: flex;
   justify-content: center;
   gap: 16px;
   margin-bottom: 10px;
-  flex-shrink: 0;
 }
 .decision-btn {
   padding: 12px 36px;
@@ -969,7 +976,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-shrink: 0;
 }
 .nav-btn {
   padding: 10px 24px;
