@@ -69,7 +69,6 @@ export function fleissKappa(ratingsPerItem, numRaters) {
 
   const N = ratingsPerItem.length;
   const n = numRaters;
-  const k = CATEGORIES.length;
 
   // P_i for each item: proportion of agreeing pairs
   const P_i = ratingsPerItem.map(item => {

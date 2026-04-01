@@ -7,10 +7,7 @@ import {
   getProject as fsGetProject,
   getProjects as fsGetProjects,
   deleteProject as fsDeleteProject,
-  saveDecision as fsSaveDecision,
-  deleteDecision as fsDeleteDecision,
   getDecisions as fsGetDecisions,
-  saveAllAIScores as fsSaveAllAIScores,
   getAIScores as fsGetAIScores,
   syncDecisionsToFirestore,
   syncAIScoresToFirestore,
@@ -400,13 +397,11 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
   const [manualProgress, setManualProgress] = useState({ done: 0, total: 0 });
 
   // PDF state
-  const [pdfFiles, setPdfFiles] = useState([]);
+  const [, setPdfFiles] = useState([]);
   const [pdfResults, setPdfResults] = useState([]);
   const [pdfProcessing, setPdfProcessing] = useState(false);
   const [pdfProjectName, setPdfProjectName] = useState('');
   const [pdfDefaultVenue, setPdfDefaultVenue] = useState('');
-
-  const SCHEMA_FIELDS = ['title', 'author', 'abstract', 'conf', 'doi', 'doi_url', 'arxiv_id', 'pdf_url', 'year', '(skip)'];
 
   // === CSV/Excel handler ===
   const handleCsvFile = useCallback((file) => {
@@ -1353,7 +1348,7 @@ function AppMain({ currentUser, logout }) {
   const [pendingInvites, setPendingInvites] = useState([]); // enriched invites with projectName, ownerEmail
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
-  const [projectOwnerId, setProjectOwnerId] = useState(null);
+  const [, setProjectOwnerId] = useState(null);
 
   // ── Conflict Resolution ───────────────────────────────────────
   const [conflictData, setConflictData] = useState(null); // { annotatorDecisions, annotators, finalDecisions, analysis }
@@ -1960,7 +1955,7 @@ function AppMain({ currentUser, logout }) {
         return prev < maxIdx ? prev + 1 : prev;
       });
     }
-  }, [globalIndex, decisions, filteredIndices.length, currentIndex, aiScores, userId, projectId]);
+  }, [globalIndex, decisions, filteredIndices.length, aiScores, userId, projectId]);
 
   const makeDecision = useCallback((d) => {
     if (globalIndex === undefined) return;
@@ -2065,7 +2060,7 @@ function AppMain({ currentUser, logout }) {
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [editing, makeDecision, goNext, goPrev]);
+  }, [editing, makeDecision, goNext, goPrev, projectRole]);
 
   // Export CSV
   const exportCSV = useCallback(() => {
