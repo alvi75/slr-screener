@@ -2878,7 +2878,7 @@ function AppMain({ currentUser, logout }) {
       {/* Header */}
       <div className="header">
         <div className="header-left">
-          <button className="hamburger-btn" onClick={() => setProjectSidebarOpen(v => !v)} aria-label="Menu">☰</button>
+          <button className="hamburger-btn" onClick={() => { setProjectSidebarOpen(v => !v); if (userId) fsGetProjects(userId)?.then(p => setDashboardProjects(p || [])).catch(() => {}); }} aria-label="Menu">☰</button>
           <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
           {(hasCollaborators || projectRole !== 'owner') && (
             <button className="header-btn btn-dashboard" onClick={() => openTeamDashboard('screening')}>Dashboard</button>
@@ -3344,79 +3344,106 @@ function AppMain({ currentUser, logout }) {
           <button className="sidebar-close" onClick={() => setProjectSidebarOpen(false)}>&times;</button>
         </div>
         <div className="project-sidebar-body">
-          <div className="project-item active" onClick={() => setProjectMenuOpen(false)}>
-            <span className="project-item-icon">📄</span>
-            <div className="project-item-info">
-              {renamingProject ? (
-                <input
-                  className="project-rename-input"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  onBlur={() => setRenamingProject(false)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') setRenamingProject(false); if (e.key === 'Escape') setRenamingProject(false); }}
-                  autoFocus
-                />
-              ) : (
-                <span className="project-item-name">
-                  {projectName}
-                  {isDemo && <span className="project-demo-badge">Demo</span>}
-                  {projectRole === 'owner' && hasCollaborators && <span className="project-team-badge">Team</span>}
-                  {projectRole !== 'owner' && <span className="project-shared-badge">Shared with me</span>}
-                </span>
-              )}
-              <span className="project-item-meta">{totalPapers} papers · {decidedCount} screened</span>
-            </div>
-            <div className="project-menu-wrap">
-              <button className="project-menu-btn" onClick={(e) => { e.stopPropagation(); setProjectMenuOpen(v => !v); }}>⋮</button>
-              {projectMenuOpen && (
-                <div className="project-menu-dropdown">
-                  <button onClick={() => { setProjectMenuOpen(false); setRenamingProject(true); }}>Rename</button>
-                  <button onClick={() => {
-                    setProjectMenuOpen(false);
-                    setProjectSidebarOpen(false);
-                    setAppendMode(projectName);
-                    navigate('/setup');
-                  }}>Add Papers</button>
-                  <div className="project-menu-sep" />
-                  <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
-                  <button onClick={() => { setProjectMenuOpen(false); exportProjectCSV(); }}>Export CSV</button>
-                  <div className="project-menu-sep" />
-                  {projectRole === 'owner' && (
-                    <button onClick={() => { setProjectMenuOpen(false); setShareModalOpen(true); loadCollaborators(); }}>Share Project</button>
+          {/* My Projects — merge current project if not already in the list */}
+          {(() => {
+            const allProjects = dashboardProjects || [];
+            const currentInList = allProjects.some(p => p.id === projectId);
+            const mergedProjects = currentInList ? allProjects : [
+              { id: projectId, name: projectName, isDemo, paperCount: totalPapers },
+              ...allProjects,
+            ];
+            return mergedProjects;
+          })().map(proj => {
+            const pid = proj.id;
+            const isActive = pid === projectId;
+            const pName = proj.name || pid;
+            return (
+              <div
+                key={pid}
+                className={`project-item ${isActive ? 'active' : ''}`}
+                onClick={() => {
+                  if (isActive) { setProjectMenuOpen(false); return; }
+                  setProjectSidebarOpen(false);
+                  setProjectMenuOpen(false);
+                  openProject(proj);
+                }}
+              >
+                <span className="project-item-icon">📄</span>
+                <div className="project-item-info">
+                  {isActive && renamingProject ? (
+                    <input
+                      className="project-rename-input"
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      onBlur={() => setRenamingProject(false)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setRenamingProject(false); if (e.key === 'Escape') setRenamingProject(false); }}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="project-item-name">
+                      {pName}
+                      {proj.isDemo && <span className="project-demo-badge">Demo</span>}
+                      {isActive && projectRole === 'owner' && hasCollaborators && <span className="project-team-badge">Team</span>}
+                    </span>
                   )}
-                  {projectRole === 'owner' && hasCollaborators && (
-                    <button onClick={openConflictDashboard}>Resolve Conflicts</button>
-                  )}
-                  <button onClick={() => {
-                    setProjectMenuOpen(false);
-                    alert('Duplicate is not yet implemented — coming soon with multi-project support.');
-                  }}>Duplicate</button>
-                  {!isDemo && (
-                    <button className="project-menu-danger" onClick={() => {
-                      if (window.confirm(`Delete "${projectName}"? This will clear all decisions and scores.`)) {
-                        setProjectMenuOpen(false);
-                        setProjectSidebarOpen(false);
-                        setPapers([]);
-                        setDecisions({});
-                        setAiScores({});
-                        setAbstractEdits({});
-                        localStorage.removeItem('slr-screener-has-data');
-                        localStorage.removeItem(STORAGE_KEY);
-                        localStorage.removeItem(SCORES_KEY);
-                        localStorage.removeItem(PAPERS_KEY);
-                        localStorage.removeItem('slr-screener-is-demo');
-                        localStorage.removeItem('slr-screener-project-name');
-                        // Delete from Firestore
-                        firestoreSync(() => fsDeleteProject(userId, projectId));
-                        // Load demo as fallback after delete
-                        loadDemoData();
-                      }
-                    }}>Delete</button>
-                  )}
+                  <span className="project-item-meta">
+                    {proj.paperCount ? `${proj.paperCount} papers` : ''}
+                    {isActive ? ` · ${decidedCount} screened` : ''}
+                  </span>
                 </div>
-              )}
-            </div>
-          </div>
+                {isActive && (
+                  <div className="project-menu-wrap">
+                    <button className="project-menu-btn" onClick={(e) => { e.stopPropagation(); setProjectMenuOpen(v => !v); }}>⋮</button>
+                    {projectMenuOpen && (
+                      <div className="project-menu-dropdown">
+                        <button onClick={() => { setProjectMenuOpen(false); setRenamingProject(true); }}>Rename</button>
+                        <button onClick={() => {
+                          setProjectMenuOpen(false);
+                          setProjectSidebarOpen(false);
+                          setAppendMode(projectName);
+                          navigate('/setup');
+                        }}>Add Papers</button>
+                        <div className="project-menu-sep" />
+                        <button onClick={() => { setProjectMenuOpen(false); exportProjectJSON(); }}>Export JSON</button>
+                        <button onClick={() => { setProjectMenuOpen(false); exportProjectCSV(); }}>Export CSV</button>
+                        <div className="project-menu-sep" />
+                        {projectRole === 'owner' && (
+                          <button onClick={() => { setProjectMenuOpen(false); setShareModalOpen(true); loadCollaborators(); }}>Share Project</button>
+                        )}
+                        {projectRole === 'owner' && hasCollaborators && (
+                          <button onClick={openConflictDashboard}>Resolve Conflicts</button>
+                        )}
+                        <button onClick={() => {
+                          setProjectMenuOpen(false);
+                          alert('Duplicate is not yet implemented.');
+                        }}>Duplicate</button>
+                        {!proj.isDemo && (
+                          <button className="project-menu-danger" onClick={() => {
+                            if (window.confirm(`Delete "${pName}"? This will clear all decisions and scores.`)) {
+                              setProjectMenuOpen(false);
+                              setProjectSidebarOpen(false);
+                              setPapers([]);
+                              setDecisions({});
+                              setAiScores({});
+                              setAbstractEdits({});
+                              localStorage.removeItem('slr-screener-has-data');
+                              localStorage.removeItem(STORAGE_KEY);
+                              localStorage.removeItem(SCORES_KEY);
+                              localStorage.removeItem(PAPERS_KEY);
+                              localStorage.removeItem('slr-screener-is-demo');
+                              localStorage.removeItem('slr-screener-project-name');
+                              firestoreSync(() => fsDeleteProject(userId, pid));
+                              loadDemoData();
+                            }
+                          }}>Delete</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {/* Shared projects section */}
           {sharedProjects.length > 0 && (
             <>

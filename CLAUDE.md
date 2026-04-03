@@ -145,7 +145,7 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Project Management
 
-- **Project sidebar** — hamburger menu (☰), lists current project with paper/screened counts
+- **Project sidebar** — hamburger menu (☰), lists ALL user projects from Firestore (refreshed on open). Active project highlighted with three-dot menu. Click any project to switch. Current project always shown even if not yet synced to Firestore.
 - **Three-dot menu (⋮)** — Rename, Add Papers, Export JSON, Export CSV, Share Project (owner), Resolve Conflicts (owner, shared), Duplicate, Delete
 - **Add Papers** — opens import page in append mode with banner "Adding papers to: [Project Name]", deduplicates by title (case-insensitive), shows result notification with counts
 - **Export JSON** — standardized format matching `enriched_papers_2025.json` schema
