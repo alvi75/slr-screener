@@ -348,7 +348,6 @@ function projectSlug(name) {
 
 const S2_PROXY = '/api/semantic-scholar';
 
-const VENUES = ['All', 'ICSE 2025', 'FSE 2025', 'ASE 2025', 'TOSEM 2025', 'TSE 2025'];
 const STORAGE_KEY = 'slr-screener-decisions';
 const INDEX_KEY = 'slr-screener-index';
 const VENUE_KEY = 'slr-screener-venue';
@@ -1266,6 +1265,10 @@ function AppMain({ currentUser, logout }) {
 
   // Initialize state from localStorage synchronously to avoid race conditions
   const [papers, setPapers] = useState([]);
+  const VENUES = useMemo(() => {
+    const unique = [...new Set(papers.map(p => p.conf).filter(v => v && v !== 'not_found'))];
+    return ['All', ...unique];
+  }, [papers]);
   const [decisions, setDecisions] = useState(() => {
     try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
@@ -1276,8 +1279,7 @@ function AppMain({ currentUser, logout }) {
   });
   const [venueFilter, setVenueFilter] = useState(() => {
     try {
-      const s = localStorage.getItem(VENUE_KEY);
-      return s && VENUES.includes(s) ? s : 'All';
+      return localStorage.getItem(VENUE_KEY) || 'All';
     } catch { return 'All'; }
   });
   const [editing, setEditing] = useState(false);

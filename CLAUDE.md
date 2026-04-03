@@ -161,9 +161,8 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Venue Filtering
 
-- Pill-style tabs for each venue (e.g., ICSE 2025, FSE 2025, ASE 2025, TOSEM 2025, TSE 2025)
-- "All" tab shows every paper
-- Dynamic venues derived from imported data
+- Pill-style tabs computed dynamically from `papers.map(p => p.conf)` — only shows venues present in the current dataset
+- "All" tab always shown; no hardcoded venue list
 
 ### Keyword Highlighting
 
