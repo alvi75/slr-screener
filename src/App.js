@@ -1474,7 +1474,7 @@ function AppMain({ currentUser, logout }) {
     catch { return {}; }
   });
   const [disagreementPopup, setDisagreementPopup] = useState(null); // { paperIndex, aiSuggestion, aiScore, userDecision }
-  const [aiPopoverIndex, setAiPopoverIndex] = useState(null);
+
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
     try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
@@ -2205,11 +2205,11 @@ function AppMain({ currentUser, logout }) {
   }, [decisions, papers, sidebarSearch, sidebarFilter]);
 
   const goNext = useCallback(() => {
-    if (safeIndex < filteredIndices.length - 1) { setCurrentIndex(safeIndex + 1); setAiPopoverIndex(null); }
+    if (safeIndex < filteredIndices.length - 1) setCurrentIndex(safeIndex + 1);
   }, [safeIndex, filteredIndices.length]);
 
   const goPrev = useCallback(() => {
-    if (safeIndex > 0) { setCurrentIndex(safeIndex - 1); setAiPopoverIndex(null); }
+    if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
   }, [safeIndex]);
 
   // Keyboard shortcuts
@@ -3195,14 +3195,11 @@ function AppMain({ currentUser, logout }) {
               {scoringOne === globalIndex ? (
                 <span className="ai-score-badge score-mid">Scoring...</span>
               ) : isValidScore(aiScores[globalIndex]) ? (
-                <span
-                  className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])} clickable`}
-                  onClick={() => setAiPopoverIndex(aiPopoverIndex === globalIndex ? null : globalIndex)}
-                >
+                <span className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])}`}>
                   AI: {formatScoreDisplay(aiScores[globalIndex])}
                   <span
-                    className="rescore-icon"
-                    onClick={(e) => { e.stopPropagation(); scoreOnePaper(globalIndex); }}
+                    className="rescore-icon clickable"
+                    onClick={() => scoreOnePaper(globalIndex)}
                   > ↻</span>
                 </span>
               ) : (
@@ -3215,7 +3212,7 @@ function AppMain({ currentUser, logout }) {
                 </span>
               )}
             </div>
-            {aiPopoverIndex === globalIndex && isValidScore(aiScores[globalIndex]) && (
+            {isValidScore(aiScores[globalIndex]) && (
               <div className="ai-breakdown-panel">
                 {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
                   <div key={ci} className="ai-breakdown-row">
