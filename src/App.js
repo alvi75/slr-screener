@@ -1350,6 +1350,27 @@ function VerificationPage() {
   );
 }
 
+function LoginRedirect() {
+  const location = useLocation();
+  const from = location.state?.from?.pathname || '/home';
+  const search = location.state?.from?.search || '';
+  return <Navigate to={from + search} replace />;
+}
+
+function AccessDenied() {
+  const navigate = useNavigate();
+  return (
+    <div className="app access-denied-view">
+      <div className="access-denied-card">
+        <div className="access-denied-icon">🔒</div>
+        <h2>Access Denied</h2>
+        <p>You don't have access to this project. Ask the project owner to share it with you.</p>
+        <button className="save-btn" onClick={() => navigate('/home')}>Go to Home</button>
+      </div>
+    </div>
+  );
+}
+
 function AuthGate({ children }) {
   const { currentUser, loading: authLoading } = useAuth();
   const location = useLocation();
@@ -1371,7 +1392,7 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={currentUser ? <Navigate to="/home" replace /> : <LoginPage />} />
+      <Route path="/login" element={currentUser ? <LoginRedirect /> : <LoginPage />} />
       <Route path="/" element={currentUser ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
         <AuthGate>
@@ -1396,6 +1417,16 @@ function AppMain({ currentUser, logout }) {
     if (path.startsWith('/project/')) return 'screener';
     return 'home'; // fallback
   }, [location.pathname]);
+
+  // Extract project slug from URL
+  const urlProjectSlug = useMemo(() => {
+    const m = location.pathname.match(/^\/project\/([^/]+)/);
+    return m ? m[1] : null;
+  }, [location.pathname]);
+
+  // Access control: 'checking' | 'granted' | 'denied'
+  const [projectAccess, setProjectAccess] = useState('checking');
+  const accessCheckRef = useRef(null);
 
   const [dashboardProjects, setDashboardProjects] = useState([]);
 
@@ -1535,6 +1566,40 @@ function AppMain({ currentUser, logout }) {
   const [syncStatus, setSyncStatus] = useState('synced');
   const syncTimerRef = useRef(null);
   const userId = currentUser?.uid || null;
+
+  // ── Access control for project URLs ──────────────────────
+  useEffect(() => {
+    if (!urlProjectSlug || !userId) {
+      setProjectAccess('granted'); // non-project routes are always accessible
+      return;
+    }
+    // Skip re-check if slug hasn't changed
+    if (accessCheckRef.current === urlProjectSlug) return;
+    accessCheckRef.current = urlProjectSlug;
+    setProjectAccess('checking');
+
+    (async () => {
+      try {
+        // Check 1: Is this the user's own project?
+        const ownProject = await fsGetProject(userId, urlProjectSlug);
+        if (ownProject) {
+          setProjectAccess('granted');
+          return;
+        }
+        // Check 2: Is the user a collaborator with accepted status?
+        const shared = await fsGetSharedProjects(currentUser?.email);
+        const match = shared.find(s => s.projectId === urlProjectSlug && s.status === 'accepted');
+        if (match) {
+          setProjectAccess('granted');
+          return;
+        }
+        setProjectAccess('denied');
+      } catch (err) {
+        console.warn('[Access] Check failed, granting access:', err.message);
+        setProjectAccess('granted'); // fail open to avoid blocking on network errors
+      }
+    })();
+  }, [urlProjectSlug, userId, currentUser?.email]);
 
   // ── Display name ──────────────────────────────────────────
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
@@ -2684,6 +2749,14 @@ function AppMain({ currentUser, logout }) {
   const yesCount = Object.values(decisions).filter((d) => d === 'Yes').length;
   const noCount = Object.values(decisions).filter((d) => d === 'No').length;
   const decidedCount = yesCount + noCount;
+
+  // ===== ACCESS CONTROL =====
+  if (urlProjectSlug && projectAccess === 'checking') {
+    return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Checking access...</div>;
+  }
+  if (urlProjectSlug && projectAccess === 'denied') {
+    return <AccessDenied />;
+  }
 
   // ===== HOME DASHBOARD VIEW =====
   if (appView === 'home') {

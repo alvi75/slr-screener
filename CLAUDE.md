@@ -134,6 +134,7 @@ Modern landing page shown on first login (returning users go directly to screene
   - `/login` — Login page (redirects to `/home` if authenticated)
   - `/setup` — New project setup
   - Browser back/forward, trackpad gestures, and shareable URLs all work
+  - **Access control** — project URLs check ownership or accepted collaborator status via Firestore before granting access. Denied users see an `AccessDenied` component. Unauthenticated users redirect to `/login` with return-to-original-URL after login via `location.state.from`.
   - `AuthGate` component redirects unauthenticated users to `/login`
 
 ### Multi-Format Data Import (Setup Page)
