@@ -227,6 +227,86 @@ function cleanAbstractText(text) {
   return s;
 }
 
+// Clean title text: same as cleanAbstractText but converts sub/superscripts to HTML
+function cleanTitle(text) {
+  if (!text) return '';
+  let s = cleanAbstractText(text);
+  // We lost sub/super during cleanAbstractText — reprocess from original
+  // Actually, re-derive from the raw text: apply everything except the sub/super stripping
+  s = text;
+  // Remove HTML/XML tags
+  s = s.replace(/<[^>]*>/g, '');
+  // Remove LaTeX math delimiters
+  s = s.replace(/\$\$(.*?)\$\$/g, '$1');
+  s = s.replace(/\$(.*?)\$/g, '$1');
+  s = s.replace(/\\\((.*?)\\\)/g, '$1');
+  s = s.replace(/\\\[(.*?)\\\]/g, '$1');
+  // LaTeX text commands
+  s = s.replace(/\\(?:operatorname|mathrm|textbf|textit|text|mathcal|mathbb|emph|textrm|mathit|boldsymbol|mbox|hbox)\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2');
+  s = s.replace(/\\sqrt\{([^}]*)\}/g, 'sqrt($1)');
+  // Greek letters
+  const greekMap = {
+    alpha: '\u03B1', beta: '\u03B2', gamma: '\u03B3', delta: '\u03B4', epsilon: '\u03B5',
+    varepsilon: '\u03B5', zeta: '\u03B6', eta: '\u03B7', theta: '\u03B8', vartheta: '\u03B8',
+    iota: '\u03B9', kappa: '\u03BA', lambda: '\u03BB', mu: '\u03BC', nu: '\u03BD',
+    xi: '\u03BE', pi: '\u03C0', rho: '\u03C1', sigma: '\u03C3', tau: '\u03C4',
+    upsilon: '\u03C5', phi: '\u03C6', varphi: '\u03C6', chi: '\u03C7', psi: '\u03C8',
+    omega: '\u03C9',
+    Gamma: '\u0393', Delta: '\u0394', Theta: '\u0398', Lambda: '\u039B', Xi: '\u039E',
+    Pi: '\u03A0', Sigma: '\u03A3', Phi: '\u03A6', Psi: '\u03A8', Omega: '\u03A9',
+  };
+  for (const [cmd, sym] of Object.entries(greekMap)) {
+    s = s.replace(new RegExp('\\\\' + cmd + '(?![a-zA-Z])', 'g'), sym);
+  }
+  // Common symbols
+  s = s.replace(/\\%/g, '%'); s = s.replace(/\\&/g, '&amp;'); s = s.replace(/\\#/g, '#'); s = s.replace(/\\\$/g, '$');
+  s = s.replace(/\\times(?![a-zA-Z])/g, '\u00D7'); s = s.replace(/\\cdot(?![a-zA-Z])/g, '\u00B7');
+  s = s.replace(/\\ldots|\\dots|\\cdots/g, '\u2026');
+  s = s.replace(/\\leq(?![a-zA-Z])|\\le(?![a-zA-Z])/g, '\u2264');
+  s = s.replace(/\\geq(?![a-zA-Z])|\\ge(?![a-zA-Z])/g, '\u2265');
+  s = s.replace(/\\neq(?![a-zA-Z])|\\ne(?![a-zA-Z])/g, '\u2260');
+  s = s.replace(/\\approx(?![a-zA-Z])/g, '\u2248'); s = s.replace(/\\pm(?![a-zA-Z])/g, '\u00B1');
+  s = s.replace(/\\infty(?![a-zA-Z])/g, '\u221E');
+  s = s.replace(/\\rightarrow(?![a-zA-Z])|\\to(?![a-zA-Z])/g, '\u2192');
+  s = s.replace(/\\leftarrow(?![a-zA-Z])/g, '\u2190');
+  s = s.replace(/\\leftrightarrow(?![a-zA-Z])/g, '\u2194');
+  s = s.replace(/\\in(?![a-zA-Z])/g, '\u2208'); s = s.replace(/\\notin(?![a-zA-Z])/g, '\u2209');
+  s = s.replace(/\\subset(?![a-zA-Z])/g, '\u2282'); s = s.replace(/\\cup(?![a-zA-Z])/g, '\u222A');
+  s = s.replace(/\\cap(?![a-zA-Z])/g, '\u2229'); s = s.replace(/\\sim(?![a-zA-Z])/g, '~');
+  s = s.replace(/\\log(?![a-zA-Z])/g, 'log'); s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
+  s = s.replace(/\\min(?![a-zA-Z])/g, 'min'); s = s.replace(/\\max(?![a-zA-Z])/g, 'max');
+  s = s.replace(/\\sum(?![a-zA-Z])/g, '\u2211'); s = s.replace(/\\prod(?![a-zA-Z])/g, '\u220F');
+  s = s.replace(/\\forall(?![a-zA-Z])/g, '\u2200'); s = s.replace(/\\exists(?![a-zA-Z])/g, '\u2203');
+  s = s.replace(/\\neg(?![a-zA-Z])/g, '\u00AC'); s = s.replace(/\\land(?![a-zA-Z])/g, '\u2227');
+  s = s.replace(/\\lor(?![a-zA-Z])/g, '\u2228'); s = s.replace(/\\emptyset(?![a-zA-Z])/g, '\u2205');
+  s = s.replace(/\\ell(?![a-zA-Z])/g, '\u2113');
+  // Convert sub/superscripts to HTML tags
+  s = s.replace(/_\{([^}]*)\}/g, '<sub>$1</sub>');
+  s = s.replace(/\^\{([^}]*)\}/g, '<sup>$1</sup>');
+  s = s.replace(/_(.)/g, '<sub>$1</sub>');
+  s = s.replace(/\^(.)/g, '<sup>$1</sup>');
+  // Remove remaining \commands
+  s = s.replace(/\\[a-zA-Z]+/g, '');
+  // Remove leftover braces
+  s = s.replace(/[{}]/g, '');
+  // Collapse whitespace
+  s = s.replace(/\s+/g, ' ').trim();
+  // Sanitize: strip any tags except sub/sup
+  s = s.replace(/<(?!\/?(?:sub|sup)>)[^>]*>/g, '');
+  return s;
+}
+
+function cleanTitleTruncated(text, max) {
+  const cleaned = cleanTitle(text);
+  // Strip HTML for length check, then truncate the HTML version
+  const plain = cleaned.replace(/<[^>]*>/g, '');
+  if (plain.length <= max) return cleaned;
+  // Truncate plain text and re-clean (to avoid breaking tags mid-way)
+  const truncPlain = plain.slice(0, max) + '...';
+  return truncPlain;
+}
+
 function highlightAbstract(text, hlData) {
   const clean = cleanAbstractText(text);
   if (!hlData.regex) return [clean];
@@ -1634,7 +1714,7 @@ function AppMain({ currentUser, logout }) {
       const annotatorCols = annotatorIds.map(aid => escapeCSV(annotatorDecisions[aid]?.[paperId] || ''));
       const fd = finalDecisions[paperId];
       return [
-        escapeCSV(p.title), escapeCSV(p.author), escapeCSV(p.conf),
+        escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author), escapeCSV(p.conf),
         escapeCSV(p.abstract), escapeCSV(p.doi),
         ...annotatorCols,
         escapeCSV(fd?.decision || ''), escapeCSV(fd?.comment || ''),
@@ -2188,7 +2268,7 @@ function AppMain({ currentUser, logout }) {
       const score = aiScores[i];
       const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
-        escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
+        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author),
         escapeCSV(decisions[i] || ''),
         escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
         ...critCols,
@@ -2258,7 +2338,7 @@ function AppMain({ currentUser, logout }) {
       const score = aiScores[i];
       const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
-        escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
+        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author),
         escapeCSV(decisions[i] || ''),
         escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
         ...critCols,
@@ -2934,7 +3014,7 @@ function AppMain({ currentUser, logout }) {
                   <div key={paperId} className={`conflict-paper-row ${fd ? 'resolved' : ''}`}>
                     <div className="conflict-paper-info">
                       <span className="conflict-paper-venue">{paper.conf}</span>
-                      <span className="conflict-paper-title">{paper.title?.length > 100 ? paper.title.slice(0, 100) + '...' : paper.title}</span>
+                      <span className="conflict-paper-title" dangerouslySetInnerHTML={{ __html: cleanTitleTruncated(paper.title || '', 100) }} />
                     </div>
                     <div className="conflict-decisions-row">
                       {annotatorIds.map((aid, i) => {
@@ -3203,7 +3283,7 @@ function AppMain({ currentUser, logout }) {
                 </span>
               )}
             </div>
-            <div className="paper-title">{paper.title}</div>
+            <div className="paper-title" dangerouslySetInnerHTML={{ __html: cleanTitle(paper.title) }} />
             <div className="paper-authors">{paper.author}</div>
 
             {/* Links */}
@@ -3346,9 +3426,7 @@ function AppMain({ currentUser, logout }) {
                   <span className={`venue-badge small ${venueCls(item.paper.conf)}`}>{item.paper.conf}</span>
                   <span className={`sidebar-decision ${item.decision.toLowerCase()}`}>{item.decision}</span>
                 </div>
-                <div className="sidebar-item-title">
-                  {item.paper.title.length > 80 ? item.paper.title.slice(0, 80) + '...' : item.paper.title}
-                </div>
+                <div className="sidebar-item-title" dangerouslySetInnerHTML={{ __html: cleanTitleTruncated(item.paper.title, 80) }} />
               </div>
             ))
           )}
@@ -3432,9 +3510,7 @@ function AppMain({ currentUser, logout }) {
                 </span>
                 {item.model && <span className="ai-via-model">via {modelName(item.model)}</span>}
               </div>
-              <div className="sidebar-item-title">
-                {item.paper.title.length > 80 ? item.paper.title.slice(0, 80) + '...' : item.paper.title}
-              </div>
+              <div className="sidebar-item-title" dangerouslySetInnerHTML={{ __html: cleanTitleTruncated(item.paper.title, 80) }} />
             </div>
           ))}
         </div>
