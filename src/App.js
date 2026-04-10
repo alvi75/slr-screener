@@ -3212,21 +3212,6 @@ function AppMain({ currentUser, logout }) {
                 </span>
               )}
             </div>
-            {isValidScore(aiScores[globalIndex]) && (
-              <div className="ai-breakdown-panel">
-                {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
-                  <div key={ci} className="ai-breakdown-row">
-                    <span className="ai-breakdown-name">{c.name}</span>
-                    <span className="ai-breakdown-dots">
-                      {[1,2,3,4,5].map(n => (
-                        <span key={n} className={`ai-dot ${n <= c.score ? (c.score >= 4 ? 'dot-high' : c.score >= 3 ? 'dot-mid' : 'dot-low') : 'dot-empty'}`} />
-                      ))}
-                    </span>
-                    <span className={`ai-breakdown-score ${c.score >= 4 ? 'sc-high' : c.score >= 3 ? 'sc-mid' : 'sc-low'}`}>{c.score}/5</span>
-                  </div>
-                ))}
-              </div>
-            )}
             <div className="paper-title" dangerouslySetInnerHTML={{ __html: cleanTitle(paper.title) }} />
             <div className="paper-authors">{paper.author}</div>
 
@@ -3278,15 +3263,27 @@ function AppMain({ currentUser, logout }) {
               ) : (
                 <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract, hlData) : cleanAbstractText(abstract)}</div>
               )}
-              {isValidScore(aiScores[globalIndex]) && (
+            </div>
+            {isValidScore(aiScores[globalIndex]) && (
+              <>
                 <div className="ai-reason">
                   <strong>AI ({modelName(aiScores[globalIndex].model)}):</strong> {aiScores[globalIndex].reason}
-                  <div className="ai-criteria-detail">
-                    {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
-                  </div>
                 </div>
-              )}
-            </div>
+                <div className="ai-breakdown-panel">
+                  {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
+                    <div key={ci} className="ai-breakdown-row">
+                      <span className="ai-breakdown-name">{c.name}</span>
+                      <span className="ai-breakdown-dots">
+                        {[1,2,3,4,5].map(n => (
+                          <span key={n} className={`ai-dot ${n <= c.score ? (c.score >= 4 ? 'dot-high' : c.score >= 3 ? 'dot-mid' : 'dot-low') : 'dot-empty'}`} />
+                        ))}
+                      </span>
+                      <span className={`ai-breakdown-score ${c.score >= 4 ? 'sc-high' : c.score >= 3 ? 'sc-mid' : 'sc-low'}`}>{c.score}/5</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Decision buttons */}
