@@ -3363,7 +3363,7 @@ function AppMain({ currentUser, logout }) {
                 <div className="ai-criteria-detail">
                   {scoreCriteriaLines(aiScores[globalIndex]).map((c, i, arr) => (
                     <React.Fragment key={i}>
-                      <span className="criteria-label-hint" title={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
+                      <span className="criteria-tip" data-tip={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
                     </React.Fragment>
                   ))}
                 </div>
@@ -3510,7 +3510,7 @@ function AppMain({ currentUser, logout }) {
             <div className="ai-criteria-detail">
               {scoreCriteriaLines(aiScores[globalIndex]).map((c, i, arr) => (
                     <React.Fragment key={i}>
-                      <span className="criteria-label-hint" title={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
+                      <span className="criteria-tip" data-tip={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
                     </React.Fragment>
                   ))}
             </div>

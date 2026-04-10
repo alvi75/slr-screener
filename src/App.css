@@ -1329,9 +1329,25 @@
   color: #6c5ce7;
   font-weight: 500;
 }
-.criteria-label-hint {
+.criteria-tip {
+  position: relative;
   cursor: help;
   border-bottom: 1px dotted #b2bec3;
+}
+.criteria-tip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d3436;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
 }
 
 /* AI score inline breakdown panel */
