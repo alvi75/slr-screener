@@ -55,7 +55,6 @@ const DEFAULT_RESEARCH_GOAL = 'Identify papers that use, evaluate, or experiment
 
 const HL_CATEGORIES_KEY = 'slr-screener-hl-categories';
 const RESEARCH_GOAL_KEY = 'slr-screener-research-goal';
-const CRITERIA_KEY = 'slr-screener-criteria';
 
 const PRESET_COLORS = [
   { bg: '#dbeafe', text: '#1d4ed8' },
@@ -332,26 +331,26 @@ function highlightAbstract(text, hlData) {
 }
 
 // ===== AI SCORING =====
-function slugifyCriterion(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-}
+const SCORING_CRITERIA = [
+  { slug: 'topical_alignment', name: 'Topical Alignment' },
+  { slug: 'methodological_relevance', name: 'Methodological Relevance' },
+  { slug: 'specificity', name: 'Specificity' },
+];
 
-function buildScoringPrompt(goal, criteria) {
-  const criteriaList = criteria.map((c, i) =>
-    `${i + 1}. ${c.name} — ${c.description}`
-  ).join('\n');
-  const slugs = criteria.map(c => `"${slugifyCriterion(c.name)}": <1-5>`).join(', ');
+function buildScoringPrompt(goal) {
   return `You are helping screen papers for a systematic literature review.
 Research goal: ${goal}
 
-Score each criterion 1-5:
-${criteriaList}
+Based on this research goal, evaluate the abstract on three dimensions:
+1. Topical Alignment — how well the paper's subject matches the goal
+2. Methodological Relevance — whether the paper's methods/approach are useful for this review
+3. Specificity — whether the paper provides concrete details the review needs
 
-Compute the overall score as the average of all criteria, rounded to 1 decimal.
+Score each 1-5. Compute overall as the average, rounded to 1 decimal.
 Suggest "yes" if overall >= 3.5, "no" otherwise.
 
 Respond in JSON only:
-{"criteria": {${slugs}}, "overall": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
+{"criteria": {"topical_alignment": <1-5>, "methodological_relevance": <1-5>, "specificity": <1-5>}, "overall": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
 }
 
 const PROXY_URL = '/api/claude-proxy';
@@ -368,8 +367,8 @@ function modelName(modelId) {
   return AI_MODELS.find(m => m.id === modelId)?.name || modelId;
 }
 
-async function scoreOneAbstract(apiKey, title, abstract, model, goal, criteria) {
-  const prompt = buildScoringPrompt(goal, criteria);
+async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
+  const prompt = buildScoringPrompt(goal);
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: {
@@ -390,21 +389,17 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal, criteria) 
   }
   const data = await res.json();
   const text = data.content?.[0]?.text || '';
-  // Parse JSON from response (handle markdown code blocks)
   const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
   const parsed = JSON.parse(jsonStr);
-  // Validate expected fields — check all criteria slugs are present
   const c = parsed.criteria;
   if (!c || typeof c !== 'object') throw new Error('Missing criteria object: ' + jsonStr);
-  const expectedSlugs = criteria.map(cr => slugifyCriterion(cr.name));
-  for (const slug of expectedSlugs) {
+  for (const { slug } of SCORING_CRITERIA) {
     if (typeof c[slug] !== 'number') throw new Error(`Missing or invalid score for "${slug}": ` + jsonStr);
   }
   if (!parsed.suggestion || !parsed.reason) {
     throw new Error('Missing suggestion or reason: ' + jsonStr);
   }
-  // Recompute overall to ensure correctness
-  const values = expectedSlugs.map(s => c[s]);
+  const values = SCORING_CRITERIA.map(cr => c[cr.slug]);
   const overall = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
   const suggestion = overall >= 3.5 ? 'yes' : 'no';
   return { criteria: c, overall, suggestion, reason: parsed.reason, model };
@@ -1442,15 +1437,9 @@ function AppMain({ currentUser, logout }) {
     try { return localStorage.getItem(RESEARCH_GOAL_KEY) || DEFAULT_RESEARCH_GOAL; }
     catch { return DEFAULT_RESEARCH_GOAL; }
   });
-  const [screeningCriteria, setScreeningCriteria] = useState(() => {
-    try { const s = localStorage.getItem(CRITERIA_KEY); return s ? JSON.parse(s) : []; }
-    catch { return []; }
-  });
   const [hlDraft, setHlDraft] = useState(null); // editing draft of categories
   const [goalDraft, setGoalDraft] = useState('');
-  const [criteriaDraft, setCriteriaDraft] = useState([]); // editing draft of screening criteria
   const [suggestingKeywords, setSuggestingKeywords] = useState(false);
-  const [suggestingCriteria, setSuggestingCriteria] = useState(false);
 
   // Build highlight data from current categories
   const hlData = useMemo(() => buildHighlightData(hlCategories), [hlCategories]);
@@ -1932,7 +1921,6 @@ function AppMain({ currentUser, logout }) {
           if (fsProject.hlCategories) setHlCategories(fsProject.hlCategories);
           if (fsProject.researchGoal) setResearchGoal(fsProject.researchGoal);
           if (fsProject.scoringModel) setScoringModel(fsProject.scoringModel);
-          if (fsProject.screeningCriteria) setScreeningCriteria(fsProject.screeningCriteria);
         }
 
         // Fetch decisions from Firestore
@@ -2072,14 +2060,6 @@ function AppMain({ currentUser, logout }) {
     if (goalInitRef.current) { goalInitRef.current = false; return; }
     firestoreSync(() => syncProjectToFirestore(userId, projectId, { researchGoal }));
   }, [researchGoal]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Save screening criteria (localStorage + Firestore project settings)
-  const criteriaInitRef = useRef(true);
-  useEffect(() => {
-    localStorage.setItem(CRITERIA_KEY, JSON.stringify(screeningCriteria));
-    if (criteriaInitRef.current) { criteriaInitRef.current = false; return; }
-    firestoreSync(() => syncProjectToFirestore(userId, projectId, { screeningCriteria }));
-  }, [screeningCriteria]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
@@ -2260,7 +2240,7 @@ function AppMain({ currentUser, logout }) {
       }
       return str;
     };
-    const critSlugs = screeningCriteria.map(c => slugifyCriterion(c.name));
+    const critSlugs = SCORING_CRITERIA.map(c => c.slug);
     const critHeaders = critSlugs.map(s => `ai_${s}`);
     const header = ['conf','title','author','decision','ai_overall','ai_suggestion','ai_reason', ...critHeaders, 'abstract','doi','pdf_url','arxiv_id'].join(',');
     const rows = papers.map((p, i) => {
@@ -2284,7 +2264,7 @@ function AppMain({ currentUser, logout }) {
     a.download = 'slr_triage_results.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [papers, decisions, getAbstract, aiScores, screeningCriteria]);
+  }, [papers, decisions, getAbstract, aiScores]);
 
   // Export standardized JSON
   const exportProjectJSON = useCallback(() => {
@@ -2330,7 +2310,7 @@ function AppMain({ currentUser, logout }) {
       }
       return str;
     };
-    const critSlugs = screeningCriteria.map(c => slugifyCriterion(c.name));
+    const critSlugs = SCORING_CRITERIA.map(c => c.slug);
     const critHeaders = critSlugs.map(s => `ai_${s}`);
     const header = ['conf','title','author','decision','ai_overall','ai_suggestion','ai_reason', ...critHeaders, 'abstract','doi','pdf_url','arxiv_id'].join(',');
     const rows = papers.map((p, i) => {
@@ -2354,7 +2334,7 @@ function AppMain({ currentUser, logout }) {
     a.download = projectSlug(projectName) + '_results.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [papers, decisions, getAbstract, aiScores, projectName, screeningCriteria]);
+  }, [papers, decisions, getAbstract, aiScores, projectName]);
 
   const exportDisagreements = useCallback(() => {
     const entries = Object.entries(aiDisagreements);
@@ -2401,7 +2381,6 @@ function AppMain({ currentUser, logout }) {
 
   // AI scoring — batch process unscored papers
   const startScoring = useCallback(async () => {
-    if (screeningCriteria.length === 0) { alert('Please define at least one screening criterion in Settings before scoring.'); return; }
     if (!apiKey) { setShowApiKeyModal(true); return; }
     setScoringError(null);
     if (!(await checkProxy())) {
@@ -2433,7 +2412,7 @@ function AppMain({ currentUser, logout }) {
       const results = await Promise.allSettled(
         batch.map(async (idx) => {
           const abs = cleanAbstractText(getAbstract(idx));
-          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal, screeningCriteria);
+          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal);
           return { idx, result };
         })
       );
@@ -2455,7 +2434,7 @@ function AppMain({ currentUser, logout }) {
     setScoringStopping(false);
     setScoringDone(true);
     setTimeout(() => setScoringDone(false), 2000);
-  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal, screeningCriteria, checkProxy]);
+  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal, checkProxy]);
 
   const [scoringStopping, setScoringStopping] = useState(false);
   const stopScoring = useCallback(() => {
@@ -2465,7 +2444,6 @@ function AppMain({ currentUser, logout }) {
 
   const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
   const scoreOnePaper = useCallback(async (gIdx) => {
-    if (screeningCriteria.length === 0) { alert('Please define at least one screening criterion in Settings before scoring.'); return; }
     if (!apiKey) { setShowApiKeyModal(true); return; }
     setScoringError(null);
     if (!(await checkProxy())) {
@@ -2477,14 +2455,14 @@ function AppMain({ currentUser, logout }) {
     if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
     setScoringOne(gIdx);
     try {
-      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel, researchGoal, screeningCriteria);
+      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel, researchGoal);
       setAiScores(prev => ({ ...prev, [gIdx]: result }));
     } catch (err) {
       console.error('[SLR] Single score error:', err);
       alert('Scoring failed: ' + err.message);
     }
     setScoringOne(null);
-  }, [apiKey, papers, getAbstract, scoringModel, researchGoal, screeningCriteria, checkProxy]);
+  }, [apiKey, papers, getAbstract, scoringModel, researchGoal, checkProxy]);
 
   const pendingScoreRef = useRef(false);
   const saveApiKey = useCallback((key) => {
@@ -2565,55 +2543,21 @@ function AppMain({ currentUser, logout }) {
     setSuggestingKeywords(false);
   }, [apiKey, scoringModel, checkProxy]);
 
-  // Suggest screening criteria via Claude API
-  const suggestCriteria = useCallback(async (goal) => {
-    if (!apiKey) { alert('Set API key first (use Score Papers button).'); return; }
-    if (!(await checkProxy())) return;
-    setSuggestingCriteria(true);
-    try {
-      const res = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
-        body: JSON.stringify({
-          model: scoringModel,
-          max_tokens: 500,
-          messages: [{
-            role: 'user',
-            content: `Given this research goal for a systematic literature review:\n\n"${goal}"\n\nSuggest 3 screening criteria for evaluating paper abstracts. Each criterion should have a short name and a one-sentence description explaining what to look for.\n\nRespond in JSON only:\n[{"name": "Criterion Name", "description": "What this criterion evaluates"}]`
-          }],
-        }),
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
-      const text = data.content?.[0]?.text || '';
-      const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
-      const parsed = JSON.parse(jsonStr);
-      if (!Array.isArray(parsed)) throw new Error('Expected array');
-      setCriteriaDraft(parsed.slice(0, 5).map(c => ({ name: c.name || '', description: c.description || '' })));
-    } catch (err) {
-      console.error('[SLR] Suggest criteria error:', err);
-      alert('Failed to suggest criteria: ' + err.message);
-    }
-    setSuggestingCriteria(false);
-  }, [apiKey, scoringModel, checkProxy]);
-
   // Open highlight settings panel
   const openHlSettings = useCallback(() => {
     setHlDraft(hlCategories.map(c => ({ ...c })));
     setGoalDraft(researchGoal);
-    setCriteriaDraft(screeningCriteria.map(c => ({ ...c })));
     setHlSettingsOpen(true);
-  }, [hlCategories, researchGoal, screeningCriteria]);
+  }, [hlCategories, researchGoal]);
 
   const saveHlSettings = useCallback(() => {
     if (!hlDraft) return;
     const cats = hlDraft.map((c, i) => ({ ...c, cls: `hl-cat-${i}` }));
     setHlCategories(cats);
     setResearchGoal(goalDraft);
-    setScreeningCriteria(criteriaDraft.filter(c => c.name.trim()));
     setHlSettingsOpen(false);
     setHlDraft(null);
-  }, [hlDraft, goalDraft, criteriaDraft]);
+  }, [hlDraft, goalDraft]);
 
   // Sorted scored papers list for AI Insights sidebar
   const scoredPapersList = useMemo(() => {
@@ -2725,7 +2669,6 @@ function AppMain({ currentUser, logout }) {
                     if (ownerProject) {
                       if (ownerProject.hlCategories) setHlCategories(ownerProject.hlCategories);
                       if (ownerProject.researchGoal) setResearchGoal(ownerProject.researchGoal);
-                      if (ownerProject.screeningCriteria) setScreeningCriteria(ownerProject.screeningCriteria);
                     }
                     const myDecisions = await fsGetDecisions(userId, sp.projectId);
                     setDecisions(myDecisions);
@@ -3836,56 +3779,6 @@ function AppMain({ currentUser, logout }) {
                   {suggestingKeywords ? 'Suggesting...' : 'Suggest Keywords'}
                 </button>
                 {!apiKey && <span className="hl-hint">Set API key first (use Score Papers button)</span>}
-              </div>
-
-              <div className="hl-settings-section">
-                <label className="hl-settings-label">Screening Criteria <span className="hl-hint">(used by AI scoring, max 5)</span></label>
-                {criteriaDraft.map((crit, i) => (
-                  <div key={i} className="criteria-row">
-                    <div className="criteria-row-top">
-                      <input
-                        className="criteria-name-input"
-                        value={crit.name}
-                        onChange={(e) => {
-                          const next = [...criteriaDraft];
-                          next[i] = { ...next[i], name: e.target.value };
-                          setCriteriaDraft(next);
-                        }}
-                        placeholder="Criterion name"
-                      />
-                      <button
-                        className="hl-cat-delete"
-                        onClick={() => setCriteriaDraft(criteriaDraft.filter((_, j) => j !== i))}
-                      >&times;</button>
-                    </div>
-                    <input
-                      className="criteria-desc-input"
-                      value={crit.description}
-                      onChange={(e) => {
-                        const next = [...criteriaDraft];
-                        next[i] = { ...next[i], description: e.target.value };
-                        setCriteriaDraft(next);
-                      }}
-                      placeholder="What this criterion evaluates"
-                    />
-                  </div>
-                ))}
-                {criteriaDraft.length < 5 && (
-                  <button
-                    className="hl-add-cat-btn"
-                    onClick={() => setCriteriaDraft([...criteriaDraft, { name: '', description: '' }])}
-                  >
-                    + Add Criterion
-                  </button>
-                )}
-                <button
-                  className={`hl-suggest-btn ${!apiKey ? 'disabled' : ''}`}
-                  onClick={() => apiKey && suggestCriteria(goalDraft)}
-                  disabled={suggestingCriteria || !apiKey}
-                  style={{ marginTop: 6 }}
-                >
-                  {suggestingCriteria ? 'Suggesting...' : 'Suggest with AI'}
-                </button>
               </div>
 
               <div className="hl-settings-section">

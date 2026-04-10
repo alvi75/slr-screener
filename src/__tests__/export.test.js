@@ -112,7 +112,7 @@ describe('Export', () => {
     const lines = csvText.split('\n');
 
     // Check header
-    expect(lines[0]).toBe('conf,title,author,decision,ai_overall,ai_suggestion,ai_reason,abstract,doi,pdf_url,arxiv_id');
+    expect(lines[0]).toBe('conf,title,author,decision,ai_overall,ai_suggestion,ai_reason,ai_topical_alignment,ai_methodological_relevance,ai_specificity,abstract,doi,pdf_url,arxiv_id');
 
     // Paper 0 should have "Yes"
     expect(lines[1]).toContain('Yes');
