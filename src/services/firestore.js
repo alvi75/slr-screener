@@ -413,6 +413,19 @@ export async function deleteAIDisagreement(userId, projectId, paperId) {
   await deleteDoc(ref);
 }
 
+// ─── User Profile ─────────────────────────────────────────────
+
+export async function getUserProfile(userId) {
+  const ref = doc(db, 'users', userId, 'profile', 'main');
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function saveUserProfile(userId, data) {
+  const ref = doc(db, 'users', userId, 'profile', 'main');
+  await setDoc(ref, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+
 // ─── Final Decisions (Conflict Resolution) ───────────────────
 
 /**

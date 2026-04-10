@@ -27,6 +27,8 @@ import {
   saveAIDisagreement as fsSaveAIDisagreement,
   getAIDisagreements as fsGetAIDisagreements,
   deleteAIDisagreement as fsDeleteAIDisagreement,
+  getUserProfile as fsGetUserProfile,
+  saveUserProfile as fsSaveUserProfile,
 } from './services/firestore';
 import { analyzeConflicts, interpretKappa } from './utils/kappa';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -1520,6 +1522,44 @@ function AppMain({ currentUser, logout }) {
   const syncTimerRef = useRef(null);
   const userId = currentUser?.uid || null;
 
+  // ── Display name ──────────────────────────────────────────
+  const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
+  const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState('');
+  const displayNameLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!userId || displayNameLoadedRef.current) return;
+    displayNameLoadedRef.current = true;
+    (async () => {
+      try {
+        const profile = await fsGetUserProfile(userId);
+        if (profile?.displayName) {
+          setDisplayName(profile.displayName);
+        } else {
+          // No display name stored — show modal
+          const prefill = currentUser?.displayName || '';
+          setDisplayNameInput(prefill);
+          setShowDisplayNameModal(true);
+        }
+      } catch (err) {
+        console.warn('[Profile] Failed to load profile:', err.message);
+      }
+    })();
+  }, [userId, currentUser]);
+
+  const saveDisplayName = useCallback(async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || !userId) return;
+    setDisplayName(trimmed);
+    setShowDisplayNameModal(false);
+    try {
+      await fsSaveUserProfile(userId, { displayName: trimmed });
+    } catch (err) {
+      console.warn('[Profile] Failed to save display name:', err.message);
+    }
+  }, [userId]);
+
   // Derive a stable project ID from the project name
   const projectId = useMemo(() => {
     const raw = localStorage.getItem('slr-screener-project-name') || projectName;
@@ -1641,11 +1681,11 @@ function AppMain({ currentUser, logout }) {
       }
       const acceptedAnnotators = collabs.filter(c => c.role === 'annotator' && c.status === 'accepted');
       const annotators = [
-        { id: ownerId, email: ownerEmail, role: 'owner' },
-        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator' })),
+        { id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '' },
+        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '' })),
       ];
 
-      // Fetch decisions for all annotators with known userIds
+      // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
       for (const a of annotators) {
         if (a.id) {
@@ -1654,6 +1694,13 @@ function AppMain({ currentUser, logout }) {
           } catch (err) {
             console.warn(`[Dashboard] Failed to fetch decisions for ${a.email}:`, err.message);
             annotatorDecisions[a.id] = {};
+          }
+          // Fetch display name if not already known
+          if (!a.displayName) {
+            try {
+              const profile = await fsGetUserProfile(a.id);
+              if (profile?.displayName) a.displayName = profile.displayName;
+            } catch { /* ignore */ }
           }
         }
       }
@@ -1673,7 +1720,7 @@ function AppMain({ currentUser, logout }) {
     } catch (err) {
       console.warn('[Dashboard] Failed to load team data:', err.message);
     }
-  }, [projectId, userId, currentUser, projectOwnerId, navigate]);
+  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -2616,7 +2663,7 @@ function AppMain({ currentUser, logout }) {
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
             ) : (
-              <span className="header-avatar-placeholder">{(currentUser.email || '?')[0].toUpperCase()}</span>
+              <span className="header-avatar-placeholder">{(displayName || currentUser.email || '?')[0].toUpperCase()}</span>
             )}
             <button className="header-btn btn-signout" onClick={logout}>Sign Out</button>
           </div>
@@ -2717,6 +2764,27 @@ function AppMain({ currentUser, logout }) {
             <p>No projects yet. Create a new project or explore the built-in demo dataset.</p>
           </div>
         )}
+        {showDisplayNameModal && (
+          <>
+            <div className="sidebar-overlay" />
+            <div className="api-key-modal">
+              <h3>Enter Your Display Name</h3>
+              <p>This name will be shown to collaborators on shared projects.</p>
+              <input
+                className="api-key-input"
+                placeholder="Your name"
+                value={displayNameInput}
+                onChange={(e) => setDisplayNameInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveDisplayName(displayNameInput); }}
+                autoFocus
+              />
+              <div className="edit-actions">
+                <button className="save-btn" onClick={() => saveDisplayName(displayNameInput)}>Save</button>
+                <button className="cancel-btn" onClick={() => setShowDisplayNameModal(false)}>Skip</button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -2781,7 +2849,7 @@ function AppMain({ currentUser, logout }) {
       const count = Object.keys(decs).length;
       const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
       const noCount = Object.values(decs).filter(d => d === 'No').length;
-      return { email: a.email, role: a.role, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+      return { email: a.email, displayName: a.displayName || '', role: a.role, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
     const allDone = teamProgress.length > 1 && teamProgress.every(t => t.count >= dbTotalPapers);
 
@@ -2889,7 +2957,7 @@ function AppMain({ currentUser, logout }) {
                   {teamProgress.map(t => (
                     <div key={t.email} className="dash-team-card">
                       <div className="dash-team-info">
-                        <span className="dash-team-email">{t.email}</span>
+                        <span className="dash-team-email">{t.displayName || t.email}</span>
                         <span className="dash-team-role">{t.role}</span>
                       </div>
                       <div className="conflict-progress-bar">
@@ -2986,7 +3054,7 @@ function AppMain({ currentUser, logout }) {
                     <div className="conflict-decisions-row">
                       {annotatorIds.map((aid, i) => {
                         const d = annotatorDecisions[aid]?.[paperId];
-                        return <span key={aid} className={`conflict-decision-chip ${d ? d.toLowerCase() : 'none'}`} title={annotators[i]?.email}>{d || '—'}</span>;
+                        return <span key={aid} className={`conflict-decision-chip ${d ? d.toLowerCase() : 'none'}`} title={annotators[i]?.displayName || annotators[i]?.email}>{d || '—'}</span>;
                       })}
                       {isConflict && projectRole === 'owner' && (
                         <div className="conflict-resolve-controls">
@@ -3125,7 +3193,7 @@ function AppMain({ currentUser, logout }) {
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
             ) : (
-              <span className="header-avatar-placeholder">{(currentUser.email || '?')[0].toUpperCase()}</span>
+              <span className="header-avatar-placeholder">{(displayName || currentUser.email || '?')[0].toUpperCase()}</span>
             )}
             <button className="header-btn btn-signout" onClick={logout}>Sign Out</button>
           </div>
@@ -3717,7 +3785,7 @@ function AppMain({ currentUser, logout }) {
               <div className="share-collaborator-list">
                 {/* Owner row */}
                 <div className="share-collaborator-row">
-                  <span className="share-collab-email">{currentUser?.email}</span>
+                  <span className="share-collab-email">{displayName || currentUser?.email}</span>
                   <span className="share-role-badge owner">Owner</span>
                   <span className="share-status-badge accepted">You</span>
                 </div>
