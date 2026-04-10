@@ -1,8 +1,8 @@
 /* Layout */
 .app {
-  max-width: 1170px;
+  max-width: 95vw;
   margin: 0 auto;
-  padding: 24px 28px;
+  padding: 24px 2%;
   position: relative;
 }
 .app.screening-view {
@@ -2959,9 +2959,9 @@
 
 /* ===== CONFLICT RESOLUTION DASHBOARD ===== */
 .conflict-view {
-  max-width: 1170px;
+  max-width: 95vw;
   margin: 0 auto;
-  padding: 24px;
+  padding: 24px 2%;
 }
 .conflict-header {
   display: flex;
@@ -3240,9 +3240,9 @@
 
 /* ===== TEAM DASHBOARD ===== */
 .dash-view {
-  max-width: 1170px;
+  max-width: 95vw;
   margin: 0 auto;
-  padding: 24px;
+  padding: 24px 2%;
 }
 .dash-header {
   display: flex;
