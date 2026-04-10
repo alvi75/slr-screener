@@ -660,6 +660,7 @@
   margin-bottom: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  overflow: visible;
 }
 .venue-badge {
   display: inline-block;
@@ -844,7 +845,7 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.05s;
-  z-index: 20;
+  z-index: 1000;
   line-height: 1.4;
 }
 .hl-tip:hover::after {
@@ -855,6 +856,12 @@
 .hl-tip.tip-down::after {
   bottom: auto;
   top: calc(100% + 6px);
+}
+/* Tooltip anchored to right edge (for elements near right side of container) */
+.hl-tip.tip-right::after {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 /* Highlights button (contains inline gear) */
@@ -927,7 +934,7 @@
   display: flex;
   justify-content: center;
   gap: 16px;
-  margin-bottom: 10px;
+  margin-bottom: 32px;
 }
 .decision-btn {
   padding: 12px 36px;
@@ -1290,8 +1297,8 @@
 .ai-score-badge.clickable { cursor: pointer; transition: opacity 0.15s; }
 .ai-score-badge.clickable:hover { opacity: 0.7; }
 .score-unscored { background: #dfe6e9; color: #636e72; }
-.rescore-icon { display: none; }
-.ai-score-badge.clickable:hover .rescore-icon { display: inline; }
+.score-rescore { background: #dfe6e9; color: #636e72; padding: 3px 6px; font-size: 11px; margin-left: 2px; }
+.ai-badge-wrapper { position: relative; display: inline-flex; align-items: center; margin-left: auto; overflow: visible; }
 
 /* Model label in AI Insights list */
 .ai-via-model {
@@ -1314,6 +1321,74 @@
   background: #f5f6fa;
   border-radius: 6px;
   border-left: 3px solid #a29bfe;
+}
+.ai-criteria-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  font-style: normal;
+  color: #6c5ce7;
+  font-weight: 500;
+}
+
+/* AI score popover */
+.ai-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 10px 14px;
+  min-width: 200px;
+  font-size: 13px;
+  font-weight: 400;
+}
+.ai-popover-line {
+  padding: 2px 0;
+  color: #2d3436;
+}
+.ai-popover-reason {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f0f0f0;
+  font-style: italic;
+  color: #636e72;
+  font-size: 12px;
+}
+
+/* Screening criteria editor */
+.criteria-row {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+.criteria-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.criteria-name-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #dfe6e9;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.criteria-desc-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #dfe6e9;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #636e72;
+  box-sizing: border-box;
 }
 
 /* Suggestion glow on decision buttons */

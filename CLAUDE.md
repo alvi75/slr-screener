@@ -181,12 +181,15 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 ### AI Scoring (Optional)
 
-- **Claude API integration** — scores each abstract 0–100 for relevance with Yes/No suggestion and one-sentence explanation
+- **Claude API integration** — evaluates each abstract on user-defined screening criteria (1–5 each), computes overall average, suggests Yes (≥3.5) or No with one-sentence explanation. Returns `{ criteria, overall, suggestion, reason, model }`.
+- **User-defined screening criteria** — `screeningCriteria` state: array of `{ name, description }` objects (max 5), persisted in localStorage (`slr-screener-criteria`) and synced to Firestore project settings. Criteria names are slugified via `slugifyCriterion()` for JSON keys. Must have ≥1 criterion before AI scoring is enabled.
+- **Criteria setup UI** — in Highlight Settings panel, below Research Goal: editable list of criteria (name + description inputs), delete button, "+ Add Criterion" (max 5), "Suggest with AI" button (calls Claude to generate 3 criteria from research goal)
+- **Backward compatibility** — legacy scores (0–100 single number) detected via `isLegacyScore()` and displayed with "(legacy)" label; helper functions `getScoreValue()`, `scoreColorClass()`, `formatScoreDisplay()`, `scoreCriteriaLines()` handle both formats
 - **Model selector** — Claude Haiku 4.5, Sonnet 4.6, Opus 4.6 (configurable in AI Insights sidebar)
 - **Research goal** — customizable prompt that drives scoring relevance
 - **Batch scoring** — batched in groups of 5 with `Promise.allSettled`, stoppable mid-run
-- **Per-paper rescoring** — clickable AI badge to rescore individual papers
-- **AI score badge** — color-coded (green ≥70, yellow ≥40, red <40) with hover tooltip
+- **Per-paper rescoring** — separate ↻ button next to AI badge to rescore individual papers
+- **AI score badge** — color-coded (green ≥4.0, yellow/orange 2.5–3.9, red <2.5); click to toggle popover with per-criterion scores and reason
 - **AI suggestion glow** — decision buttons get subtle purple glow when matching AI suggestion
 - **Sort by Score** — toggle to sort papers by relevance score instead of default order
 - **API key management** — stored in localStorage. Clicking "Score Papers" with no key shows a modal with input field, "Save & Start Scoring" button, and link to console.anthropic.com. Scoring starts immediately once key is saved. "AI: ?" badge on every unscored paper — click to score individually (or opens API key modal if no key). Proxy down shows inline amber banner (auto-clears after 8s).
@@ -225,7 +228,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 
 ### Export & Progress
 
-- **CSV export** — downloads with columns: conf, title, author, decision, ai_score, ai_suggestion, ai_reason, abstract, doi, pdf_url, arxiv_id
+- **CSV export** — downloads with columns: conf, title, author, decision, ai_overall, ai_suggestion, ai_reason, [per-criterion columns], abstract, doi, pdf_url, arxiv_id
 - **Progress bar** — segmented bar showing Yes (green), No (red) counts with remaining
 - **Auto-save** — all state persists in localStorage
 

@@ -55,6 +55,7 @@ const DEFAULT_RESEARCH_GOAL = 'Identify papers that use, evaluate, or experiment
 
 const HL_CATEGORIES_KEY = 'slr-screener-hl-categories';
 const RESEARCH_GOAL_KEY = 'slr-screener-research-goal';
+const CRITERIA_KEY = 'slr-screener-criteria';
 
 const PRESET_COLORS = [
   { bg: '#dbeafe', text: '#1d4ed8' },
@@ -251,8 +252,26 @@ function highlightAbstract(text, hlData) {
 }
 
 // ===== AI SCORING =====
-function buildScoringPrompt(goal) {
-  return `You are helping screen papers for a systematic literature review. The research goal is: ${goal} Rate this abstract 0-100 for relevance and suggest Yes/No. Respond in JSON only: {"score": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
+function slugifyCriterion(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function buildScoringPrompt(goal, criteria) {
+  const criteriaList = criteria.map((c, i) =>
+    `${i + 1}. ${c.name} — ${c.description}`
+  ).join('\n');
+  const slugs = criteria.map(c => `"${slugifyCriterion(c.name)}": <1-5>`).join(', ');
+  return `You are helping screen papers for a systematic literature review.
+Research goal: ${goal}
+
+Score each criterion 1-5:
+${criteriaList}
+
+Compute the overall score as the average of all criteria, rounded to 1 decimal.
+Suggest "yes" if overall >= 3.5, "no" otherwise.
+
+Respond in JSON only:
+{"criteria": {${slugs}}, "overall": number, "suggestion": "yes"|"no", "reason": "one sentence why"}`;
 }
 
 const PROXY_URL = '/api/claude-proxy';
@@ -269,8 +288,8 @@ function modelName(modelId) {
   return AI_MODELS.find(m => m.id === modelId)?.name || modelId;
 }
 
-async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
-  const prompt = buildScoringPrompt(goal);
+async function scoreOneAbstract(apiKey, title, abstract, model, goal, criteria) {
+  const prompt = buildScoringPrompt(goal, criteria);
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: {
@@ -279,7 +298,7 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 150,
+      max_tokens: 300,
       messages: [
         { role: 'user', content: `${prompt}\n\nTitle: ${title}\nAbstract: ${abstract}` },
       ],
@@ -294,11 +313,52 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
   // Parse JSON from response (handle markdown code blocks)
   const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
   const parsed = JSON.parse(jsonStr);
-  // Validate expected fields
-  if (typeof parsed.score !== 'number' || !parsed.suggestion || !parsed.reason) {
-    throw new Error('Unexpected response format: ' + jsonStr);
+  // Validate expected fields — check all criteria slugs are present
+  const c = parsed.criteria;
+  if (!c || typeof c !== 'object') throw new Error('Missing criteria object: ' + jsonStr);
+  const expectedSlugs = criteria.map(cr => slugifyCriterion(cr.name));
+  for (const slug of expectedSlugs) {
+    if (typeof c[slug] !== 'number') throw new Error(`Missing or invalid score for "${slug}": ` + jsonStr);
   }
-  return { score: parsed.score, suggestion: parsed.suggestion.toLowerCase(), reason: parsed.reason, model };
+  if (!parsed.suggestion || !parsed.reason) {
+    throw new Error('Missing suggestion or reason: ' + jsonStr);
+  }
+  // Recompute overall to ensure correctness
+  const values = expectedSlugs.map(s => c[s]);
+  const overall = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+  const suggestion = overall >= 3.5 ? 'yes' : 'no';
+  return { criteria: c, overall, suggestion, reason: parsed.reason, model };
+}
+
+// ===== AI SCORE HELPERS (backward compat) =====
+// Old format: { score: number (0-100), suggestion, reason, model }
+// New format: { criteria: { slug: 1-5, ... }, overall: number (1-5), suggestion, reason, model }
+function isLegacyScore(s) {
+  return s != null && typeof s === 'object' && !s.criteria;
+}
+function getScoreValue(s) {
+  if (s == null) return null;
+  if (typeof s === 'number') return s;
+  if (s.criteria) return s.overall;
+  return s.score; // legacy object
+}
+function scoreColorClass(s) {
+  const v = getScoreValue(s);
+  if (v == null) return 'unscored';
+  if (isLegacyScore(s)) return v >= 70 ? 'high' : v >= 40 ? 'mid' : 'low';
+  return v >= 4.0 ? 'high' : v >= 2.5 ? 'mid' : 'low';
+}
+function formatScoreDisplay(s) {
+  if (s == null) return '?';
+  if (isLegacyScore(s)) return String(s.score);
+  return String(s.overall);
+}
+function unslugify(slug) {
+  return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function scoreCriteriaLines(s) {
+  if (!s || !s.criteria) return null;
+  return Object.entries(s.criteria).map(([slug, val]) => ({ name: unslugify(slug), score: val }));
 }
 
 // ===== SETUP / IMPORT HELPERS =====
@@ -1306,9 +1366,15 @@ function AppMain({ currentUser, logout }) {
     try { return localStorage.getItem(RESEARCH_GOAL_KEY) || DEFAULT_RESEARCH_GOAL; }
     catch { return DEFAULT_RESEARCH_GOAL; }
   });
+  const [screeningCriteria, setScreeningCriteria] = useState(() => {
+    try { const s = localStorage.getItem(CRITERIA_KEY); return s ? JSON.parse(s) : []; }
+    catch { return []; }
+  });
   const [hlDraft, setHlDraft] = useState(null); // editing draft of categories
   const [goalDraft, setGoalDraft] = useState('');
+  const [criteriaDraft, setCriteriaDraft] = useState([]); // editing draft of screening criteria
   const [suggestingKeywords, setSuggestingKeywords] = useState(false);
+  const [suggestingCriteria, setSuggestingCriteria] = useState(false);
 
   // Build highlight data from current categories
   const hlData = useMemo(() => buildHighlightData(hlCategories), [hlCategories]);
@@ -1343,6 +1409,7 @@ function AppMain({ currentUser, logout }) {
     catch { return {}; }
   });
   const [disagreementPopup, setDisagreementPopup] = useState(null); // { paperIndex, aiSuggestion, aiScore, userDecision }
+  const [aiPopoverIndex, setAiPopoverIndex] = useState(null);
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
     try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
@@ -1789,6 +1856,7 @@ function AppMain({ currentUser, logout }) {
           if (fsProject.hlCategories) setHlCategories(fsProject.hlCategories);
           if (fsProject.researchGoal) setResearchGoal(fsProject.researchGoal);
           if (fsProject.scoringModel) setScoringModel(fsProject.scoringModel);
+          if (fsProject.screeningCriteria) setScreeningCriteria(fsProject.screeningCriteria);
         }
 
         // Fetch decisions from Firestore
@@ -1929,6 +1997,14 @@ function AppMain({ currentUser, logout }) {
     firestoreSync(() => syncProjectToFirestore(userId, projectId, { researchGoal }));
   }, [researchGoal]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Save screening criteria (localStorage + Firestore project settings)
+  const criteriaInitRef = useRef(true);
+  useEffect(() => {
+    localStorage.setItem(CRITERIA_KEY, JSON.stringify(screeningCriteria));
+    if (criteriaInitRef.current) { criteriaInitRef.current = false; return; }
+    firestoreSync(() => syncProjectToFirestore(userId, projectId, { screeningCriteria }));
+  }, [screeningCriteria]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Venue-only filtering, optionally sorted by AI score
   const filteredIndices = useMemo(() => {
     const indices = papers.reduce((acc, p, i) => {
@@ -1939,7 +2015,7 @@ function AppMain({ currentUser, logout }) {
     if (sortByScore) {
       const scored = indices.filter(i => aiScores[i] != null);
       const unscored = indices.filter(i => aiScores[i] == null);
-      scored.sort((a, b) => (aiScores[b]?.score ?? 0) - (aiScores[a]?.score ?? 0));
+      scored.sort((a, b) => (getScoreValue(aiScores[b]) ?? 0) - (getScoreValue(aiScores[a]) ?? 0));
       return [...scored, ...unscored];
     }
     return indices;
@@ -2004,7 +2080,7 @@ function AppMain({ currentUser, logout }) {
         setDisagreementPopup({
           paperIndex: globalIndex,
           aiSuggestion: aiSug,
-          aiScore: aiData.score,
+          aiScore: getScoreValue(aiData),
           aiReason: aiData.reason,
           userDecision: d,
         });
@@ -2073,11 +2149,11 @@ function AppMain({ currentUser, logout }) {
   }, [decisions, papers, sidebarSearch, sidebarFilter]);
 
   const goNext = useCallback(() => {
-    if (safeIndex < filteredIndices.length - 1) setCurrentIndex(safeIndex + 1);
+    if (safeIndex < filteredIndices.length - 1) { setCurrentIndex(safeIndex + 1); setAiPopoverIndex(null); }
   }, [safeIndex, filteredIndices.length]);
 
   const goPrev = useCallback(() => {
-    if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
+    if (safeIndex > 0) { setCurrentIndex(safeIndex - 1); setAiPopoverIndex(null); }
   }, [safeIndex]);
 
   // Keyboard shortcuts
@@ -2108,14 +2184,18 @@ function AppMain({ currentUser, logout }) {
       }
       return str;
     };
-    const header = 'conf,title,author,decision,ai_score,ai_suggestion,ai_reason,abstract,doi,pdf_url,arxiv_id';
+    const critSlugs = screeningCriteria.map(c => slugifyCriterion(c.name));
+    const critHeaders = critSlugs.map(s => `ai_${s}`);
+    const header = ['conf','title','author','decision','ai_overall','ai_suggestion','ai_reason', ...critHeaders, 'abstract','doi','pdf_url','arxiv_id'].join(',');
     const rows = papers.map((p, i) => {
       const abs = getAbstract(i);
       const score = aiScores[i];
+      const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
         escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
         escapeCSV(decisions[i] || ''),
-        escapeCSV(score?.score ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        ...critCols,
         escapeCSV(abs),
         escapeCSV(p.doi || ''), escapeCSV(p.pdf_url || ''), escapeCSV(p.arxiv_id || ''),
       ].join(',');
@@ -2128,7 +2208,7 @@ function AppMain({ currentUser, logout }) {
     a.download = 'slr_triage_results.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [papers, decisions, getAbstract, aiScores]);
+  }, [papers, decisions, getAbstract, aiScores, screeningCriteria]);
 
   // Export standardized JSON
   const exportProjectJSON = useCallback(() => {
@@ -2174,14 +2254,18 @@ function AppMain({ currentUser, logout }) {
       }
       return str;
     };
-    const header = 'conf,title,author,decision,ai_score,ai_suggestion,ai_reason,abstract,doi,pdf_url,arxiv_id';
+    const critSlugs = screeningCriteria.map(c => slugifyCriterion(c.name));
+    const critHeaders = critSlugs.map(s => `ai_${s}`);
+    const header = ['conf','title','author','decision','ai_overall','ai_suggestion','ai_reason', ...critHeaders, 'abstract','doi','pdf_url','arxiv_id'].join(',');
     const rows = papers.map((p, i) => {
       const abs = getAbstract(i);
       const score = aiScores[i];
+      const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
         escapeCSV(p.conf), escapeCSV(p.title), escapeCSV(p.author),
         escapeCSV(decisions[i] || ''),
-        escapeCSV(score?.score ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
+        ...critCols,
         escapeCSV(abs),
         escapeCSV(p.doi || ''), escapeCSV(p.pdf_url || ''), escapeCSV(p.arxiv_id || ''),
       ].join(',');
@@ -2194,7 +2278,7 @@ function AppMain({ currentUser, logout }) {
     a.download = projectSlug(projectName) + '_results.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [papers, decisions, getAbstract, aiScores, projectName]);
+  }, [papers, decisions, getAbstract, aiScores, projectName, screeningCriteria]);
 
   const exportDisagreements = useCallback(() => {
     const entries = Object.entries(aiDisagreements);
@@ -2241,6 +2325,7 @@ function AppMain({ currentUser, logout }) {
 
   // AI scoring — batch process unscored papers
   const startScoring = useCallback(async () => {
+    if (screeningCriteria.length === 0) { alert('Please define at least one screening criterion in Settings before scoring.'); return; }
     if (!apiKey) { setShowApiKeyModal(true); return; }
     setScoringError(null);
     if (!(await checkProxy())) {
@@ -2272,7 +2357,7 @@ function AppMain({ currentUser, logout }) {
       const results = await Promise.allSettled(
         batch.map(async (idx) => {
           const abs = cleanAbstractText(getAbstract(idx));
-          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal);
+          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal, screeningCriteria);
           return { idx, result };
         })
       );
@@ -2294,7 +2379,7 @@ function AppMain({ currentUser, logout }) {
     setScoringStopping(false);
     setScoringDone(true);
     setTimeout(() => setScoringDone(false), 2000);
-  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal, checkProxy]);
+  }, [apiKey, papers, aiScores, getAbstract, scoringModel, researchGoal, screeningCriteria, checkProxy]);
 
   const [scoringStopping, setScoringStopping] = useState(false);
   const stopScoring = useCallback(() => {
@@ -2304,6 +2389,7 @@ function AppMain({ currentUser, logout }) {
 
   const [scoringOne, setScoringOne] = useState(null); // globalIndex being scored
   const scoreOnePaper = useCallback(async (gIdx) => {
+    if (screeningCriteria.length === 0) { alert('Please define at least one screening criterion in Settings before scoring.'); return; }
     if (!apiKey) { setShowApiKeyModal(true); return; }
     setScoringError(null);
     if (!(await checkProxy())) {
@@ -2315,14 +2401,14 @@ function AppMain({ currentUser, logout }) {
     if (!abs || abs === 'not_found') { alert('No abstract to score.'); return; }
     setScoringOne(gIdx);
     try {
-      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel, researchGoal);
+      const result = await scoreOneAbstract(apiKey, papers[gIdx].title, cleanAbstractText(abs), scoringModel, researchGoal, screeningCriteria);
       setAiScores(prev => ({ ...prev, [gIdx]: result }));
     } catch (err) {
       console.error('[SLR] Single score error:', err);
       alert('Scoring failed: ' + err.message);
     }
     setScoringOne(null);
-  }, [apiKey, papers, getAbstract, scoringModel, researchGoal, checkProxy]);
+  }, [apiKey, papers, getAbstract, scoringModel, researchGoal, screeningCriteria, checkProxy]);
 
   const pendingScoreRef = useRef(false);
   const saveApiKey = useCallback((key) => {
@@ -2352,7 +2438,11 @@ function AppMain({ currentUser, logout }) {
     const cleaned = {};
     let removed = 0;
     for (const [idx, score] of Object.entries(aiScores)) {
-      if (typeof score.score === 'number' && score.suggestion && score.reason) {
+      const valid = score && score.suggestion && score.reason && (
+        (score.criteria && typeof score.overall === 'number') || // new format
+        typeof score.score === 'number' // legacy format
+      );
+      if (valid) {
         cleaned[idx] = score;
       } else {
         removed++;
@@ -2402,28 +2492,62 @@ function AppMain({ currentUser, logout }) {
     setSuggestingKeywords(false);
   }, [apiKey, scoringModel, checkProxy]);
 
+  // Suggest screening criteria via Claude API
+  const suggestCriteria = useCallback(async (goal) => {
+    if (!apiKey) { alert('Set API key first (use Score Papers button).'); return; }
+    if (!(await checkProxy())) return;
+    setSuggestingCriteria(true);
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+        body: JSON.stringify({
+          model: scoringModel,
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: `Given this research goal for a systematic literature review:\n\n"${goal}"\n\nSuggest 3 screening criteria for evaluating paper abstracts. Each criterion should have a short name and a one-sentence description explaining what to look for.\n\nRespond in JSON only:\n[{"name": "Criterion Name", "description": "What this criterion evaluates"}]`
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      if (!Array.isArray(parsed)) throw new Error('Expected array');
+      setCriteriaDraft(parsed.slice(0, 5).map(c => ({ name: c.name || '', description: c.description || '' })));
+    } catch (err) {
+      console.error('[SLR] Suggest criteria error:', err);
+      alert('Failed to suggest criteria: ' + err.message);
+    }
+    setSuggestingCriteria(false);
+  }, [apiKey, scoringModel, checkProxy]);
+
   // Open highlight settings panel
   const openHlSettings = useCallback(() => {
     setHlDraft(hlCategories.map(c => ({ ...c })));
     setGoalDraft(researchGoal);
+    setCriteriaDraft(screeningCriteria.map(c => ({ ...c })));
     setHlSettingsOpen(true);
-  }, [hlCategories, researchGoal]);
+  }, [hlCategories, researchGoal, screeningCriteria]);
 
   const saveHlSettings = useCallback(() => {
     if (!hlDraft) return;
     const cats = hlDraft.map((c, i) => ({ ...c, cls: `hl-cat-${i}` }));
     setHlCategories(cats);
     setResearchGoal(goalDraft);
+    setScreeningCriteria(criteriaDraft.filter(c => c.name.trim()));
     setHlSettingsOpen(false);
     setHlDraft(null);
-  }, [hlDraft, goalDraft]);
+  }, [hlDraft, goalDraft, criteriaDraft]);
 
   // Sorted scored papers list for AI Insights sidebar
   const scoredPapersList = useMemo(() => {
     return Object.entries(aiScores)
       .map(([idx, score]) => ({ idx: Number(idx), ...score, paper: papers[Number(idx)] }))
       .filter(item => item.paper)
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => (getScoreValue(b) ?? 0) - (getScoreValue(a) ?? 0));
   }, [aiScores, papers]);
 
   // Count papers not scored by the currently selected model
@@ -2527,6 +2651,7 @@ function AppMain({ currentUser, logout }) {
                     if (ownerProject) {
                       if (ownerProject.hlCategories) setHlCategories(ownerProject.hlCategories);
                       if (ownerProject.researchGoal) setResearchGoal(ownerProject.researchGoal);
+                      if (ownerProject.screeningCriteria) setScreeningCriteria(ownerProject.screeningCriteria);
                     }
                     const myDecisions = await fsGetDecisions(userId, sp.projectId);
                     setDecisions(myDecisions);
@@ -3053,16 +3178,30 @@ function AppMain({ currentUser, logout }) {
               {scoringOne === globalIndex ? (
                 <span className="ai-score-badge score-mid">Scoring...</span>
               ) : aiScores[globalIndex] ? (
-                <span
-                  className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'} clickable hl-tip`}
-                  data-tip={`Click to rescore with ${modelName(scoringModel)}`}
-                  onClick={() => scoreOnePaper(globalIndex)}
-                >
-                  AI: {aiScores[globalIndex].score}<span className="rescore-icon"> ↻</span>
+                <span className="ai-badge-wrapper">
+                  <span
+                    className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])} clickable`}
+                    onClick={(e) => { e.stopPropagation(); setAiPopoverIndex(aiPopoverIndex === globalIndex ? null : globalIndex); }}
+                  >
+                    AI: {formatScoreDisplay(aiScores[globalIndex])}{isLegacyScore(aiScores[globalIndex]) ? ' (legacy)' : ''}
+                  </span>
+                  <span
+                    className="ai-score-badge score-rescore clickable hl-tip tip-right"
+                    data-tip={`Rescore with ${modelName(scoringModel)}`}
+                    onClick={() => scoreOnePaper(globalIndex)}
+                  >↻</span>
+                  {aiPopoverIndex === globalIndex && aiScores[globalIndex].criteria && (
+                    <div className="ai-popover">
+                      {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
+                        <div key={ci} className="ai-popover-line">{c.name}: <strong>{c.score}/5</strong></div>
+                      ))}
+                      <div className="ai-popover-reason">{aiScores[globalIndex].reason}</div>
+                    </div>
+                  )}
                 </span>
               ) : (
                 <span
-                  className="ai-score-badge score-unscored clickable hl-tip"
+                  className="ai-score-badge score-unscored clickable hl-tip tip-right"
                   data-tip={apiKey ? 'Click to score this paper' : 'Click to set API key'}
                   onClick={() => apiKey ? scoreOnePaper(globalIndex) : setShowApiKeyModal(true)}
                 >
@@ -3124,6 +3263,11 @@ function AppMain({ currentUser, logout }) {
               {aiScores[globalIndex]?.reason && (
                 <div className="ai-reason">
                   <strong>AI ({modelName(aiScores[globalIndex].model)}):</strong> {aiScores[globalIndex].reason}
+                  {aiScores[globalIndex].criteria && (
+                    <div className="ai-criteria-detail">
+                      {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3257,16 +3401,21 @@ function AppMain({ currentUser, logout }) {
         {/* Current paper insight */}
         {aiScores[globalIndex] ? (
           <div className="ai-insight-current">
-            <div className="ai-insight-label">Current Paper</div>
+            <div className="ai-insight-label">Current Paper{isLegacyScore(aiScores[globalIndex]) ? ' (legacy score)' : ''}</div>
             <div className="ai-insight-score-row">
-              <span className={`ai-score-badge score-${aiScores[globalIndex].score >= 70 ? 'high' : aiScores[globalIndex].score >= 40 ? 'mid' : 'low'}`}>
-                Score: {aiScores[globalIndex].score}
+              <span className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])}`}>
+                Score: {formatScoreDisplay(aiScores[globalIndex])}{isLegacyScore(aiScores[globalIndex]) ? '/100' : '/5'}
               </span>
               <span className={`sidebar-decision ${aiScores[globalIndex].suggestion}`}>
                 {aiScores[globalIndex].suggestion.charAt(0).toUpperCase() + aiScores[globalIndex].suggestion.slice(1)}
               </span>
               {aiScores[globalIndex].model && <span className="ai-via-model">via {modelName(aiScores[globalIndex].model)}</span>}
             </div>
+            {aiScores[globalIndex].criteria && (
+              <div className="ai-criteria-detail">
+                {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+              </div>
+            )}
             <div className="ai-insight-reason">{aiScores[globalIndex].reason}</div>
           </div>
         ) : (
@@ -3285,8 +3434,8 @@ function AppMain({ currentUser, logout }) {
               onClick={() => { jumpToPaper(item.idx); }}
             >
               <div className="sidebar-item-top">
-                <span className={`ai-score-badge score-${item.score >= 70 ? 'high' : item.score >= 40 ? 'mid' : 'low'}`}>
-                  {item.score}
+                <span className={`ai-score-badge score-${scoreColorClass(item)}`} title={scoreCriteriaLines(item)?.map(c => `${c.name}: ${c.score}/5`).join(' · ') || ''}>
+                  {formatScoreDisplay(item)}{isLegacyScore(item) ? ' ⚠' : ''}
                 </span>
                 <span className={`sidebar-decision ${item.suggestion}`}>
                   {item.suggestion.charAt(0).toUpperCase() + item.suggestion.slice(1)}
@@ -3617,6 +3766,56 @@ function AppMain({ currentUser, logout }) {
                   {suggestingKeywords ? 'Suggesting...' : 'Suggest Keywords'}
                 </button>
                 {!apiKey && <span className="hl-hint">Set API key first (use Score Papers button)</span>}
+              </div>
+
+              <div className="hl-settings-section">
+                <label className="hl-settings-label">Screening Criteria <span className="hl-hint">(used by AI scoring, max 5)</span></label>
+                {criteriaDraft.map((crit, i) => (
+                  <div key={i} className="criteria-row">
+                    <div className="criteria-row-top">
+                      <input
+                        className="criteria-name-input"
+                        value={crit.name}
+                        onChange={(e) => {
+                          const next = [...criteriaDraft];
+                          next[i] = { ...next[i], name: e.target.value };
+                          setCriteriaDraft(next);
+                        }}
+                        placeholder="Criterion name"
+                      />
+                      <button
+                        className="hl-cat-delete"
+                        onClick={() => setCriteriaDraft(criteriaDraft.filter((_, j) => j !== i))}
+                      >&times;</button>
+                    </div>
+                    <input
+                      className="criteria-desc-input"
+                      value={crit.description}
+                      onChange={(e) => {
+                        const next = [...criteriaDraft];
+                        next[i] = { ...next[i], description: e.target.value };
+                        setCriteriaDraft(next);
+                      }}
+                      placeholder="What this criterion evaluates"
+                    />
+                  </div>
+                ))}
+                {criteriaDraft.length < 5 && (
+                  <button
+                    className="hl-add-cat-btn"
+                    onClick={() => setCriteriaDraft([...criteriaDraft, { name: '', description: '' }])}
+                  >
+                    + Add Criterion
+                  </button>
+                )}
+                <button
+                  className={`hl-suggest-btn ${!apiKey ? 'disabled' : ''}`}
+                  onClick={() => apiKey && suggestCriteria(goalDraft)}
+                  disabled={suggestingCriteria || !apiKey}
+                  style={{ marginTop: 6 }}
+                >
+                  {suggestingCriteria ? 'Suggesting...' : 'Suggest with AI'}
+                </button>
               </div>
 
               <div className="hl-settings-section">
