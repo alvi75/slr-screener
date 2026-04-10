@@ -238,7 +238,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Auto-discovery** — on every app load, collectionGroup query finds all projects where user's email is a collaborator (case-insensitive). All collaborator emails normalized to lowercase in Firestore.
 - **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines
 - **Notification bell** — header icon with red badge showing pending invite count; clicking opens dropdown with invite cards (owner email, project name, role, Accept/Decline buttons)
-- **Accept** — moves project to "Shared with me" sidebar, updates Firestore status to `accepted`
+- **Accept** — moves project to "Shared with me" sidebar, updates Firestore status to `accepted`, stores collaborator's `userId` on the collaborator record for dashboard decision fetching
 - **Decline** — removes invite from notifications, updates Firestore status to `declined`; owner sees "declined" in share modal
 - **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
 - **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
@@ -250,6 +250,7 @@ Two-phase dashboard accessible to ALL annotators (not just owner). Opens automat
 **Phase 1 — Screening:**
 - **My Progress** — Recharts pie chart (screened vs remaining), bar chart (Yes/No counts), stacked venue breakdown
 - **Team Progress** — progress bars showing each annotator's screened count (e.g., "120/1100"). NO decisions shown — bias protection
+- **Team Progress** — visible to all collaborators (not just owner). Shows each annotator's email, role, progress bar, screened count, Yes count, and No count. Owner's progress visible to collaborators. Only aggregate counts shown (no per-paper decisions) for bias protection.
 - **My AI Disagreements** — summary count with export button
 - **Phase indicator** — "Screening (In Progress)" or "Screening (Complete)" toggle
 

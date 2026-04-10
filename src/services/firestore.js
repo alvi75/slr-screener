@@ -331,12 +331,14 @@ export async function getCollaborators(projectId) {
  * @param {string} projectId
  * @param {string} email
  */
-export async function acceptInvite(projectId, email) {
+export async function acceptInvite(projectId, email, userId) {
   const normalizedEmail = email.toLowerCase();
   const path = `projects/${projectId}/collaborators/${normalizedEmail}`;
   console.log('[Sharing] acceptInvite writing status=accepted to', path);
   const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
-  await setDoc(ref, { status: 'accepted', acceptedAt: serverTimestamp() }, { merge: true });
+  const data = { status: 'accepted', acceptedAt: serverTimestamp() };
+  if (userId) data.userId = userId;
+  await setDoc(ref, data, { merge: true });
   console.log('[Sharing] acceptInvite completed for', path);
 }
 

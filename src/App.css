@@ -3388,6 +3388,9 @@
 }
 .dash-team-email { font-size: 13px; font-weight: 600; color: #2d3436; }
 .dash-team-role { font-size: 11px; color: #b2bec3; text-transform: capitalize; }
+.dash-team-counts { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.dash-team-yes { font-size: 12px; color: #00b894; font-weight: 600; }
+.dash-team-no { font-size: 12px; color: #d63031; font-weight: 600; }
 
 /* AI disagreements summary */
 .dash-dis-summary {

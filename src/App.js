@@ -1504,7 +1504,7 @@ function AppMain({ currentUser, logout }) {
   const [pendingInvites, setPendingInvites] = useState([]); // enriched invites with projectName, ownerEmail
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
-  const [, setProjectOwnerId] = useState(null);
+  const [projectOwnerId, setProjectOwnerId] = useState(null);
 
   // ── Conflict Resolution ───────────────────────────────────────
   const [conflictData, setConflictData] = useState(null); // { annotatorDecisions, annotators, finalDecisions, analysis }
@@ -1603,14 +1603,14 @@ function AppMain({ currentUser, logout }) {
   const handleAcceptInvite = useCallback(async (invite) => {
     try {
       console.log('[Sharing] Accepting invite for project:', invite.projectId, 'email:', currentUser?.email);
-      await fsAcceptInvite(invite.projectId, currentUser?.email);
+      await fsAcceptInvite(invite.projectId, currentUser?.email, userId);
       console.log('[Sharing] Invite accepted successfully');
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
       setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
     } catch (err) {
       console.warn('[Sharing] Accept invite failed:', err.message);
     }
-  }, [currentUser]);
+  }, [currentUser, userId]);
 
   const handleDeclineInvite = useCallback(async (invite) => {
     try {
@@ -1632,14 +1632,31 @@ function AppMain({ currentUser, logout }) {
 
     try {
       const collabs = await fsGetCollaborators(projectId);
+      // Determine owner — for shared projects, use projectOwnerId; for own projects, use userId
+      const ownerId = projectOwnerId || userId;
+      let ownerEmail = currentUser?.email;
+      if (projectOwnerId && projectOwnerId !== userId) {
+        const meta = await fsGetProjectMeta(projectId);
+        if (meta?.ownerEmail) ownerEmail = meta.ownerEmail;
+      }
+      const acceptedAnnotators = collabs.filter(c => c.role === 'annotator' && c.status === 'accepted');
       const annotators = [
-        { id: userId, email: currentUser?.email, role: 'owner' },
-        ...collabs.filter(c => c.role === 'annotator' && c.status === 'accepted').map(c => ({ id: null, email: c.email, role: 'annotator' })),
+        { id: ownerId, email: ownerEmail, role: 'owner' },
+        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator' })),
       ];
 
+      // Fetch decisions for all annotators with known userIds
       const annotatorDecisions = {};
-      const ownerDecisions = await fsGetDecisions(userId, projectId);
-      annotatorDecisions[userId] = ownerDecisions;
+      for (const a of annotators) {
+        if (a.id) {
+          try {
+            annotatorDecisions[a.id] = await fsGetDecisions(a.id, projectId);
+          } catch (err) {
+            console.warn(`[Dashboard] Failed to fetch decisions for ${a.email}:`, err.message);
+            annotatorDecisions[a.id] = {};
+          }
+        }
+      }
 
       const finalDecisions = await fsGetFinalDecisions(projectId);
       const analysis = analyzeConflicts(annotatorDecisions);
@@ -1656,7 +1673,7 @@ function AppMain({ currentUser, logout }) {
     } catch (err) {
       console.warn('[Dashboard] Failed to load team data:', err.message);
     }
-  }, [projectId, userId, currentUser, navigate]);
+  }, [projectId, userId, currentUser, projectOwnerId, navigate]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -2757,11 +2774,14 @@ function AppMain({ currentUser, logout }) {
       { name: 'No', count: myNo, fill: '#d63031' },
     ];
 
-    // Team progress (counts only — no decisions shown, bias protection)
+    // Team progress (counts only — no per-paper decisions shown, bias protection)
     const teamProgress = annotators.map((a, i) => {
       const aid = annotatorIds[i] || a.id;
-      const count = aid ? Object.keys(annotatorDecisions[aid] || {}).length : 0;
-      return { email: a.email, role: a.role, count, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+      const decs = annotatorDecisions[aid] || {};
+      const count = Object.keys(decs).length;
+      const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
+      const noCount = Object.values(decs).filter(d => d === 'No').length;
+      return { email: a.email, role: a.role, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
     const allDone = teamProgress.length > 1 && teamProgress.every(t => t.count >= dbTotalPapers);
 
@@ -2862,7 +2882,7 @@ function AppMain({ currentUser, logout }) {
             </div>
 
             {/* Team Progress (counts only) */}
-            {teamProgress.length > 1 && (
+            {teamProgress.length > 0 && (
               <div className="dash-section">
                 <h3>Team Progress</h3>
                 <div className="dash-team-grid">
@@ -2875,7 +2895,11 @@ function AppMain({ currentUser, logout }) {
                       <div className="conflict-progress-bar">
                         <div className="conflict-progress-fill" style={{ width: `${t.pct}%` }} />
                       </div>
-                      <span className="conflict-progress-label">{t.count} / {dbTotalPapers}</span>
+                      <div className="dash-team-counts">
+                        <span className="conflict-progress-label">{t.count} / {dbTotalPapers}</span>
+                        <span className="dash-team-yes">Yes: {t.yesCount}</span>
+                        <span className="dash-team-no">No: {t.noCount}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
