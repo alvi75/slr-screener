@@ -1390,8 +1390,8 @@ function AppMain({ currentUser, logout }) {
     const path = location.pathname;
     if (path === '/setup') return 'setup';
     if (path.startsWith('/project/') && path.endsWith('/dashboard')) return 'dashboard';
-    if (path.startsWith('/project/') && path.endsWith('/conflicts')) return 'dashboard'; // conflicts is resolution phase of dashboard
-    if (path.startsWith('/project/')) return 'screener';
+    if (path.startsWith('/project/') && path.endsWith('/conflicts')) return 'dashboard';
+    if (path.startsWith('/project/')) return 'screener'; // matches /project/{slug} and /project/{slug}/{index}
     return 'home';
   }, [location.pathname]);
 
@@ -1407,14 +1407,25 @@ function AppMain({ currentUser, logout }) {
     try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
   });
+  // Read paper index and venue filter from URL if available
+  const urlPaperIndex = useMemo(() => {
+    const m = location.pathname.match(/^\/project\/[^/]+\/(\d+)$/);
+    return m ? parseInt(m[1], 10) : null;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const urlVenue = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('venue') || null;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [currentIndex, setCurrentIndex] = useState(() => {
+    // URL paper index will be resolved after papers load; start with localStorage
     try { const s = localStorage.getItem(INDEX_KEY); return s ? parseInt(s, 10) : 0; }
     catch { return 0; }
   });
   const [venueFilter, setVenueFilter] = useState(() => {
-    try {
-      return localStorage.getItem(VENUE_KEY) || 'All';
-    } catch { return 'All'; }
+    if (urlVenue) return urlVenue;
+    try { return localStorage.getItem(VENUE_KEY) || 'All'; }
+    catch { return 'All'; }
   });
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
@@ -2146,13 +2157,35 @@ function AppMain({ currentUser, logout }) {
   const globalIndex = filteredIndices[safeIndex];
   const paper = papers[globalIndex];
 
-  // Save index (only after papers loaded to avoid overwriting with 0)
+  // Resolve URL paper index once papers are loaded
+  const urlIndexResolvedRef = useRef(false);
+  useEffect(() => {
+    if (urlIndexResolvedRef.current || papers.length === 0 || urlPaperIndex == null) return;
+    if (urlPaperIndex >= 0 && urlPaperIndex < papers.length) {
+      urlIndexResolvedRef.current = true;
+      // Find position within filtered indices
+      const pos = filteredIndices.indexOf(urlPaperIndex);
+      if (pos !== -1) {
+        setCurrentIndex(pos);
+      } else {
+        // Paper not in current filter — reset to All
+        setVenueFilter('All');
+        setCurrentIndex(urlPaperIndex);
+      }
+    }
+  }, [papers.length, urlPaperIndex, filteredIndices]);
+
+  // Save index to localStorage and sync URL
   useEffect(() => {
     if (papers.length > 0) {
-      console.log('[SLR] Saving index:', currentIndex, 'venue:', venueFilter);
       localStorage.setItem(INDEX_KEY, String(currentIndex));
+      // Update URL with paper index and venue filter
+      if (appView === 'screener' && projectId && globalIndex != null) {
+        const venueParam = venueFilter !== 'All' ? `?venue=${encodeURIComponent(venueFilter)}` : '';
+        navigate(`/project/${projectId}/${globalIndex}${venueParam}`, { replace: true });
+      }
     }
-  }, [currentIndex, papers.length, venueFilter]);
+  }, [currentIndex, papers.length, venueFilter, appView, projectId, globalIndex, navigate]);
 
   const getAbstract = useCallback((gIdx) => {
     if (abstractEdits[gIdx]) return abstractEdits[gIdx];

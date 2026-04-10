@@ -125,7 +125,8 @@ Modern landing page shown on first login (returning users go directly to screene
 - **Navigation** — clicking the "SLR Screener" title in the screening header returns to the dashboard; setup page has "Back to Home" link
 - **React Router** — URL-based navigation with `react-router-dom` v6:
   - `/` — Home dashboard (project list)
-  - `/project/:projectId` — Screening view
+  - `/project/:projectId` — Screening view (redirects to `/project/:projectId/:paperIndex`)
+  - `/project/:projectId/:paperIndex` — Screening view at specific paper (supports `?venue=` query param)
   - `/project/:projectId/dashboard` — Team dashboard
   - `/project/:projectId/conflicts` — Conflict resolution (resolution phase)
   - `/login` — Login page (redirects to `/` if authenticated)
