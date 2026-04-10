@@ -1371,7 +1371,8 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={currentUser ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={currentUser ? <Navigate to="/home" replace /> : <LoginPage />} />
+      <Route path="/" element={currentUser ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
         <AuthGate>
           <AppMain currentUser={currentUser} logout={logout} />
@@ -1388,11 +1389,12 @@ function AppMain({ currentUser, logout }) {
   // Derive appView from URL path
   const appView = useMemo(() => {
     const path = location.pathname;
+    if (path === '/home') return 'home';
     if (path === '/setup') return 'setup';
     if (path.startsWith('/project/') && path.endsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/project/') && path.endsWith('/conflicts')) return 'dashboard';
-    if (path.startsWith('/project/')) return 'screener'; // matches /project/{slug} and /project/{slug}/{index}
-    return 'home';
+    if (path.startsWith('/project/')) return 'screener';
+    return 'home'; // fallback
   }, [location.pathname]);
 
   const [dashboardProjects, setDashboardProjects] = useState([]);
@@ -1940,7 +1942,7 @@ function AppMain({ currentUser, logout }) {
 
   // Navigate back to home dashboard
   const goHome = useCallback(async () => {
-    navigate('/');
+    navigate('/home');
     // Refresh project list
     try {
       const projects = await fsGetProjects(userId);

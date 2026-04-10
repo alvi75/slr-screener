@@ -124,12 +124,14 @@ Modern landing page shown on first login (returning users go directly to screene
 - **Recent Projects** — grid of project cards from Firestore, showing name, paper count, date, and badges (Demo, Shared)
 - **Navigation** — clicking the "SLR Screener" title in the screening header returns to the dashboard; setup page has "Back to Home" link
 - **React Router** — URL-based navigation with `react-router-dom` v6:
-  - `/` — Home dashboard (project list)
-  - `/project/:projectId` — Screening view (redirects to `/project/:projectId/:paperIndex`)
+  - `/` — Redirects to `/home` (authenticated) or `/login` (unauthenticated)
+  - `/home` — Home dashboard (project list, create new project)
+  - `/setup` — Setup/import view for creating a new project
+  - `/project/:projectId` — Screening view, defaults to paper 0
   - `/project/:projectId/:paperIndex` — Screening view at specific paper (supports `?venue=` query param)
   - `/project/:projectId/dashboard` — Team dashboard
   - `/project/:projectId/conflicts` — Conflict resolution (resolution phase)
-  - `/login` — Login page (redirects to `/` if authenticated)
+  - `/login` — Login page (redirects to `/home` if authenticated)
   - `/setup` — New project setup
   - Browser back/forward, trackpad gestures, and shareable URLs all work
   - `AuthGate` component redirects unauthenticated users to `/login`
