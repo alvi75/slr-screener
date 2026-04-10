@@ -1334,10 +1334,10 @@
   cursor: help;
   border-bottom: 1px dotted #b2bec3;
 }
-.criteria-tip:hover::after {
+.criteria-tip::after {
   content: attr(data-tip);
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   background: #2d3436;
@@ -1345,9 +1345,18 @@
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 12px;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 280px;
+  width: max-content;
+  text-align: center;
+  line-height: 1.4;
   z-index: 1000;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.criteria-tip:hover::after {
+  opacity: 1;
 }
 
 /* AI score inline breakdown panel */
