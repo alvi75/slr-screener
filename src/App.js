@@ -334,10 +334,11 @@ function highlightAbstract(text, hlData) {
 
 // ===== AI SCORING =====
 const SCORING_CRITERIA = [
-  { slug: 'topical_alignment', name: 'Topical Alignment' },
-  { slug: 'methodological_relevance', name: 'Methodological Relevance' },
-  { slug: 'specificity', name: 'Specificity' },
+  { slug: 'topical_alignment', name: 'Topical Alignment', desc: "How well the paper's subject matter matches the research goal" },
+  { slug: 'methodological_relevance', name: 'Methodological Relevance', desc: "Whether the paper's methods or approach are useful for this review" },
+  { slug: 'specificity', name: 'Specificity', desc: 'Whether the paper provides concrete details the review needs (e.g., model names, parameters, benchmarks)' },
 ];
+const CRITERIA_DESC = Object.fromEntries(SCORING_CRITERIA.map(c => [c.name, c.desc]));
 
 function buildScoringPrompt(goal) {
   return `You are helping screen papers for a systematic literature review.
@@ -3360,7 +3361,11 @@ function AppMain({ currentUser, logout }) {
               <div className="ai-reason">
                 <strong>AI ({modelName(aiScores[globalIndex].model)}):</strong> {aiScores[globalIndex].reason}
                 <div className="ai-criteria-detail">
-                  {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+                  {scoreCriteriaLines(aiScores[globalIndex]).map((c, i, arr) => (
+                    <React.Fragment key={i}>
+                      <span className="criteria-label-hint" title={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
+                    </React.Fragment>
+                  ))}
                 </div>
               </div>
             )}

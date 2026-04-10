@@ -1329,6 +1329,10 @@
   color: #6c5ce7;
   font-weight: 500;
 }
+.criteria-label-hint {
+  cursor: help;
+  border-bottom: 1px dotted #b2bec3;
+}
 
 /* AI score inline breakdown panel */
 .ai-breakdown-panel {
