@@ -1689,6 +1689,8 @@ function AppMain({ currentUser, logout }) {
       await fsSaveProjectMeta(projectId, {
         ownerId: userId,
         ownerEmail: currentUser?.email,
+        ownerDisplayName: displayName || currentUser?.displayName || '',
+        ownerPhotoURL: currentUser?.photoURL || '',
         projectName,
       });
       await fsAddCollaborator(projectId, email, shareRole, userId);
@@ -1726,10 +1728,12 @@ function AppMain({ currentUser, logout }) {
       console.log('[Sharing] Invite accepted successfully');
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
       setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
+      setNotificationsOpen(false);
+      navigate('/home');
     } catch (err) {
       console.warn('[Sharing] Accept invite failed:', err.message);
     }
-  }, [currentUser, userId]);
+  }, [currentUser, userId, navigate]);
 
   const handleDeclineInvite = useCallback(async (invite) => {
     try {
@@ -1885,7 +1889,7 @@ function AppMain({ currentUser, logout }) {
         // Sync demo project metadata to Firestore
         const demoId = projectSlug('Model Sizes in SE Research 2025');
         syncProjectToFirestore(userId, demoId, { name: 'Model Sizes in SE Research 2025', isDemo: true, createdAt: Date.now(), paperCount: data.papers.length });
-        try { fsSaveProjectMeta(demoId, { ownerId: userId, ownerEmail: currentUser?.email, projectName: 'Model Sizes in SE Research 2025' })?.catch(() => {}); } catch (e) { /* ignore */ }
+        try { fsSaveProjectMeta(demoId, { ownerId: userId, ownerEmail: currentUser?.email, ownerDisplayName: displayName || currentUser?.displayName || '', ownerPhotoURL: currentUser?.photoURL || '', projectName: 'Model Sizes in SE Research 2025' })?.catch(() => {}); } catch (e) { /* ignore */ }
         setProjectRole('owner');
         setProjectOwnerId(null);
       });
@@ -1930,7 +1934,7 @@ function AppMain({ currentUser, logout }) {
     // Sync new project to Firestore + save top-level meta for sharing
     const newProjectId = projectSlug(name);
     firestoreSync(() => fsSaveProject(userId, newProjectId, { name, isDemo: false, createdAt: Date.now(), paperCount: importedPapers.length }));
-    try { fsSaveProjectMeta(newProjectId, { ownerId: userId, ownerEmail: currentUser?.email, projectName: name })?.catch(() => {}); } catch (e) { /* ignore */ }
+    try { fsSaveProjectMeta(newProjectId, { ownerId: userId, ownerEmail: currentUser?.email, ownerDisplayName: displayName || currentUser?.displayName || '', ownerPhotoURL: currentUser?.photoURL || '', projectName: name })?.catch(() => {}); } catch (e) { /* ignore */ }
     setProjectRole('owner');
     setProjectOwnerId(null);
     navigate(`/project/${projectSlug(name)}`);
@@ -2119,7 +2123,7 @@ function AppMain({ currentUser, logout }) {
             try {
               const meta = await fsGetProjectMeta(s.projectId);
               if (meta && meta.ownerId !== userId) {
-                const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerId: meta.ownerId };
+                const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
                 if (s.status === 'accepted') {
                   enrichedAccepted.push(enriched);
                 } else if (s.status === 'pending') {
@@ -2857,9 +2861,14 @@ function AppMain({ currentUser, logout }) {
                     {sp.projectName}
                     <span className="project-shared-badge">Shared</span>
                   </div>
-                  <div className="home-project-meta">
-                    <span>by {sp.ownerEmail}</span>
-                    <span>{sp.role}</span>
+                  <div className="home-project-meta shared-owner-row">
+                    {sp.ownerPhotoURL ? (
+                      <img src={sp.ownerPhotoURL} alt="" className="shared-owner-avatar" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="shared-owner-avatar-placeholder">{(sp.ownerDisplayName || sp.ownerEmail || '?')[0].toUpperCase()}</span>
+                    )}
+                    <span>by {sp.ownerDisplayName || sp.ownerEmail}</span>
+                    <span className="shared-role-pill">{sp.role}</span>
                   </div>
                 </div>
               ))}
@@ -3285,8 +3294,15 @@ function AppMain({ currentUser, logout }) {
                 ) : (
                   pendingInvites.map(inv => (
                     <div key={inv.projectId} className="notif-invite-card">
-                      <div className="notif-invite-text">
-                        <strong>{inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{inv.role}</span>
+                      <div className="notif-invite-row">
+                        {inv.ownerPhotoURL ? (
+                          <img src={inv.ownerPhotoURL} alt="" className="notif-owner-avatar" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
+                        )}
+                        <div className="notif-invite-text">
+                          <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{inv.role}</span>
+                        </div>
                       </div>
                       <div className="notif-invite-actions">
                         <button className="notif-accept-btn" onClick={() => { handleAcceptInvite(inv); }}>Accept</button>
@@ -3842,7 +3858,7 @@ function AppMain({ currentUser, logout }) {
                       <span className="project-shared-badge">Shared with me</span>
                     </span>
                     <span className="project-item-meta">
-                      by {sp.ownerEmail} · {sp.role}
+                      by {sp.ownerDisplayName || sp.ownerEmail} · {sp.role}
                     </span>
                   </div>
                 </div>
