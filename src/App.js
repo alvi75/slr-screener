@@ -330,34 +330,30 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal, criteria) 
   return { criteria: c, overall, suggestion, reason: parsed.reason, model };
 }
 
-// ===== AI SCORE HELPERS (backward compat) =====
-// Old format: { score: number (0-100), suggestion, reason, model }
-// New format: { criteria: { slug: 1-5, ... }, overall: number (1-5), suggestion, reason, model }
-function isLegacyScore(s) {
-  return s != null && typeof s === 'object' && !s.criteria;
+// ===== AI SCORE HELPERS =====
+// Score format: { criteria: { slug: 1-5, ... }, overall: number (1-5), suggestion, reason, model }
+// Old 0-100 scores without .criteria are treated as non-existent.
+function isValidScore(s) {
+  return s != null && typeof s === 'object' && !!s.criteria;
 }
 function getScoreValue(s) {
-  if (s == null) return null;
-  if (typeof s === 'number') return s;
-  if (s.criteria) return s.overall;
-  return s.score; // legacy object
+  if (!isValidScore(s)) return null;
+  return s.overall;
 }
 function scoreColorClass(s) {
   const v = getScoreValue(s);
   if (v == null) return 'unscored';
-  if (isLegacyScore(s)) return v >= 70 ? 'high' : v >= 40 ? 'mid' : 'low';
   return v >= 4.0 ? 'high' : v >= 2.5 ? 'mid' : 'low';
 }
 function formatScoreDisplay(s) {
-  if (s == null) return '?';
-  if (isLegacyScore(s)) return String(s.score);
+  if (!isValidScore(s)) return '?';
   return String(s.overall);
 }
 function unslugify(slug) {
   return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 function scoreCriteriaLines(s) {
-  if (!s || !s.criteria) return null;
+  if (!isValidScore(s)) return null;
   return Object.entries(s.criteria).map(([slug, val]) => ({ name: unslugify(slug), score: val }));
 }
 
@@ -2013,8 +2009,8 @@ function AppMain({ currentUser, logout }) {
       return acc;
     }, []);
     if (sortByScore) {
-      const scored = indices.filter(i => aiScores[i] != null);
-      const unscored = indices.filter(i => aiScores[i] == null);
+      const scored = indices.filter(i => isValidScore(aiScores[i]));
+      const unscored = indices.filter(i => !isValidScore(aiScores[i]));
       scored.sort((a, b) => (getScoreValue(aiScores[b]) ?? 0) - (getScoreValue(aiScores[a]) ?? 0));
       return [...scored, ...unscored];
     }
@@ -2438,10 +2434,7 @@ function AppMain({ currentUser, logout }) {
     const cleaned = {};
     let removed = 0;
     for (const [idx, score] of Object.entries(aiScores)) {
-      const valid = score && score.suggestion && score.reason && (
-        (score.criteria && typeof score.overall === 'number') || // new format
-        typeof score.score === 'number' // legacy format
-      );
+      const valid = score && score.criteria && typeof score.overall === 'number' && score.suggestion && score.reason;
       if (valid) {
         cleaned[idx] = score;
       } else {
@@ -2545,6 +2538,7 @@ function AppMain({ currentUser, logout }) {
   // Sorted scored papers list for AI Insights sidebar
   const scoredPapersList = useMemo(() => {
     return Object.entries(aiScores)
+      .filter(([, score]) => isValidScore(score))
       .map(([idx, score]) => ({ idx: Number(idx), ...score, paper: papers[Number(idx)] }))
       .filter(item => item.paper)
       .sort((a, b) => (getScoreValue(b) ?? 0) - (getScoreValue(a) ?? 0));
@@ -3177,13 +3171,13 @@ function AppMain({ currentUser, logout }) {
               )}
               {scoringOne === globalIndex ? (
                 <span className="ai-score-badge score-mid">Scoring...</span>
-              ) : aiScores[globalIndex] ? (
+              ) : isValidScore(aiScores[globalIndex]) ? (
                 <span className="ai-badge-wrapper">
                   <span
                     className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])} clickable`}
                     onClick={(e) => { e.stopPropagation(); setAiPopoverIndex(aiPopoverIndex === globalIndex ? null : globalIndex); }}
                   >
-                    AI: {formatScoreDisplay(aiScores[globalIndex])}{isLegacyScore(aiScores[globalIndex]) ? ' (legacy)' : ''}
+                    AI: {formatScoreDisplay(aiScores[globalIndex])}
                   </span>
                   <span
                     className="ai-score-badge score-rescore clickable hl-tip tip-right"
@@ -3260,14 +3254,12 @@ function AppMain({ currentUser, logout }) {
               ) : (
                 <div className="abstract-text">{highlightsOn ? highlightAbstract(abstract, hlData) : cleanAbstractText(abstract)}</div>
               )}
-              {aiScores[globalIndex]?.reason && (
+              {isValidScore(aiScores[globalIndex]) && (
                 <div className="ai-reason">
                   <strong>AI ({modelName(aiScores[globalIndex].model)}):</strong> {aiScores[globalIndex].reason}
-                  {aiScores[globalIndex].criteria && (
-                    <div className="ai-criteria-detail">
-                      {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
-                    </div>
-                  )}
+                  <div className="ai-criteria-detail">
+                    {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+                  </div>
                 </div>
               )}
             </div>
@@ -3399,23 +3391,21 @@ function AppMain({ currentUser, logout }) {
           </select>
         </div>
         {/* Current paper insight */}
-        {aiScores[globalIndex] ? (
+        {isValidScore(aiScores[globalIndex]) ? (
           <div className="ai-insight-current">
-            <div className="ai-insight-label">Current Paper{isLegacyScore(aiScores[globalIndex]) ? ' (legacy score)' : ''}</div>
+            <div className="ai-insight-label">Current Paper</div>
             <div className="ai-insight-score-row">
               <span className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])}`}>
-                Score: {formatScoreDisplay(aiScores[globalIndex])}{isLegacyScore(aiScores[globalIndex]) ? '/100' : '/5'}
+                Score: {aiScores[globalIndex].overall}/5
               </span>
               <span className={`sidebar-decision ${aiScores[globalIndex].suggestion}`}>
                 {aiScores[globalIndex].suggestion.charAt(0).toUpperCase() + aiScores[globalIndex].suggestion.slice(1)}
               </span>
               {aiScores[globalIndex].model && <span className="ai-via-model">via {modelName(aiScores[globalIndex].model)}</span>}
             </div>
-            {aiScores[globalIndex].criteria && (
-              <div className="ai-criteria-detail">
-                {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
-              </div>
-            )}
+            <div className="ai-criteria-detail">
+              {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+            </div>
             <div className="ai-insight-reason">{aiScores[globalIndex].reason}</div>
           </div>
         ) : (
@@ -3435,7 +3425,7 @@ function AppMain({ currentUser, logout }) {
             >
               <div className="sidebar-item-top">
                 <span className={`ai-score-badge score-${scoreColorClass(item)}`} title={scoreCriteriaLines(item)?.map(c => `${c.name}: ${c.score}/5`).join(' · ') || ''}>
-                  {formatScoreDisplay(item)}{isLegacyScore(item) ? ' ⚠' : ''}
+                  {formatScoreDisplay(item)}
                 </span>
                 <span className={`sidebar-decision ${item.suggestion}`}>
                   {item.suggestion.charAt(0).toUpperCase() + item.suggestion.slice(1)}

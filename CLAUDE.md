@@ -184,7 +184,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Claude API integration** — evaluates each abstract on user-defined screening criteria (1–5 each), computes overall average, suggests Yes (≥3.5) or No with one-sentence explanation. Returns `{ criteria, overall, suggestion, reason, model }`.
 - **User-defined screening criteria** — `screeningCriteria` state: array of `{ name, description }` objects (max 5), persisted in localStorage (`slr-screener-criteria`) and synced to Firestore project settings. Criteria names are slugified via `slugifyCriterion()` for JSON keys. Must have ≥1 criterion before AI scoring is enabled.
 - **Criteria setup UI** — in Highlight Settings panel, below Research Goal: editable list of criteria (name + description inputs), delete button, "+ Add Criterion" (max 5), "Suggest with AI" button (calls Claude to generate 3 criteria from research goal)
-- **Backward compatibility** — legacy scores (0–100 single number) detected via `isLegacyScore()` and displayed with "(legacy)" label; helper functions `getScoreValue()`, `scoreColorClass()`, `formatScoreDisplay()`, `scoreCriteriaLines()` handle both formats
+- **Score helpers** — `isValidScore()`, `getScoreValue()`, `scoreColorClass()`, `formatScoreDisplay()`, `scoreCriteriaLines()`. Old 0–100 format scores (no `.criteria`) are treated as non-existent and shown as "AI: ?"
 - **Model selector** — Claude Haiku 4.5, Sonnet 4.6, Opus 4.6 (configurable in AI Insights sidebar)
 - **Research goal** — customizable prompt that drives scoring relevance
 - **Batch scoring** — batched in groups of 5 with `Promise.allSettled`, stoppable mid-run
