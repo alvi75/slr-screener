@@ -3508,7 +3508,11 @@ function AppMain({ currentUser, logout }) {
               {aiScores[globalIndex].model && <span className="ai-via-model">via {modelName(aiScores[globalIndex].model)}</span>}
             </div>
             <div className="ai-criteria-detail">
-              {scoreCriteriaLines(aiScores[globalIndex]).map(c => `${c.name}: ${c.score}/5`).join(' · ')}
+              {scoreCriteriaLines(aiScores[globalIndex]).map((c, i, arr) => (
+                    <React.Fragment key={i}>
+                      <span className="criteria-label-hint" title={CRITERIA_DESC[c.name] || ''}>{c.name}</span>: {c.score}/5{i < arr.length - 1 ? ' · ' : ''}
+                    </React.Fragment>
+                  ))}
             </div>
             <div className="ai-insight-reason">{aiScores[globalIndex].reason}</div>
           </div>
