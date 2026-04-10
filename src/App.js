@@ -3252,26 +3252,15 @@ function AppMain({ currentUser, logout }) {
               {scoringOne === globalIndex ? (
                 <span className="ai-score-badge score-mid">Scoring...</span>
               ) : isValidScore(aiScores[globalIndex]) ? (
-                <span className="ai-badge-wrapper">
+                <span
+                  className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])} clickable`}
+                  onClick={() => setAiPopoverIndex(aiPopoverIndex === globalIndex ? null : globalIndex)}
+                >
+                  AI: {formatScoreDisplay(aiScores[globalIndex])}
                   <span
-                    className={`ai-score-badge score-${scoreColorClass(aiScores[globalIndex])} clickable`}
-                    onClick={(e) => { e.stopPropagation(); setAiPopoverIndex(aiPopoverIndex === globalIndex ? null : globalIndex); }}
-                  >
-                    AI: {formatScoreDisplay(aiScores[globalIndex])}
-                  </span>
-                  <span
-                    className="ai-score-badge score-rescore clickable hl-tip tip-right"
-                    data-tip={`Rescore with ${modelName(scoringModel)}`}
-                    onClick={() => scoreOnePaper(globalIndex)}
-                  >↻</span>
-                  {aiPopoverIndex === globalIndex && aiScores[globalIndex].criteria && (
-                    <div className="ai-popover">
-                      {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
-                        <div key={ci} className="ai-popover-line">{c.name}: <strong>{c.score}/5</strong></div>
-                      ))}
-                      <div className="ai-popover-reason">{aiScores[globalIndex].reason}</div>
-                    </div>
-                  )}
+                    className="rescore-icon"
+                    onClick={(e) => { e.stopPropagation(); scoreOnePaper(globalIndex); }}
+                  > ↻</span>
                 </span>
               ) : (
                 <span
@@ -3283,6 +3272,21 @@ function AppMain({ currentUser, logout }) {
                 </span>
               )}
             </div>
+            {aiPopoverIndex === globalIndex && isValidScore(aiScores[globalIndex]) && (
+              <div className="ai-breakdown-panel">
+                {scoreCriteriaLines(aiScores[globalIndex]).map((c, ci) => (
+                  <div key={ci} className="ai-breakdown-row">
+                    <span className="ai-breakdown-name">{c.name}</span>
+                    <span className="ai-breakdown-dots">
+                      {[1,2,3,4,5].map(n => (
+                        <span key={n} className={`ai-dot ${n <= c.score ? (c.score >= 4 ? 'dot-high' : c.score >= 3 ? 'dot-mid' : 'dot-low') : 'dot-empty'}`} />
+                      ))}
+                    </span>
+                    <span className={`ai-breakdown-score ${c.score >= 4 ? 'sc-high' : c.score >= 3 ? 'sc-mid' : 'sc-low'}`}>{c.score}/5</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="paper-title" dangerouslySetInnerHTML={{ __html: cleanTitle(paper.title) }} />
             <div className="paper-authors">{paper.author}</div>
 
