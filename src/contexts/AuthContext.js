@@ -45,9 +45,16 @@ export function AuthProvider({ children }) {
     return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   }
 
-  function googleSignIn() {
-    if (isMobile()) {
-      return signInWithRedirect(auth, googleProvider);
+  async function googleSignIn() {
+    const mobile = isMobile();
+    console.log('[Auth] googleSignIn called, isMobile:', mobile);
+    if (mobile) {
+      try {
+        return await signInWithRedirect(auth, googleProvider);
+      } catch (err) {
+        console.warn('[Auth] signInWithRedirect failed, falling back to popup:', err);
+        return signInWithPopup(auth, googleProvider);
+      }
     }
     return signInWithPopup(auth, googleProvider);
   }
@@ -79,10 +86,15 @@ export function AuthProvider({ children }) {
     // to prevent race condition where onAuthStateChanged fires with
     // user=null before getRedirectResult resolves on mobile
     getRedirectResult(auth)
-      .then(() => {})
-      .catch(() => {})
+      .then((result) => {
+        console.log('[Auth] getRedirectResult resolved:', result, 'user:', result?.user || null);
+      })
+      .catch((err) => {
+        console.error('[Auth] getRedirectResult error:', err);
+      })
       .finally(() => {
         unsubscribe = onAuthStateChanged(auth, (user) => {
+          console.log('[Auth] onAuthStateChanged fired, user:', user);
           setCurrentUser(user);
           setLoading(false);
         });
