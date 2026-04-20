@@ -1701,7 +1701,7 @@ function AppMain({ currentUser, logout }) {
       console.warn('[Sharing] Invite failed:', err.message);
     }
     setShareLoading(false);
-  }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators]);
+  }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators, displayName]);
 
   const handleRemoveCollaborator = useCallback(async (email) => {
     try {
@@ -1893,7 +1893,7 @@ function AppMain({ currentUser, logout }) {
         setProjectRole('owner');
         setProjectOwnerId(null);
       });
-  }, [userId, currentUser, navigate]);
+  }, [userId, currentUser, navigate, displayName]);
 
   // Reload data: demo re-fetches JSON, imported re-reads from localStorage
   const loadData = useCallback(() => {
@@ -1938,7 +1938,7 @@ function AppMain({ currentUser, logout }) {
     setProjectRole('owner');
     setProjectOwnerId(null);
     navigate(`/project/${projectSlug(name)}`);
-  }, [userId, currentUser, firestoreSync, navigate]);
+  }, [userId, currentUser, firestoreSync, navigate, displayName]);
 
   // Append papers to existing project (dedup by title)
   const appendPapers = useCallback((newPapers) => {
