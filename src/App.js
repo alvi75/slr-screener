@@ -3257,9 +3257,7 @@ function AppMain({ currentUser, logout }) {
         <div className="header-left">
           <button className="hamburger-btn" onClick={() => { setProjectSidebarOpen(v => !v); if (userId) fsGetProjects(userId)?.then(p => setDashboardProjects(p || [])).catch(() => {}); }} aria-label="Menu">☰</button>
           <h1 className="header-home-link" onClick={goHome} style={{ cursor: 'pointer' }}><span className="logo-bold">SLR</span> <span className="logo-light">Screener</span></h1>
-          {(hasCollaborators || projectRole !== 'owner') && (
-            <button className="header-btn btn-dashboard" onClick={() => openTeamDashboard('screening')}>Dashboard</button>
-          )}
+          <button className="header-btn btn-dashboard" onClick={() => openTeamDashboard('screening')}>Dashboard</button>
         </div>
         <div className="header-right">
           <button className="header-btn btn-reload" onClick={loadData}>Reload Data</button>
