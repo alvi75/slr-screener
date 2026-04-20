@@ -159,10 +159,11 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Paper Screening
 
-- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Natural height card — no forced stretch or min-height. Abstract area fixed at `height: 400px` with `overflow-y: auto` — every card identical size, buttons always at same position. Yes/No buttons and navigation sit directly below the card with small margins, no gap.
+- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Natural height card — no forced stretch or min-height. Abstract area uses `height: auto; max-height: 400px` with `overflow-y: auto` — short abstracts wrap tightly with no gap, long abstracts get a scrollbar at 400px. Yes/No buttons and navigation sit directly below the card with small margins, no gap.
 - **Triage buttons** — Two big buttons: Yes (green) / No (red) with visual feedback (current decision highlighted)
 - **Auto-advance** — moves to next paper after new decision; stays when changing existing decision
 - **Keyboard shortcuts** — `Y` Yes, `N` No, `H` Toggle highlights, `←` Previous, `→` Next
+- **Swipe navigation** — on touch devices, swipe left for next paper, swipe right for previous (60px threshold, horizontal-dominant)
 
 ### Venue Filtering
 
@@ -273,6 +274,17 @@ Two-phase dashboard accessible to ALL annotators (not just owner). Opens automat
 - **Final decisions** — stored at `projects/{projectId}/finalDecisions/{paperId}` with decision, resolvedBy, resolvedAt, comment
 - **Export Resolved** — CSV with title, author, venue, abstract, doi, each annotator's decision columns, final_decision, conflict_comment, resolved_by, resolved_at
 - **Kappa utility** (`src/utils/kappa.js`) — pure functions: `cohensKappa`, `fleissKappa`, `interpretKappa`, `analyzeConflicts`
+
+### Responsive Design
+
+Fully responsive layout across all screen sizes. No external CSS framework — pure media queries in `src/App.css`.
+
+- **Desktop/laptop** — `.app.screening-view` uses `min-height: 100vh; overflow-y: auto` (not fixed height). Paper card wraps content naturally, no forced stretching.
+- **Tablet/mobile (≤768px)** — header stacks vertically (logo row + scrollable action buttons row), filters scroll horizontally, paper card/title/authors/abstract use smaller fonts, decision buttons stack full-width, sidebars expand to 85vw, abstract section capped at `max-height: 300px`
+- **Small phone (≤480px)** — header buttons show emoji icons only (hide text), smaller title (14px) and abstract (13px) fonts, compact decision buttons
+- **Mobile bottom nav bar** — fixed bottom navigation with Home, Score, Log, Insights icons. Only visible on screens ≤768px. Content has `padding-bottom: 70px` to avoid overlap.
+- **Touch-friendly** — all buttons `min-height: 44px` on mobile (Apple guideline), filter buttons padded for touch, swipe left/right on paper card for navigation
+- **Swipe support** — `touchstart`/`touchend` listeners with 60px horizontal threshold and dominant-axis check
 
 ## Project Structure
 

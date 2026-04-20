@@ -2399,6 +2399,31 @@ function AppMain({ currentUser, logout }) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [editing, makeDecision, goNext, goPrev, projectRole]);
 
+  // Swipe support for touch devices (swipe left = next, swipe right = prev)
+  useEffect(() => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const handleTouchStart = (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    };
+    const handleTouchEnd = (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      // Only trigger if horizontal swipe is dominant and > 60px
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0) goNext();
+        else goPrev();
+      }
+    };
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [goNext, goPrev]);
+
   // Export CSV
   const exportCSV = useCallback(() => {
     const escapeCSV = (s) => {
@@ -4057,6 +4082,26 @@ function AppMain({ currentUser, logout }) {
           </div>
         </>
       )}
+
+      {/* Mobile Bottom Nav Bar */}
+      <nav className="mobile-bottom-nav">
+        <button className="mobile-bottom-nav-item" onClick={goHome}>
+          <span className="mobile-bottom-nav-icon">🏠</span>
+          <span className="mobile-bottom-nav-label">Home</span>
+        </button>
+        <button className="mobile-bottom-nav-item" onClick={() => { if (!apiKey) { setShowApiKeyModal(true); } else { startScoring(); } }}>
+          <span className="mobile-bottom-nav-icon">⚡</span>
+          <span className="mobile-bottom-nav-label">Score</span>
+        </button>
+        <button className="mobile-bottom-nav-item" onClick={() => setSidebarOpen(v => !v)}>
+          <span className="mobile-bottom-nav-icon">📋</span>
+          <span className="mobile-bottom-nav-label">Log</span>
+        </button>
+        <button className="mobile-bottom-nav-item" onClick={() => setAiInsightsOpen(v => !v)}>
+          <span className="mobile-bottom-nav-icon">🤖</span>
+          <span className="mobile-bottom-nav-label">Insights</span>
+        </button>
+      </nav>
 
       {/* API Key Modal */}
       {showApiKeyModal && (

@@ -6,8 +6,8 @@
   position: relative;
 }
 .app.screening-view {
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
@@ -796,7 +796,8 @@
 /* Abstract */
 .abstract-section {
   margin-bottom: 0;
-  height: 400px;
+  height: auto;
+  max-height: 400px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -3540,3 +3541,193 @@
   cursor: pointer;
 }
 .dash-dis-export:hover { background: #a29bfe22; }
+
+/* ===== MOBILE BOTTOM NAV BAR ===== */
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* ===== RESPONSIVE: TABLET & MOBILE (max-width: 768px) ===== */
+@media (max-width: 768px) {
+  .app {
+    padding: 12px 8px;
+    max-width: 100vw;
+  }
+  .app.screening-view {
+    padding-bottom: 70px;
+  }
+
+  /* Header: stack vertically */
+  .header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .header-right {
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .header-btn {
+    font-size: 11px;
+    padding: 6px 10px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  /* Filters: horizontal scroll */
+  .filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .filter-btn {
+    padding: 8px 14px;
+    min-height: 44px;
+  }
+
+  /* Paper card */
+  .paper-card {
+    padding: 14px 16px;
+  }
+  .paper-title {
+    font-size: 16px;
+  }
+  .paper-authors {
+    font-size: 12px;
+  }
+  .paper-abstract, .abstract-text {
+    font-size: 14px;
+  }
+  .abstract-section {
+    height: auto;
+    max-height: 300px;
+  }
+
+  /* AI score badge */
+  .ai-score-badge {
+    font-size: 11px;
+  }
+
+  /* Decision buttons: full width stacked */
+  .decision-section {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .decision-btn, .decision-btn-big {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  /* Navigation */
+  .navigation {
+    font-size: 13px;
+  }
+  .nav-btn {
+    min-height: 44px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  /* Sidebars: wider on mobile */
+  .sidebar {
+    width: 85vw;
+  }
+  .project-sidebar {
+    width: 85vw;
+  }
+
+  /* Mobile bottom nav bar */
+  .mobile-bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.1);
+    padding: 8px 0;
+    z-index: 99;
+  }
+  .mobile-bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    border: none;
+    font-size: 10px;
+    color: #636e72;
+    cursor: pointer;
+    padding: 4px 12px;
+    min-height: 44px;
+    justify-content: center;
+    transition: color 0.15s;
+  }
+  .mobile-bottom-nav-item:hover,
+  .mobile-bottom-nav-item.active {
+    color: #0984e3;
+  }
+  .mobile-bottom-nav-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+  .mobile-bottom-nav-label {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* Touch-friendly: all buttons min 44px */
+  button {
+    min-height: 44px;
+  }
+  .hamburger-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ===== RESPONSIVE: SMALL PHONE (max-width: 480px) ===== */
+@media (max-width: 480px) {
+  .paper-title {
+    font-size: 14px;
+  }
+  .paper-abstract, .abstract-text {
+    font-size: 13px;
+  }
+  /* Header buttons: icon-only (hide text via clipping, show abbreviations) */
+  .header-btn {
+    font-size: 0;
+    padding: 8px 10px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .header-btn::before {
+    font-size: 14px;
+  }
+  .header-btn.btn-score::before { content: "⚡"; font-size: 14px; }
+  .header-btn.btn-export::before { content: "📥"; font-size: 14px; }
+  .header-btn.btn-log::before { content: "📋"; font-size: 14px; }
+  .header-btn.btn-insights::before { content: "🤖"; font-size: 14px; }
+  .header-btn.btn-reload::before { content: "🔄"; font-size: 14px; }
+  .header-btn.btn-dashboard::before { content: "📊"; font-size: 14px; }
+  .header-btn.btn-stop::before { content: "⏹"; font-size: 14px; }
+
+  /* Decision buttons */
+  .decision-btn-big {
+    padding: 12px;
+    font-size: 16px;
+  }
+}
