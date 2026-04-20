@@ -73,13 +73,22 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    // Handle redirect result from mobile Google sign-in
-    getRedirectResult(auth).catch(() => {});
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setLoading(false);
-    });
-    return unsubscribe;
+    let unsubscribe;
+
+    // Wait for redirect result before listening to auth state
+    // to prevent race condition where onAuthStateChanged fires with
+    // user=null before getRedirectResult resolves on mobile
+    getRedirectResult(auth)
+      .then(() => {})
+      .catch(() => {})
+      .finally(() => {
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          setCurrentUser(user);
+          setLoading(false);
+        });
+      });
+
+    return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
   const value = {
