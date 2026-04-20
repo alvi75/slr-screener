@@ -47,7 +47,7 @@ All fields except `title` are optional. Missing fields are normalized to `"not_f
 
 Firebase Auth with two sign-in methods:
 
-- **Google sign-in** — one-click OAuth, bypasses email verification. Uses `signInWithPopup` on desktop, `signInWithRedirect` on mobile (detected via viewport width < 768 or user agent) with automatic fallback to `signInWithPopup` if redirect fails. `getRedirectResult` awaited before `onAuthStateChanged` listener is attached — prevents race condition where auth state fires `user=null` before redirect result resolves. Debug `console.log` statements throughout auth flow (`[Auth]` prefix) for mobile troubleshooting.
+- **Google sign-in** — one-click OAuth, bypasses email verification. Uses `signInWithPopup` on all devices (desktop and mobile). No redirect flow — popup is simpler and avoids race conditions with `onAuthStateChanged`.
 - **Email/password** — sign-up with password strength validation (8+ chars, uppercase, lowercase, number, special character), real-time strength indicator (Weak/Medium/Strong), show/hide password toggle
 - **Email verification flow** — after sign-up, shows "Check Your Email" screen with:
   - Auto-polling every 5 seconds (calls `reloadUser()` to check verification status)
