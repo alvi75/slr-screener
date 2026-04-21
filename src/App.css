@@ -767,6 +767,8 @@
   margin-bottom: 8px;
   color: #2d3436;
   flex-shrink: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .paper-authors {
   font-size: 14px;
@@ -774,6 +776,8 @@
   margin-bottom: 10px;
   line-height: 1.4;
   flex-shrink: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .paper-links {
   display: flex;
@@ -803,6 +807,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
   margin-bottom: 0;
 }
@@ -837,6 +842,9 @@
   font-size: 15px;
   line-height: 1.75;
   color: #2d3436;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .abstract-edit {
   width: 100%;
@@ -1394,6 +1402,8 @@
   border-radius: 6px;
   border-left: 3px solid #a29bfe;
   flex-shrink: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .ai-criteria-detail {
   margin-top: 6px;
