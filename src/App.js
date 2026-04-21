@@ -1520,7 +1520,6 @@ function AppMain({ currentUser, logout }) {
     try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
   });
-  const [disagreementBanner, setDisagreementBanner] = useState(null); // { aiSuggestion, aiScore, userDecision }
 
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
@@ -2305,22 +2304,18 @@ function AppMain({ currentUser, logout }) {
     if (globalIndex === undefined) return;
     const aiData = aiScores[globalIndex];
 
-    // Apply decision immediately — no blocking modal
+    // Apply decision immediately
     applyDecision(d);
 
-    // Check for AI disagreement — show informational banner and log
+    // Log AI disagreement if applicable
     if (aiData && aiData.suggestion) {
       const aiSug = aiData.suggestion.charAt(0).toUpperCase() + aiData.suggestion.slice(1);
       if (aiSug !== d && (aiSug === 'Yes' || aiSug === 'No')) {
-        const aiScore = getScoreValue(aiData);
-        setDisagreementBanner({ aiSuggestion: aiSug, aiScore, userDecision: d });
-
-        // Log disagreement
         const paper = papers[globalIndex];
         const record = {
           title: paper?.title || '',
           venue: paper?.conf || '',
-          aiScore,
+          aiScore: getScoreValue(aiData),
           aiSuggestion: aiSug,
           aiReason: aiData.reason || '',
           userDecision: d,
@@ -2328,11 +2323,7 @@ function AppMain({ currentUser, logout }) {
         };
         setAiDisagreements((prev) => ({ ...prev, [globalIndex]: record }));
         fsSaveAIDisagreement(userId, projectId, String(globalIndex), record).catch(() => {});
-      } else {
-        setDisagreementBanner(null);
       }
-    } else {
-      setDisagreementBanner(null);
     }
   }, [globalIndex, aiScores, applyDecision, papers, userId, projectId]);
 
@@ -2368,11 +2359,6 @@ function AppMain({ currentUser, logout }) {
 
   const goPrev = useCallback(() => {
     if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
-  }, [safeIndex]);
-
-  // Dismiss disagreement banner whenever the current paper changes
-  useEffect(() => {
-    setDisagreementBanner(null);
   }, [safeIndex]);
 
   // Keyboard shortcuts
@@ -3558,15 +3544,21 @@ function AppMain({ currentUser, logout }) {
             </>; })()}
           </div>
 
-          {/* AI Disagreement Banner */}
-          {disagreementBanner && (
-            <div className="disagreement-banner">
-              <span>
-                AI suggested <strong className={`dis-${disagreementBanner.aiSuggestion.toLowerCase()}`}>{disagreementBanner.aiSuggestion}</strong> (score {disagreementBanner.aiScore}) — you chose <strong className={`dis-${disagreementBanner.userDecision.toLowerCase()}`}>{disagreementBanner.userDecision}</strong>
-              </span>
-              <button className="disagreement-banner-dismiss" onClick={() => setDisagreementBanner(null)}>&times;</button>
-            </div>
-          )}
+          {/* AI Disagreement Banner — derived from current paper state */}
+          {(() => {
+            const dec = decisions[globalIndex];
+            const aiSug = aiScores[globalIndex]?.suggestion;
+            if (!dec || !aiSug) return null;
+            const normSug = aiSug.charAt(0).toUpperCase() + aiSug.slice(1);
+            if (normSug === dec || (normSug !== 'Yes' && normSug !== 'No')) return null;
+            return (
+              <div className="disagreement-banner">
+                <span>
+                  AI suggested <strong className={`dis-${normSug.toLowerCase()}`}>{normSug}</strong> (score {getScoreValue(aiScores[globalIndex])}) — you chose <strong className={`dis-${dec.toLowerCase()}`}>{dec}</strong>
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Navigation */}
           <div className="navigation">

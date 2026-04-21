@@ -1138,18 +1138,6 @@
   color: #2d3436;
 }
 .disagreement-banner strong { color: #2d3436; }
-.disagreement-banner-dismiss {
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: #636e72;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  margin-left: 12px;
-  flex-shrink: 0;
-}
-.disagreement-banner-dismiss:hover { color: #2d3436; }
 .dis-yes { color: #00b894; }
 .dis-no { color: #d63031; }
 .dis-export-btn {
