@@ -3368,16 +3368,29 @@ function AppMain({ currentUser, logout }) {
 
       {/* Progress */}
       <div className="progress-section">
-        <div className="progress-stats">
-          <span>Yes: {yesCount}</span>
-          <span>No: {noCount}</span>
-          <span>Remaining: {totalPapers - decidedCount}</span>
-        </div>
-        <div className="progress-bar-track">
+        <div className="progress-bar-track progress-bar-labeled">
           <div className="progress-bar-segments">
-            {yesCount > 0 && <div className="progress-bar-fill fill-yes" style={{ width: `${(yesCount / totalPapers) * 100}%` }} />}
-            {noCount > 0 && <div className="progress-bar-fill fill-no" style={{ width: `${(noCount / totalPapers) * 100}%` }} />}
+            {yesCount > 0 && (
+              <div className="progress-bar-fill fill-yes" style={{ width: `${(yesCount / totalPapers) * 100}%` }}>
+                {(yesCount / totalPapers) >= 0.08 && <span className="progress-bar-label">Yes: {yesCount}</span>}
+              </div>
+            )}
+            {noCount > 0 && (
+              <div className="progress-bar-fill fill-no" style={{ width: `${(noCount / totalPapers) * 100}%` }}>
+                {(noCount / totalPapers) >= 0.08 && <span className="progress-bar-label">No: {noCount}</span>}
+              </div>
+            )}
+            {(totalPapers - decidedCount) > 0 && (
+              <div className="progress-bar-remaining" style={{ width: `${((totalPapers - decidedCount) / totalPapers) * 100}%` }}>
+                {((totalPapers - decidedCount) / totalPapers) >= 0.12 && <span className="progress-bar-label-remaining">{totalPapers - decidedCount} left</span>}
+              </div>
+            )}
           </div>
+        </div>
+        <div className="progress-stats-inline">
+          {(yesCount / totalPapers) < 0.08 && yesCount > 0 && <span className="progress-stat-yes">Yes: {yesCount}</span>}
+          {(noCount / totalPapers) < 0.08 && noCount > 0 && <span className="progress-stat-no">No: {noCount}</span>}
+          {((totalPapers - decidedCount) / totalPapers) < 0.12 && (totalPapers - decidedCount) > 0 && <span className="progress-stat-remaining">{totalPapers - decidedCount} left</span>}
         </div>
       </div>
 

@@ -156,23 +156,22 @@ describe('Triage', () => {
       expect(screen.getByText(MOCK_PAPERS[0].title)).toBeInTheDocument();
     });
 
-    // Initial state
-    expect(screen.getByText('Yes: 0')).toBeInTheDocument();
-    expect(screen.getByText('No: 0')).toBeInTheDocument();
-    expect(screen.getByText('Remaining: 5')).toBeInTheDocument();
+    // Initial state — no Yes/No segments, only remaining
+    expect(screen.getByText('5 left')).toBeInTheDocument();
+    expect(screen.queryByText(/Yes:/)).not.toBeInTheDocument();
 
     // Make Yes decision
     fireEvent.keyDown(document, { key: 'y' });
     await waitFor(() => {
       expect(screen.getByText('Yes: 1')).toBeInTheDocument();
-      expect(screen.getByText('Remaining: 4')).toBeInTheDocument();
+      expect(screen.getByText('4 left')).toBeInTheDocument();
     });
 
     // Make No decision on paper 2
     fireEvent.keyDown(document, { key: 'n' });
     await waitFor(() => {
       expect(screen.getByText('No: 1')).toBeInTheDocument();
-      expect(screen.getByText('Remaining: 3')).toBeInTheDocument();
+      expect(screen.getByText('3 left')).toBeInTheDocument();
     });
   });
 });
