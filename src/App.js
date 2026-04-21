@@ -2363,11 +2363,16 @@ function AppMain({ currentUser, logout }) {
   }, [decisions, papers, sidebarSearch, sidebarFilter]);
 
   const goNext = useCallback(() => {
-    if (safeIndex < filteredIndices.length - 1) { setCurrentIndex(safeIndex + 1); setDisagreementBanner(null); }
+    if (safeIndex < filteredIndices.length - 1) setCurrentIndex(safeIndex + 1);
   }, [safeIndex, filteredIndices.length]);
 
   const goPrev = useCallback(() => {
-    if (safeIndex > 0) { setCurrentIndex(safeIndex - 1); setDisagreementBanner(null); }
+    if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
+  }, [safeIndex]);
+
+  // Dismiss disagreement banner whenever the current paper changes
+  useEffect(() => {
+    setDisagreementBanner(null);
   }, [safeIndex]);
 
   // Keyboard shortcuts
