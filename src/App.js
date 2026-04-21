@@ -1704,7 +1704,7 @@ function AppMain({ currentUser, logout }) {
       setShareEmail('');
       await loadCollaborators();
     } catch (err) {
-      setShareError('Failed to send invite. Please try again.');
+      setShareError('Failed to send invite: ' + err.message);
       console.warn('[Sharing] Invite failed:', err.message);
     }
     setShareLoading(false);
