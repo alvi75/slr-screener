@@ -1808,9 +1808,11 @@ function AppMain({ currentUser, logout }) {
         if (meta?.ownerEmail) ownerEmail = meta.ownerEmail;
       }
       const acceptedAnnotators = collabs.filter(c => c.role === 'annotator' && c.status === 'accepted');
+      const pendingCollaborators = collabs.filter(c => c.status === 'pending');
       const annotators = [
-        { id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '' },
-        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '' })),
+        { id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '', status: 'accepted' },
+        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' })),
+        ...pendingCollaborators.map(c => ({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' })),
       ];
 
       // Fetch decisions and display names for all annotators with known userIds
@@ -2163,26 +2165,27 @@ function AppMain({ currentUser, logout }) {
     if (!userId || !currentUser?.email) return;
     (async () => {
       try {
+        console.log('[Sharing] Fetching shared projects for:', currentUser.email);
         const shared = await fsGetSharedProjects(currentUser.email);
-        if (shared.length > 0) {
-          const enrichedAccepted = [];
-          const enrichedPending = [];
-          for (const s of shared) {
-            try {
-              const meta = await fsGetProjectMeta(s.projectId);
-              if (meta && meta.ownerId !== userId) {
-                const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
-                if (s.status === 'accepted') {
-                  enrichedAccepted.push(enriched);
-                } else if (s.status === 'pending') {
-                  enrichedPending.push(enriched);
-                }
+        console.log('[Sharing] getSharedProjects result:', shared.length, 'entries:', shared.map(s => `${s.projectId}(${s.status})`));
+        const enrichedAccepted = [];
+        const enrichedPending = [];
+        for (const s of shared) {
+          try {
+            const meta = await fsGetProjectMeta(s.projectId);
+            if (meta && meta.ownerId !== userId) {
+              const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
+              if (s.status === 'accepted') {
+                enrichedAccepted.push(enriched);
+              } else if (s.status === 'pending') {
+                enrichedPending.push(enriched);
               }
-            } catch { /* skip inaccessible projects */ }
-          }
-          setSharedProjects(enrichedAccepted);
-          setPendingInvites(enrichedPending);
+            }
+          } catch { /* skip inaccessible projects */ }
         }
+        console.log('[Sharing] Enriched:', enrichedAccepted.length, 'accepted,', enrichedPending.length, 'pending');
+        setSharedProjects(enrichedAccepted);
+        setPendingInvites(enrichedPending);
       } catch (err) {
         console.warn('[Sharing] Failed to load shared projects:', err.message, err);
       }
@@ -3020,13 +3023,14 @@ function AppMain({ currentUser, logout }) {
     // Team progress (counts only — no per-paper decisions shown, bias protection)
     const teamProgress = annotators.map((a, i) => {
       const aid = annotatorIds[i] || a.id;
-      const decs = annotatorDecisions[aid] || {};
+      const decs = aid ? (annotatorDecisions[aid] || {}) : {};
       const count = Object.keys(decs).length;
       const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
       const noCount = Object.values(decs).filter(d => d === 'No').length;
-      return { email: a.email, displayName: a.displayName || '', role: a.role, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+      return { email: a.email, displayName: a.displayName || '', role: a.role, status: a.status || 'accepted', count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
-    const allDone = teamProgress.length > 1 && teamProgress.every(t => t.count >= dbTotalPapers);
+    const acceptedProgress = teamProgress.filter(t => t.status === 'accepted');
+    const allDone = acceptedProgress.length > 1 && acceptedProgress.every(t => t.count >= dbTotalPapers);
 
     // AI disagreements count
     const disCount = Object.keys(aiDisagreements).length;
@@ -3130,19 +3134,28 @@ function AppMain({ currentUser, logout }) {
                 <h3>{teamProgress.length <= 1 ? 'My Progress' : 'Team Progress'}</h3>
                 <div className="dash-team-grid">
                   {teamProgress.map(t => (
-                    <div key={t.email} className="dash-team-card">
+                    <div key={t.email} className="dash-team-card" style={t.status === 'pending' ? { opacity: 0.6 } : undefined}>
                       <div className="dash-team-info">
-                        <span className="dash-team-email">{t.displayName || t.email}</span>
+                        <span className="dash-team-email">
+                          {t.displayName || t.email}
+                          {t.status === 'pending' && <span style={{ marginLeft: 6, fontSize: 11, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>(pending)</span>}
+                        </span>
                         <span className="dash-team-role">{t.role}</span>
                       </div>
-                      <div className="conflict-progress-bar">
-                        <div className="conflict-progress-fill" style={{ width: `${t.pct}%` }} />
-                      </div>
-                      <div className="dash-team-counts">
-                        <span className="conflict-progress-label">{t.count} / {dbTotalPapers}</span>
-                        <span className="dash-team-yes">Yes: {t.yesCount}</span>
-                        <span className="dash-team-no">No: {t.noCount}</span>
-                      </div>
+                      {t.status === 'pending' ? (
+                        <div style={{ fontSize: 12, color: '#b2bec3', fontStyle: 'italic', padding: '4px 0' }}>Waiting to accept invite...</div>
+                      ) : (
+                        <>
+                          <div className="conflict-progress-bar">
+                            <div className="conflict-progress-fill" style={{ width: `${t.pct}%` }} />
+                          </div>
+                          <div className="dash-team-counts">
+                            <span className="conflict-progress-label">{t.count} / {dbTotalPapers}</span>
+                            <span className="dash-team-yes">Yes: {t.yesCount}</span>
+                            <span className="dash-team-no">No: {t.noCount}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
