@@ -1752,6 +1752,10 @@ function AppMain({ currentUser, logout }) {
     if (!projectId) return;
     setProjectMenuOpen(false);
     setProjectSidebarOpen(false);
+    if (forcePhase) setDashboardPhase(forcePhase);
+
+    // Navigate immediately so the user sees "Loading dashboard..."
+    navigate(`/project/${projectId}/dashboard`);
 
     try {
       const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
@@ -1796,14 +1800,17 @@ function AppMain({ currentUser, logout }) {
       setConflictSearch('');
       setConflictVenueFilter('All');
       setConflictStatusFilter('all');
-      if (forcePhase) {
-        setDashboardPhase(forcePhase);
-      }
-      navigate(`/project/${projectId}/dashboard`);
     } catch (err) {
       console.warn('[Dashboard] Failed to load team data:', err.message);
+      // Set minimal conflictData so dashboard renders instead of spinning forever
+      setConflictData({
+        annotatorDecisions: { [userId]: decisions },
+        annotators: [{ id: userId, email: currentUser?.email, role: 'owner', displayName: displayName }],
+        finalDecisions: {},
+        analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
+      });
     }
-  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate]);
+  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate, decisions]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
