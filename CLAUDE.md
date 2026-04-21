@@ -197,7 +197,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **AI suggestion glow** — decision buttons get subtle purple glow when matching AI suggestion
 - **Sort by Score** — toggle to sort papers by relevance score instead of default order
 - **API key management** — stored in localStorage. Clicking "Score Papers" with no key shows a modal with input field, "Save & Start Scoring" button, and link to console.anthropic.com. Scoring starts immediately once key is saved. "AI: ?" badge on every unscored paper — click to score individually (or opens API key modal if no key). Proxy down shows inline amber banner (auto-clears after 8s).
-- **AI Disagreement Detection** — when user's triage decision disagrees with AI suggestion, a confirmation popup appears: "AI suggested [Yes/No] with score [X]. You chose [No/Yes]. Confirm your decision?" with "Keep my decision" / "Change to AI suggestion" buttons
+- **AI Disagreement Detection** — when user's triage decision disagrees with AI suggestion, a non-blocking inline banner slides in below the Yes/No buttons: "AI suggested [Yes/No] (score [X]) — you chose [No/Yes]" with a dismiss button. Decision is applied immediately — no modal or forced confirmation. Disagreement is logged automatically. Banner dismisses on navigation or manual close.
 - **Disagreement Logging** — confirmed disagreements stored in localStorage (`slr-screener-disagreements`) and Firestore (`users/{userId}/projects/{projectId}/aiDisagreements/{paperId}`) with title, venue, AI score, AI suggestion, AI rationale, user decision, and timestamp
 - **Disagreement Export** — "Export AI Disagreements" button in AI Insights sidebar exports CSV with all human-AI disagreements
 

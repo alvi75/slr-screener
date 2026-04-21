@@ -1520,7 +1520,7 @@ function AppMain({ currentUser, logout }) {
     try { const s = localStorage.getItem(DISAGREEMENTS_KEY); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
   });
-  const [disagreementPopup, setDisagreementPopup] = useState(null); // { paperIndex, aiSuggestion, aiScore, userDecision }
+  const [disagreementBanner, setDisagreementBanner] = useState(null); // { aiSuggestion, aiScore, userDecision }
 
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
@@ -2305,54 +2305,36 @@ function AppMain({ currentUser, logout }) {
     if (globalIndex === undefined) return;
     const aiData = aiScores[globalIndex];
 
-    // Check for AI disagreement
+    // Apply decision immediately — no blocking modal
+    applyDecision(d);
+
+    // Check for AI disagreement — show informational banner and log
     if (aiData && aiData.suggestion) {
       const aiSug = aiData.suggestion.charAt(0).toUpperCase() + aiData.suggestion.slice(1);
       if (aiSug !== d && (aiSug === 'Yes' || aiSug === 'No')) {
-        setDisagreementPopup({
-          paperIndex: globalIndex,
+        const aiScore = getScoreValue(aiData);
+        setDisagreementBanner({ aiSuggestion: aiSug, aiScore, userDecision: d });
+
+        // Log disagreement
+        const paper = papers[globalIndex];
+        const record = {
+          title: paper?.title || '',
+          venue: paper?.conf || '',
+          aiScore,
           aiSuggestion: aiSug,
-          aiScore: getScoreValue(aiData),
-          aiReason: aiData.reason,
+          aiReason: aiData.reason || '',
           userDecision: d,
-        });
-        return;
+          timestamp: new Date().toISOString(),
+        };
+        setAiDisagreements((prev) => ({ ...prev, [globalIndex]: record }));
+        fsSaveAIDisagreement(userId, projectId, String(globalIndex), record).catch(() => {});
+      } else {
+        setDisagreementBanner(null);
       }
+    } else {
+      setDisagreementBanner(null);
     }
-    applyDecision(d);
-  }, [globalIndex, aiScores, applyDecision]);
-
-  const confirmDisagreement = useCallback(() => {
-    if (!disagreementPopup) return;
-    const { paperIndex, aiSuggestion, aiScore, aiReason, userDecision } = disagreementPopup;
-    const paper = papers[paperIndex];
-
-    // Apply the user's decision
-    applyDecision(userDecision, paperIndex);
-
-    // Log disagreement
-    const record = {
-      title: paper?.title || '',
-      venue: paper?.conf || '',
-      aiScore,
-      aiSuggestion,
-      aiReason: aiReason || '',
-      userDecision,
-      timestamp: new Date().toISOString(),
-    };
-    setAiDisagreements((prev) => ({ ...prev, [paperIndex]: record }));
-
-    // Sync to Firestore
-    fsSaveAIDisagreement(userId, projectId, String(paperIndex), record).catch(() => {});
-
-    setDisagreementPopup(null);
-  }, [disagreementPopup, papers, applyDecision, userId, projectId]);
-
-  const acceptAISuggestion = useCallback(() => {
-    if (!disagreementPopup) return;
-    applyDecision(disagreementPopup.aiSuggestion, disagreementPopup.paperIndex);
-    setDisagreementPopup(null);
-  }, [disagreementPopup, applyDecision]);
+  }, [globalIndex, aiScores, applyDecision, papers, userId, projectId]);
 
   const jumpToPaper = useCallback((gIdx) => {
     const pos = filteredIndices.indexOf(gIdx);
@@ -2381,11 +2363,11 @@ function AppMain({ currentUser, logout }) {
   }, [decisions, papers, sidebarSearch, sidebarFilter]);
 
   const goNext = useCallback(() => {
-    if (safeIndex < filteredIndices.length - 1) setCurrentIndex(safeIndex + 1);
+    if (safeIndex < filteredIndices.length - 1) { setCurrentIndex(safeIndex + 1); setDisagreementBanner(null); }
   }, [safeIndex, filteredIndices.length]);
 
   const goPrev = useCallback(() => {
-    if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
+    if (safeIndex > 0) { setCurrentIndex(safeIndex - 1); setDisagreementBanner(null); }
   }, [safeIndex]);
 
   // Keyboard shortcuts
@@ -3571,6 +3553,16 @@ function AppMain({ currentUser, logout }) {
             </>; })()}
           </div>
 
+          {/* AI Disagreement Banner */}
+          {disagreementBanner && (
+            <div className="disagreement-banner">
+              <span>
+                AI suggested <strong className={`dis-${disagreementBanner.aiSuggestion.toLowerCase()}`}>{disagreementBanner.aiSuggestion}</strong> (score {disagreementBanner.aiScore}) — you chose <strong className={`dis-${disagreementBanner.userDecision.toLowerCase()}`}>{disagreementBanner.userDecision}</strong>
+              </span>
+              <button className="disagreement-banner-dismiss" onClick={() => setDisagreementBanner(null)}>&times;</button>
+            </div>
+          )}
+
           {/* Navigation */}
           <div className="navigation">
             <button className="nav-btn" onClick={goPrev} disabled={safeIndex === 0}>
@@ -3743,24 +3735,6 @@ function AppMain({ currentUser, logout }) {
           </div>
         )}
       </div>
-      {/* AI Disagreement Confirmation Popup */}
-      {disagreementPopup && (
-        <div className="disagreement-overlay">
-          <div className="disagreement-popup">
-            <div className="disagreement-title">AI Disagrees</div>
-            <div className="disagreement-body">
-              AI suggested <strong className={`dis-${disagreementPopup.aiSuggestion.toLowerCase()}`}>{disagreementPopup.aiSuggestion}</strong> with
-              score <strong>{disagreementPopup.aiScore}</strong>.
-              You chose <strong className={`dis-${disagreementPopup.userDecision.toLowerCase()}`}>{disagreementPopup.userDecision}</strong>.
-              Confirm your decision?
-            </div>
-            <div className="disagreement-actions">
-              <button className="dis-btn dis-keep" onClick={confirmDisagreement}>Keep my decision</button>
-              <button className="dis-btn dis-change" onClick={acceptAISuggestion}>Change to AI suggestion</button>
-            </div>
-          </div>
-        </div>
-      )}
       {aiInsightsOpen && <div className="sidebar-overlay" onClick={() => setAiInsightsOpen(false)} />}
 
       {/* Project Sidebar (left) */}
