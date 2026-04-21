@@ -159,7 +159,7 @@ All imports normalize to standardized JSON format via `normalizePaper()`.
 
 ### Paper Screening
 
-- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Layout: `.app.screening-view` is `height: 100vh; overflow: hidden`. Paper card uses `max-height: min(calc(100vh - 280px), 600px); overflow: hidden; display: flex; flex-direction: column` — capped to fit viewport with header/filters/buttons/nav accounted for (280px). If content is shorter, card shrinks to fit. `.abstract-section` inside uses `flex: 1; min-height: 0; overflow-y: auto` so only the abstract scrolls. All other card elements (meta, title, authors, links, label) have `flex-shrink: 0`. Decision section and navigation sit directly below with `flex-shrink: 0`.
+- **Paper card** — one paper at a time with title, authors, venue badge (color-coded), and abstract. Layout: `.app.screening-view` is `height: 100vh; overflow: hidden`. Paper card uses `height: min(calc(100vh - 280px), 600px); overflow: hidden; display: flex; flex-direction: column` — capped to fit viewport with header/filters/buttons/nav accounted for (280px). If content is shorter, card shrinks to fit. `.abstract-section` inside uses `flex: 1; min-height: 0; overflow-y: auto` so only the abstract scrolls. All other card elements (meta, title, authors, links, label) have `flex-shrink: 0`. Decision section and navigation sit directly below with `flex-shrink: 0`.
 - **Triage buttons** — Two big buttons: Yes (green) / No (red) with visual feedback (current decision highlighted)
 - **Auto-advance** — moves to next paper after new decision; stays when changing existing decision
 - **Keyboard shortcuts** — `Y` Yes, `N` No, `H` Toggle highlights, `←` Previous, `→` Next
