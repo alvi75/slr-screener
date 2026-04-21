@@ -493,6 +493,34 @@ describe('Firestore Service', () => {
       const shared = await getSharedProjects(null);
       expect(shared).toEqual([]);
     });
+
+    test('returns both pending and accepted status entries', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [
+          {
+            data: () => ({ email: 'collab@test.com', role: 'annotator', status: 'pending' }),
+            ref: { parent: { parent: { id: 'projA' } } },
+          },
+          {
+            data: () => ({ email: 'collab@test.com', role: 'annotator', status: 'accepted' }),
+            ref: { parent: { parent: { id: 'projB' } } },
+          },
+        ],
+      });
+
+      const shared = await getSharedProjects('collab@test.com');
+      expect(shared).toHaveLength(2);
+      expect(shared[0].status).toBe('pending');
+      expect(shared[1].status).toBe('accepted');
+    });
+
+    test('email lookup is case-insensitive (normalizes to lowercase)', async () => {
+      mockGetDocs.mockResolvedValueOnce({ docs: [] });
+
+      await getSharedProjects('MHaque@WM.edu');
+      // The where clause should receive the lowercased email
+      expect(mockWhereFn).toHaveBeenCalledWith('email', '==', 'mhaque@wm.edu');
+    });
   });
 
   // ── Final Decisions (Conflict Resolution) ──────────────────
@@ -579,6 +607,87 @@ describe('Firestore Service', () => {
       await deleteAIDisagreement('user1', 'proj1', '5');
       expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'users', 'user1', 'projects', 'proj1', 'aiDisagreements', '5');
       expect(mockDeleteDoc).toHaveBeenCalled();
+    });
+  });
+
+  // ── Invite → getSharedProjects integration ──────────────────
+
+  describe('addCollaborator + getSharedProjects flow', () => {
+    test('addCollaborator stores invite data and getSharedProjects returns it', async () => {
+      // Step 1: add collaborator with invite metadata
+      await addCollaborator('proj1', 'MHaque@WM.edu', 'annotator', 'owner123', {
+        projectName: 'My SLR Project',
+        ownerEmail: 'owner@test.com',
+        ownerDisplayName: 'Owner',
+        ownerPhotoURL: '',
+        ownerId: 'owner123',
+      });
+
+      // Verify addCollaborator wrote with normalized email and all fields
+      expect(mockDocFn).toHaveBeenCalledWith('MOCK_DB', 'projects', 'proj1', 'collaborators', 'mhaque@wm.edu');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ _path: 'projects/proj1/collaborators/mhaque@wm.edu' }),
+        expect.objectContaining({
+          email: 'mhaque@wm.edu',
+          role: 'annotator',
+          status: 'pending',
+          invitedBy: 'owner123',
+          projectName: 'My SLR Project',
+          ownerEmail: 'owner@test.com',
+          ownerDisplayName: 'Owner',
+          ownerId: 'owner123',
+        })
+      );
+
+      // Step 2: simulate getSharedProjects returning that collaborator doc
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{
+          data: () => ({
+            email: 'mhaque@wm.edu',
+            role: 'annotator',
+            status: 'pending',
+            projectName: 'My SLR Project',
+            ownerEmail: 'owner@test.com',
+          }),
+          ref: { parent: { parent: { id: 'proj1' } } },
+        }],
+      });
+
+      const shared = await getSharedProjects('mhaque@wm.edu');
+      expect(shared).toHaveLength(1);
+      expect(shared[0]).toMatchObject({
+        projectId: 'proj1',
+        email: 'mhaque@wm.edu',
+        role: 'annotator',
+        status: 'pending',
+        projectName: 'My SLR Project',
+        ownerEmail: 'owner@test.com',
+      });
+    });
+
+    test('invite contains correct fields: projectId, projectName, ownerEmail, status, role', async () => {
+      mockGetDocs.mockResolvedValueOnce({
+        docs: [{
+          data: () => ({
+            email: 'invitee@test.com',
+            role: 'viewer',
+            status: 'pending',
+            projectName: 'Test Project',
+            ownerEmail: 'owner@test.com',
+            ownerDisplayName: 'Owner Name',
+            ownerPhotoURL: 'https://photo.url',
+            ownerId: 'owner456',
+          }),
+          ref: { parent: { parent: { id: 'test_project' } } },
+        }],
+      });
+
+      const shared = await getSharedProjects('invitee@test.com');
+      expect(shared[0]).toHaveProperty('projectId', 'test_project');
+      expect(shared[0]).toHaveProperty('projectName', 'Test Project');
+      expect(shared[0]).toHaveProperty('ownerEmail', 'owner@test.com');
+      expect(shared[0]).toHaveProperty('status', 'pending');
+      expect(shared[0]).toHaveProperty('role', 'viewer');
     });
   });
 });
