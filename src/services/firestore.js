@@ -273,7 +273,7 @@ export async function getProjectMeta(projectId) {
  * @param {string} role - "annotator" | "viewer"
  * @param {string} invitedByUserId - UID of the inviting user
  */
-export async function addCollaborator(projectId, email, role, invitedByUserId) {
+export async function addCollaborator(projectId, email, role, invitedByUserId, inviteData = {}) {
   const normalizedEmail = email.toLowerCase();
   const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
   await setDoc(ref, {
@@ -282,6 +282,12 @@ export async function addCollaborator(projectId, email, role, invitedByUserId) {
     status: 'pending',
     invitedBy: invitedByUserId,
     invitedAt: serverTimestamp(),
+    // Store invite metadata so the invitee can see project/owner info without extra lookups
+    projectName: inviteData.projectName || '',
+    ownerEmail: inviteData.ownerEmail || '',
+    ownerDisplayName: inviteData.ownerDisplayName || '',
+    ownerPhotoURL: inviteData.ownerPhotoURL || '',
+    ownerId: inviteData.ownerId || invitedByUserId,
   });
 }
 
@@ -462,4 +468,62 @@ export async function getFinalDecisions(projectId) {
 export async function deleteFinalDecision(projectId, paperId) {
   const ref = doc(db, 'projects', projectId, 'finalDecisions', String(paperId));
   await deleteDoc(ref);
+}
+
+// ─── Decision & Score Migration ────────────────────────────────
+
+/**
+ * Migrate decisions from one project to another for a user.
+ * Only copies decisions for paper indices that don't already exist in the target.
+ * @param {string} userId
+ * @param {string} oldProjectId - Source project ID
+ * @param {string} newProjectId - Target (shared) project ID
+ * @param {number} [maxPaperIndex] - Only migrate papers with index < this value (optional)
+ * @returns {Promise<number>} Count of migrated decisions
+ */
+export async function migrateDecisionsToSharedProject(userId, oldProjectId, newProjectId, maxPaperIndex) {
+  const oldDecisions = await getDecisions(userId, oldProjectId);
+  const newDecisions = await getDecisions(userId, newProjectId);
+
+  const toMigrate = {};
+  for (const [paperId, decision] of Object.entries(oldDecisions)) {
+    // Skip if already exists in target
+    if (newDecisions[paperId]) continue;
+    // Skip if paper index exceeds shared project size
+    if (maxPaperIndex !== undefined && Number(paperId) >= maxPaperIndex) continue;
+    toMigrate[paperId] = decision;
+  }
+
+  const count = Object.keys(toMigrate).length;
+  if (count > 0) {
+    await saveAllDecisions(userId, newProjectId, toMigrate);
+  }
+  return count;
+}
+
+/**
+ * Migrate AI scores from one project to another.
+ * Only copies scores for paper indices that don't already exist in the target.
+ * AI scores are shared (project-level), not per-user.
+ * @param {string} oldProjectId - Source project ID
+ * @param {string} newProjectId - Target (shared) project ID
+ * @param {number} [maxPaperIndex] - Only migrate papers with index < this value (optional)
+ * @returns {Promise<number>} Count of migrated scores
+ */
+export async function migrateAIScoresToSharedProject(oldProjectId, newProjectId, maxPaperIndex) {
+  const oldScores = await getAIScores(oldProjectId);
+  const newScores = await getAIScores(newProjectId);
+
+  const toMigrate = {};
+  for (const [paperId, scoreData] of Object.entries(oldScores)) {
+    if (newScores[paperId]) continue;
+    if (maxPaperIndex !== undefined && Number(paperId) >= maxPaperIndex) continue;
+    toMigrate[paperId] = scoreData;
+  }
+
+  const count = Object.keys(toMigrate).length;
+  if (count > 0) {
+    await saveAllAIScores(newProjectId, toMigrate);
+  }
+  return count;
 }

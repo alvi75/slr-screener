@@ -242,10 +242,11 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
 - **Collaborator list** — shows email, role (editable), status badge (pending yellow, accepted green, declined red), remove button
 - **Auto-discovery** — on every app load, collectionGroup query finds all projects where user's email is a collaborator (case-insensitive). All collaborator emails normalized to lowercase in Firestore.
-- **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines
-- **Notification bell** — header icon with red badge showing pending invite count; clicking opens dropdown with invite cards showing owner's profile photo (or initial avatar), display name, project name, role, and Accept/Decline buttons. Accepting navigates to `/home`.
-- **Accept** — moves project to "Shared with me" sidebar, updates Firestore status to `accepted`, stores collaborator's `userId` on the collaborator record for dashboard decision fetching
-- **Decline** — removes invite from notifications, updates Firestore status to `declined`; owner sees "declined" in share modal
+- **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines. Invite metadata (projectName, ownerEmail, ownerDisplayName, ownerPhotoURL, ownerId) stored on the collaborator record for rich notification display.
+- **Notification bell** — header icon with red badge showing pending invite count; clicking opens dropdown with invite cards showing owner's profile photo (or initial avatar), display name, project name, role, and Accept/Decline buttons.
+- **Accept** — updates Firestore status to `accepted`, then checks if user has an existing project with matching slug. If found, migrates decisions and AI scores to the shared project (only for papers not already decided, bounded by shared project paper count). Shows banner with migration count. Navigates to `/project/{sharedProjectId}`.
+- **Decision migration** — `migrateDecisionsToSharedProject(userId, oldProjectId, newProjectId, maxPaperIndex)` in `firestore.js` copies decisions that don't exist in target. `migrateAIScoresToSharedProject` does the same for AI scores. Both respect `maxPaperIndex` bounds for mismatched paper sets.
+- **Decline** — removes invite from notifications, updates Firestore status to `declined`; owner sees "declined" in share modal. User stays on current page.
 - **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
 - **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
 

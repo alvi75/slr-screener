@@ -29,6 +29,8 @@ import {
   deleteAIDisagreement as fsDeleteAIDisagreement,
   getUserProfile as fsGetUserProfile,
   saveUserProfile as fsSaveUserProfile,
+  migrateDecisionsToSharedProject as fsMigrateDecisions,
+  migrateAIScoresToSharedProject as fsMigrateAIScores,
 } from './services/firestore';
 import { analyzeConflicts, interpretKappa } from './utils/kappa';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -1692,7 +1694,13 @@ function AppMain({ currentUser, logout }) {
         ownerPhotoURL: currentUser?.photoURL || '',
         projectName,
       });
-      await fsAddCollaborator(projectId, email, shareRole, userId);
+      await fsAddCollaborator(projectId, email, shareRole, userId, {
+        projectName,
+        ownerEmail: currentUser?.email,
+        ownerDisplayName: displayName || currentUser?.displayName || '',
+        ownerPhotoURL: currentUser?.photoURL || '',
+        ownerId: userId,
+      });
       setShareEmail('');
       await loadCollaborators();
     } catch (err) {
@@ -1725,10 +1733,44 @@ function AppMain({ currentUser, logout }) {
       console.log('[Sharing] Accepting invite for project:', invite.projectId, 'email:', currentUser?.email);
       await fsAcceptInvite(invite.projectId, currentUser?.email, userId);
       console.log('[Sharing] Invite accepted successfully');
+
+      // Migrate existing decisions and AI scores from user's own matching project
+      let migratedCount = 0;
+      let migratedScores = 0;
+      try {
+        const userProjects = await fsGetProjects(userId);
+        const matchingProject = userProjects.find(p => p.id === invite.projectId && p.id !== invite.projectId)
+          || userProjects.find(p => p.id === invite.projectId)
+          || userProjects.find(p => {
+            // Match by slug: user may have the same project under their own account
+            const slug = p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') : '';
+            return slug === invite.projectId && p.id !== invite.projectId;
+          });
+
+        if (matchingProject && matchingProject.id !== invite.projectId) {
+          // Get shared project paper count for bounds checking
+          const meta = await fsGetProjectMeta(invite.projectId).catch(() => null);
+          const maxPaperIndex = meta?.paperCount || undefined;
+
+          migratedCount = await fsMigrateDecisions(userId, matchingProject.id, invite.projectId, maxPaperIndex);
+          migratedScores = await fsMigrateAIScores(matchingProject.id, invite.projectId, maxPaperIndex);
+          console.log(`[Sharing] Migrated ${migratedCount} decisions and ${migratedScores} AI scores from ${matchingProject.id}`);
+        }
+      } catch (err) {
+        console.warn('[Sharing] Migration failed (non-blocking):', err.message);
+      }
+
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
       setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
       setNotificationsOpen(false);
-      navigate('/home');
+
+      // Show migration result if any decisions were migrated
+      if (migratedCount > 0) {
+        setAppendResult({ added: migratedCount, skipped: migratedScores, total: migratedCount, message: `Migrated ${migratedCount} existing decision${migratedCount !== 1 ? 's' : ''}${migratedScores > 0 ? ` and ${migratedScores} AI score${migratedScores !== 1 ? 's' : ''}` : ''} to the shared project` });
+      }
+
+      // Navigate to the shared project
+      navigate(`/project/${invite.projectId}`);
     } catch (err) {
       console.warn('[Sharing] Accept invite failed:', err.message);
     }
@@ -3249,9 +3291,11 @@ function AppMain({ currentUser, logout }) {
       {appendResult && (
         <div className="append-result-banner">
           <span>
-            Added <strong>{appendResult.added}</strong> paper{appendResult.added !== 1 ? 's' : ''}.
-            {appendResult.skipped > 0 && <> <strong>{appendResult.skipped}</strong> duplicate{appendResult.skipped !== 1 ? 's' : ''} skipped.</>}
-            {' '}Total now: <strong>{appendResult.total}</strong>.
+            {appendResult.message ? appendResult.message : <>
+              Added <strong>{appendResult.added}</strong> paper{appendResult.added !== 1 ? 's' : ''}.
+              {appendResult.skipped > 0 && <> <strong>{appendResult.skipped}</strong> duplicate{appendResult.skipped !== 1 ? 's' : ''} skipped.</>}
+              {' '}Total now: <strong>{appendResult.total}</strong>.
+            </>}
           </span>
           <button onClick={() => setAppendResult(null)}>&times;</button>
         </div>
