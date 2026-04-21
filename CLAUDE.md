@@ -54,7 +54,7 @@ Firebase Auth with two sign-in methods:
   - Countdown timer (60s) before resend is available
   - "Use Google sign-in instead" button
   - "Sign out and use a different account" link
-- **Display name** — on first sign-in, a one-time modal prompts users to enter a display name (pre-filled from Google `displayName` if available). Stored in Firestore at `users/{userId}/profile/main`. Shown in team dashboard, share modal, conflict resolution tooltips, and header avatar. Falls back to email if not set. Service functions: `getUserProfile()`, `saveUserProfile()`.
+- **Display name** — on every login, checks Firestore `users/{userId}/profile/main` for a display name. If missing, a blocking full-screen modal forces the user to enter one before any app content is shown. Pre-filled from Google `displayName` for OAuth users, blank for email/password users. No skip button — name is required. Shown in team dashboard, share modal, conflict resolution tooltips, and header avatar. Falls back to email if not set. Service functions: `getUserProfile()`, `saveUserProfile()`.
 - **Auth gating** — login required to access the app; unauthenticated users see LoginPage
 - **Header integration** — left side (hamburger + logo + Dashboard button), right side (Reload Data, Score Papers, Export CSV, Decision Log, AI Insights + sync icon + notifications + user avatar + Sign Out). Dashboard button always visible for all projects (solo and shared). App container max-width 1170px.
 - **Forgot password** — "Forgot Password?" link on sign-in form, shows email input + "Send Reset Link" button, uses Firebase `sendPasswordResetEmail()`, success/error messages, "Back to Sign In" link

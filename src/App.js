@@ -1606,27 +1606,31 @@ function AppMain({ currentUser, logout }) {
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
   const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState('');
-  const displayNameLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (!userId || displayNameLoadedRef.current) return;
-    displayNameLoadedRef.current = true;
+    if (!userId) return;
     (async () => {
       try {
         const profile = await fsGetUserProfile(userId);
         if (profile?.displayName) {
           setDisplayName(profile.displayName);
+          setShowDisplayNameModal(false);
         } else {
-          // No display name stored — show modal
+          // No display name stored — show blocking modal
           const prefill = currentUser?.displayName || '';
           setDisplayNameInput(prefill);
           setShowDisplayNameModal(true);
         }
       } catch (err) {
         console.warn('[Profile] Failed to load profile:', err.message);
+        // On error, still show modal if no name set
+        if (!displayName) {
+          setDisplayNameInput(currentUser?.displayName || '');
+          setShowDisplayNameModal(true);
+        }
       }
     })();
-  }, [userId, currentUser]);
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDisplayName = useCallback(async (name) => {
     const trimmed = name.trim();
@@ -2932,27 +2936,34 @@ function AppMain({ currentUser, logout }) {
             <p>No projects yet. Create a new project or explore the built-in demo dataset.</p>
           </div>
         )}
-        {showDisplayNameModal && (
-          <>
-            <div className="sidebar-overlay" />
-            <div className="api-key-modal">
-              <h3>Enter Your Display Name</h3>
-              <p>This name will be shown to collaborators on shared projects.</p>
-              <input
-                className="api-key-input"
-                placeholder="Your name"
-                value={displayNameInput}
-                onChange={(e) => setDisplayNameInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') saveDisplayName(displayNameInput); }}
-                autoFocus
-              />
-              <div className="edit-actions">
-                <button className="save-btn" onClick={() => saveDisplayName(displayNameInput)}>Save</button>
-                <button className="cancel-btn" onClick={() => setShowDisplayNameModal(false)}>Skip</button>
-              </div>
-            </div>
-          </>
-        )}
+      </div>
+    );
+  }
+
+  // ===== BLOCKING DISPLAY NAME MODAL =====
+  // Must enter a display name before using any view
+  if (showDisplayNameModal) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="api-key-modal" style={{ position: 'relative' }}>
+          <h3>Enter Your Display Name</h3>
+          <p>This name will be shown to collaborators on shared projects.</p>
+          <input
+            className="api-key-input"
+            placeholder="Your name"
+            value={displayNameInput}
+            onChange={(e) => setDisplayNameInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && displayNameInput.trim()) saveDisplayName(displayNameInput); }}
+            autoFocus
+          />
+          <div className="edit-actions">
+            <button
+              className="save-btn"
+              onClick={() => saveDisplayName(displayNameInput)}
+              disabled={!displayNameInput.trim()}
+            >Save</button>
+          </div>
+        </div>
       </div>
     );
   }
