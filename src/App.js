@@ -2184,7 +2184,7 @@ function AppMain({ currentUser, logout }) {
           setPendingInvites(enrichedPending);
         }
       } catch (err) {
-        console.warn('[Sharing] Failed to load shared projects:', err.message);
+        console.warn('[Sharing] Failed to load shared projects:', err.message, err);
       }
     })();
   }, [userId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps

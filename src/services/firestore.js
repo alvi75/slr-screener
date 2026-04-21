@@ -366,16 +366,20 @@ export async function declineInvite(projectId, email) {
  */
 export async function getSharedProjects(userEmail) {
   if (!userEmail) return [];
+  const normalizedEmail = userEmail.toLowerCase();
+  console.log('[Sharing] getSharedProjects querying for email:', normalizedEmail);
   const q = query(
     collectionGroup(db, 'collaborators'),
-    where('email', '==', userEmail.toLowerCase())
+    where('email', '==', normalizedEmail)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => {
+  const results = snap.docs.map(d => {
     // d.ref.path is "projects/{projectId}/collaborators/{email}"
     const projectId = d.ref.parent.parent.id;
     return { projectId, ...d.data() };
   });
+  console.log('[Sharing] getSharedProjects found:', results.length, 'results:', results.map(r => `${r.projectId}(${r.status})`));
+  return results;
 }
 
 // ─── AI Disagreements ───────────────────────────────────────
