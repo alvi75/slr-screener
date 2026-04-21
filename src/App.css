@@ -6,9 +6,18 @@
   position: relative;
 }
 .app.screening-view {
-  min-height: 100vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   box-sizing: border-box;
+}
+.screening-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ===== HOME DASHBOARD ===== */
@@ -716,6 +725,11 @@
   padding: 20px 28px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .paper-meta {
   display: flex;
@@ -795,11 +809,11 @@
 
 /* Abstract */
 .abstract-section {
-  margin-bottom: 0;
-  height: auto;
-  max-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  margin-bottom: 0;
 }
 .abstract-section::-webkit-scrollbar { width: 6px; }
 .abstract-section::-webkit-scrollbar-thumb { background: #dfe6e9; border-radius: 3px; }
@@ -1000,6 +1014,7 @@
   justify-content: center;
   gap: 16px;
   margin-bottom: 32px;
+  flex-shrink: 0;
 }
 .decision-btn {
   padding: 12px 36px;
@@ -1030,6 +1045,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 .nav-btn {
   padding: 10px 24px;
@@ -1386,6 +1402,7 @@
   background: #f5f6fa;
   border-radius: 6px;
   border-left: 3px solid #a29bfe;
+  flex-shrink: 0;
 }
 .ai-criteria-detail {
   margin-top: 6px;
@@ -3607,10 +3624,6 @@
   }
   .paper-abstract, .abstract-text {
     font-size: 14px;
-  }
-  .abstract-section {
-    height: auto;
-    max-height: 300px;
   }
 
   /* AI score badge */

@@ -3422,7 +3422,7 @@ function AppMain({ currentUser, logout }) {
 
       {/* Paper */}
       {paper ? (
-        <>
+        <div className="screening-body">
           <div className="paper-card">
             <div className="paper-meta">
               <span className={`venue-badge ${venueCls(paper.conf)}`}>{paper.conf}</span>
@@ -3549,10 +3549,12 @@ function AppMain({ currentUser, logout }) {
               Next &rarr;
             </button>
           </div>
-        </>
+        </div>
       ) : (
-        <div className="paper-card" style={{ textAlign: 'center', color: '#b2bec3' }}>
-          No papers match the current filters.
+        <div className="screening-body">
+          <div className="paper-card" style={{ textAlign: 'center', color: '#b2bec3' }}>
+            No papers match the current filters.
+          </div>
         </div>
       )}
 
