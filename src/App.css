@@ -720,7 +720,6 @@
   margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  height: min(calc(100vh - 280px), 600px);
   overflow: hidden;
 }
 .paper-meta {
@@ -3554,6 +3553,33 @@
 /* ===== MOBILE BOTTOM NAV BAR ===== */
 .mobile-bottom-nav {
   display: none;
+}
+
+/* ===== PAPER CARD HEIGHT BY SCREEN SIZE ===== */
+
+/* Small laptops / 768p displays (13" MacBook Air, old 768p Windows) */
+@media (min-width: 769px) and (max-height: 750px) {
+  .paper-card { height: 350px; }
+}
+
+/* 14" laptops / 900p (MacBook Pro 14") */
+@media (min-width: 769px) and (min-height: 751px) and (max-height: 900px) {
+  .paper-card { height: 450px; }
+}
+
+/* 1080p screens — 15-16" laptops and 22-24" monitors */
+@media (min-width: 769px) and (min-height: 901px) and (max-height: 1100px) {
+  .paper-card { height: 530px; }
+}
+
+/* 1200p / scaled 1440p (24" scaled monitors) */
+@media (min-width: 769px) and (min-height: 1101px) and (max-height: 1300px) {
+  .paper-card { height: 620px; }
+}
+
+/* 1440p+ full — 27-32" monitors */
+@media (min-width: 769px) and (min-height: 1301px) {
+  .paper-card { height: 700px; }
 }
 
 /* ===== RESPONSIVE: TABLET & MOBILE (max-width: 768px) ===== */
