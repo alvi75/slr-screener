@@ -249,9 +249,9 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Badges** — "Team" badge on owner's projects with collaborators; "Shared with me" badge on collaborator's view
 - **Bias prevention** — each annotator's decisions stored separately under their own userId; annotators cannot see each other's decisions during screening
 
-### Team Dashboard (`appView='dashboard'`)
+### Dashboard (`appView='dashboard'`)
 
-Two-phase dashboard accessible to ALL annotators (not just owner). Opens automatically when clicking a shared project. Also accessible via "Dashboard" button in the screening header for team projects.
+Two-phase dashboard accessible to ALL annotators (not just owner). Works for both solo and shared projects. Opens automatically when clicking a shared project. Also accessible via "Dashboard" button in the screening header (always visible). For solo projects: heading shows "My Progress", conflict resolution shows "Collaboration Required" prompt with Share button, and the Resolution phase button is disabled.
 
 **Phase 1 — Screening:**
 - **My Progress** — Recharts pie chart (screened vs remaining), bar chart (Yes/No counts), stacked venue breakdown

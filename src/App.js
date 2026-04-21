@@ -1754,7 +1754,7 @@ function AppMain({ currentUser, logout }) {
     setProjectSidebarOpen(false);
 
     try {
-      const collabs = await fsGetCollaborators(projectId);
+      const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
       // Determine owner — for shared projects, use projectOwnerId; for own projects, use userId
       const ownerId = projectOwnerId || userId;
       let ownerEmail = currentUser?.email;
@@ -2948,7 +2948,17 @@ function AppMain({ currentUser, logout }) {
   }
 
   // ===== TEAM DASHBOARD VIEW =====
-  if (appView === 'dashboard' && conflictData) {
+  if (appView === 'dashboard') {
+    if (!conflictData) {
+      return (
+        <div className="app screening-view" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', color: '#636e72' }}>
+            <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+            <div>Loading dashboard...</div>
+          </div>
+        </div>
+      );
+    }
     const { annotatorDecisions, annotators, finalDecisions, analysis } = conflictData;
     const annotatorIds = Object.keys(annotatorDecisions);
     const dbTotalPapers = papers.length;
@@ -3018,7 +3028,7 @@ function AppMain({ currentUser, logout }) {
       <div className="app dash-view">
         <div className="dash-header">
           <button className="conflict-back-btn" onClick={() => navigate(`/project/${projectId}`)}>&larr; Back to Screener</button>
-          <h2>Team Dashboard — {projectName}</h2>
+          <h2>Dashboard — {projectName}</h2>
           <button className="conflict-export-btn" onClick={exportResolved}>Export</button>
         </div>
 
@@ -3029,10 +3039,10 @@ function AppMain({ currentUser, logout }) {
           </button>
           <button className={`dash-phase-btn ${dashboardPhase === 'resolution' ? 'active' : ''}`} onClick={() => {
             if (projectRole === 'owner' || allDone) setDashboardPhase('resolution');
-          }} disabled={projectRole !== 'owner' && !allDone}>
+          }} disabled={(annotators.length <= 1) || (projectRole !== 'owner' && !allDone)} title={annotators.length <= 1 ? 'Share project with collaborators to enable' : ''}>
             Conflict Resolution {allDone ? '(Ready)' : ''}
           </button>
-          {projectRole === 'owner' && dashboardPhase === 'screening' && (
+          {annotators.length > 1 && projectRole === 'owner' && dashboardPhase === 'screening' && (
             <button className="dash-start-resolution" onClick={() => setDashboardPhase('resolution')}>
               Start Resolution
             </button>
@@ -3095,7 +3105,7 @@ function AppMain({ currentUser, logout }) {
             {/* Team Progress (counts only) */}
             {teamProgress.length > 0 && (
               <div className="dash-section">
-                <h3>Team Progress</h3>
+                <h3>{teamProgress.length <= 1 ? 'My Progress' : 'Team Progress'}</h3>
                 <div className="dash-team-grid">
                   {teamProgress.map(t => (
                     <div key={t.email} className="dash-team-card">
@@ -3134,6 +3144,19 @@ function AppMain({ currentUser, logout }) {
         {/* ─── CONFLICT RESOLUTION PHASE ─── */}
         {dashboardPhase === 'resolution' && (
           <>
+            {annotators.length <= 1 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#636e72' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+                <h3 style={{ color: '#2d3436', marginBottom: '8px' }}>Collaboration Required</h3>
+                <p style={{ maxWidth: '400px', margin: '0 auto 20px', lineHeight: '1.6' }}>
+                  Inter-annotator agreement requires at least two annotators. Share this project with a collaborator to enable conflict resolution.
+                </p>
+                <button className="header-btn btn-dashboard" onClick={() => setShareModalOpen(true)} style={{ background: '#0984e3', color: 'white' }}>
+                  Share Project
+                </button>
+              </div>
+            ) : (
+            <>
             {/* Agreement Summary */}
             <div className="conflict-section">
               <h3>Agreement Summary</h3>
@@ -3220,6 +3243,8 @@ function AppMain({ currentUser, logout }) {
                 );
               })}
             </div>
+            </>
+            )}
           </>
         )}
       </div>
