@@ -720,7 +720,7 @@
   margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 280px);
+  max-height: min(calc(100vh - 280px), 600px);
   overflow: hidden;
 }
 .paper-meta {
