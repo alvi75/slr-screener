@@ -258,7 +258,7 @@ Two-phase dashboard accessible to ALL annotators (not just owner). Works for bot
 **Phase 1 — Screening:**
 - **My Progress** — Recharts pie chart (screened vs remaining), bar chart (Yes/No counts), stacked venue breakdown
 - **Team Progress** — progress bars showing each annotator's screened count (e.g., "120/1100"). NO decisions shown — bias protection
-- **Team Progress** — visible to all collaborators (not just owner). Shows display names (fetched via `fsGetUserProfile`), role, progress bar, screened count, Yes/No counts. Current user always listed first with "(You)" label. Pending collaborators shown with "(pending)" badge. Auto-refreshes every 15 seconds while dashboard is open (re-fetches decisions + recomputes analysis). Only aggregate counts shown (no per-paper decisions) for bias protection.
+- **Team Progress** — visible to all collaborators (not just owner). Owner ID always fetched from project meta (`fsGetProjectMeta`) to ensure correct identity — never falls back to current userId which would cause duplicates when collaborator views. Shows display names (fetched via `fsGetUserProfile`), role, progress bar, screened count, Yes/No counts. Current user always listed first with "(You)" label. Pending collaborators shown with "(pending)" badge. Auto-refreshes every 15 seconds. Only aggregate counts shown (no per-paper decisions) for bias protection.
 - **My AI Disagreements** — summary count with export button
 - **Phase indicator** — "Screening (In Progress)" or "Screening (Complete)" toggle
 

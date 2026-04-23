@@ -1891,20 +1891,18 @@ function AppMain({ currentUser, logout }) {
 
     try {
       const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
-      // Determine owner — for shared projects, use projectOwnerId; for own projects, use userId
-      const ownerId = projectOwnerId || userId;
-      let ownerEmail = currentUser?.email;
-      if (projectOwnerId && projectOwnerId !== userId) {
-        const meta = await fsGetProjectMeta(projectId);
-        if (meta?.ownerEmail) ownerEmail = meta.ownerEmail;
-      }
+      // Always fetch project meta to determine the real owner
+      const meta = await fsGetProjectMeta(projectId).catch(() => null);
+      const ownerId = meta?.ownerId || projectOwnerId || userId;
+      const ownerEmail = meta?.ownerEmail || currentUser?.email;
       const acceptedAnnotators = collabs.filter(c => c.role === 'annotator' && c.status === 'accepted');
       const pendingCollaborators = collabs.filter(c => c.status === 'pending');
       const annotators = [
         { id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '', status: 'accepted' },
-        ...acceptedAnnotators.map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' })),
+        ...acceptedAnnotators.filter(c => c.userId !== ownerId).map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' })),
         ...pendingCollaborators.map(c => ({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' })),
       ];
+      console.log('[Dashboard] annotators:', annotators.map(a => `${a.email}(id=${a.id}, role=${a.role})`), 'currentUserId:', userId);
 
       // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
