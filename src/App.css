@@ -210,6 +210,87 @@
   margin: 0 0 24px;
 }
 
+/* Display Name Modal */
+.dn-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.dn-modal-card {
+  background: white;
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+.dn-modal-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #2d3436;
+}
+.dn-modal-subtitle {
+  font-size: 15px;
+  color: #636e72;
+  margin: 0 0 24px;
+}
+.dn-modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3436;
+  margin-bottom: 6px;
+  text-align: left;
+}
+.dn-modal-required {
+  color: #d63031;
+}
+.dn-modal-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: 2px solid #dfe6e9;
+  border-radius: 10px;
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.dn-modal-input:focus {
+  border-color: #6c5ce7;
+}
+.dn-modal-error {
+  font-size: 12px;
+  color: #d63031;
+  margin-top: 4px;
+}
+.dn-modal-save {
+  width: 100%;
+  padding: 14px;
+  background: #6c5ce7;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 16px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  font-family: inherit;
+}
+.dn-modal-save:hover { opacity: 0.9; }
+.dn-modal-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Setup back button */
 .setup-back-bar {
   max-width: 960px;
