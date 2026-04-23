@@ -1645,6 +1645,14 @@ function AppMain({ currentUser, logout }) {
     } catch (err) {
       console.warn('[Profile] Failed to save display name:', err.message);
     }
+    // Update conflictData if dashboard is loaded — refresh owner's name
+    setConflictData(prev => {
+      if (!prev) return prev;
+      const updatedAnnotators = prev.annotators.map(a =>
+        a.id === userId ? { ...a, displayName: trimmed } : a
+      );
+      return { ...prev, annotators: updatedAnnotators };
+    });
   }, [userId]);
 
   // Derive a stable project ID from the project name
@@ -1672,10 +1680,17 @@ function AppMain({ currentUser, logout }) {
   const loadCollaborators = useCallback(async () => {
     if (!projectId) return;
     setCollabsLoading(true);
-    console.log('[Sharing] loadCollaborators called for projectId:', projectId);
     try {
       const collabs = await fsGetCollaborators(projectId);
-      console.log('[Sharing] loadCollaborators result:', collabs.map(c => `${c.email}=${c.status}`));
+      // Fetch display names for accepted collaborators with known userIds
+      for (const c of collabs) {
+        if (c.userId && c.status === 'accepted') {
+          try {
+            const profile = await fsGetUserProfile(c.userId);
+            if (profile?.displayName) c.displayName = profile.displayName;
+          } catch { /* ignore */ }
+        }
+      }
       setCollaborators(collabs);
     } catch (err) {
       console.warn('[Sharing] Failed to load collaborators:', err.message);
@@ -3084,7 +3099,9 @@ function AppMain({ currentUser, logout }) {
       const count = Object.keys(decs).length;
       const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
       const noCount = Object.values(decs).filter(d => d === 'No').length;
-      return { email: a.email, displayName: a.displayName || '', role: a.role, status: a.status || 'accepted', count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+      // Use live displayName for the current user (always up-to-date)
+      const name = (aid === userId) ? displayName : (a.displayName || '');
+      return { email: a.email, displayName: name, role: a.role, status: a.status || 'accepted', count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
     const acceptedProgress = teamProgress.filter(t => t.status === 'accepted');
     const allDone = acceptedProgress.length > 1 && acceptedProgress.every(t => t.count >= dbTotalPapers);
@@ -4098,7 +4115,7 @@ function AppMain({ currentUser, logout }) {
                 {/* Collaborator rows */}
                 {!collabsLoading && (collaborators || []).map(c => (
                   <div key={c.email} className="share-collaborator-row">
-                    <span className="share-collab-email">{c.email}</span>
+                    <span className="share-collab-email">{c.displayName || c.email}{c.displayName && c.status === 'accepted' ? ` (${c.email})` : ''}</span>
                     <select
                       className="share-role-inline"
                       value={c.role}
