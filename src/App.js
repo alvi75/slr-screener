@@ -1951,6 +1951,24 @@ function AppMain({ currentUser, logout }) {
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
 
+  // Auto-load dashboard data when landing on dashboard URL directly (bookmark, refresh, direct nav)
+  const dashboardAutoLoadRef = useRef(false);
+  useEffect(() => {
+    if (appView !== 'dashboard') {
+      dashboardAutoLoadRef.current = false;
+      return;
+    }
+    if (conflictData || dashboardAutoLoadRef.current || !projectId || !userId) return;
+    dashboardAutoLoadRef.current = true;
+    // Determine phase from URL
+    const phase = location.pathname.endsWith('/conflicts') ? 'resolution' : 'screening';
+    // Start the 3-second timeout independently
+    setDashboardTimedOut(false);
+    const fallbackTimeout = setTimeout(() => setDashboardTimedOut(true), 3000);
+    // Call openTeamDashboard (it navigates, but we're already on the dashboard URL — that's fine)
+    openTeamDashboard(phase).finally(() => clearTimeout(fallbackTimeout));
+  }, [appView, conflictData, projectId, userId, location.pathname, openTeamDashboard]);
+
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
     try {

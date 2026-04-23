@@ -343,7 +343,7 @@ These features have been fixed multiple times. Any future change MUST verify the
 No page in the app should ever show a loading spinner for more than 3-5 seconds. Every loading state has a timeout that shows fallback UI (cached data, error message, or navigation buttons). This applies to:
 - **Auth loading** (AuthGate): 5s timeout → redirect to login
 - **Access check**: 3s timeout → deny access
-- **Dashboard loading**: 3s timeout → show "Dashboard Loading Timed Out" with Back to Screener / Go to Home buttons
+- **Dashboard loading**: auto-calls `openTeamDashboard` when landing on dashboard URL directly (bookmark, refresh, direct nav). 3s timeout → show "Dashboard Loading Timed Out" with Back to Screener / Go to Home buttons. Uses `dashboardAutoLoadRef` guard to prevent re-calling in a loop.
 - **Papers loading**: 3s timeout → stop loading, show empty state or fallback
 - **Display name modal**: shows immediately on auth, Firestore error shows modal with empty input
 - **Home**: project list loads in background, page renders immediately with empty state
