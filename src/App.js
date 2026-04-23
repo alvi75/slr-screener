@@ -1353,10 +1353,7 @@ function VerificationPage() {
 }
 
 function LoginRedirect() {
-  const location = useLocation();
-  const from = location.state?.from?.pathname || '/home';
-  const search = location.state?.from?.search || '';
-  return <Navigate to={from + search} replace />;
+  return <Navigate to="/home" replace />;
 }
 
 function AccessDenied() {

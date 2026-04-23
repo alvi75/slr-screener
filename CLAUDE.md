@@ -134,7 +134,7 @@ Modern landing page shown on every login. New users see an empty home page ("No 
   - `/login` — Login page (redirects to `/home` if authenticated)
   - `/setup` — New project setup
   - Browser back/forward, trackpad gestures, and shareable URLs all work
-  - **Access control** — project URLs check ownership or accepted collaborator status via Firestore before granting access. Denied users see an `AccessDenied` component. Unauthenticated users redirect to `/login` with return-to-original-URL after login via `location.state.from`.
+  - **Access control** — project URLs check ownership or accepted collaborator status via Firestore before granting access. Denied users see an `AccessDenied` component. Unauthenticated users redirect to `/login`. After login, users ALWAYS land on `/home` — never directly on a project URL. `LoginRedirect` always navigates to `/home` (no `location.state.from` logic).
   - **Error states** — no view shows an infinite spinner, blank screen, or crash. Dashboard/conflicts with no data shows "No Project Loaded" + home button. Screening with no papers shows "No Papers in This Project" + home button. Out-of-bounds paper index in URL clamps to last paper. Unknown routes show "Page Not Found" + home button. Display name modal blocks all views until name is set.
   - `AuthGate` component redirects unauthenticated users to `/login`
 
