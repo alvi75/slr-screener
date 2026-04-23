@@ -1969,6 +1969,27 @@ function AppMain({ currentUser, logout }) {
     openTeamDashboard(phase).finally(() => clearTimeout(fallbackTimeout));
   }, [appView, conflictData, projectId, userId, location.pathname, openTeamDashboard]);
 
+  // Auto-refresh dashboard every 15 seconds while viewing it
+  useEffect(() => {
+    if (appView !== 'dashboard' || !conflictData || !projectId) return;
+    const interval = setInterval(async () => {
+      try {
+        const { annotators } = conflictData;
+        const updatedDecisions = {};
+        for (const a of annotators) {
+          if (a.id) {
+            try {
+              updatedDecisions[a.id] = await fsGetDecisions(a.id, projectId);
+            } catch { updatedDecisions[a.id] = conflictData.annotatorDecisions[a.id] || {}; }
+          }
+        }
+        const analysis = analyzeConflicts(updatedDecisions);
+        setConflictData(prev => prev ? { ...prev, annotatorDecisions: updatedDecisions, analysis } : prev);
+      } catch { /* ignore refresh errors */ }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [appView, conflictData, projectId]);
+
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
     try {
@@ -3275,16 +3296,21 @@ function AppMain({ currentUser, logout }) {
     ];
 
     // Team progress (counts only — no per-paper decisions shown, bias protection)
-    const teamProgress = annotators.map((a, i) => {
+    const teamProgressUnsorted = annotators.map((a, i) => {
       const aid = annotatorIds[i] || a.id;
       const decs = aid ? (annotatorDecisions[aid] || {}) : {};
       const count = Object.keys(decs).length;
       const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
       const noCount = Object.values(decs).filter(d => d === 'No').length;
-      // Use live displayName for the current user (always up-to-date)
-      const name = (aid === userId) ? displayName : (a.displayName || '');
-      return { email: a.email, displayName: name, role: a.role, status: a.status || 'accepted', count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
+      const isMe = aid === userId;
+      const name = isMe ? displayName : (a.displayName || '');
+      return { email: a.email, displayName: name, role: a.role, status: a.status || 'accepted', isMe, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
+    // Current user always first
+    const teamProgress = [
+      ...teamProgressUnsorted.filter(t => t.isMe),
+      ...teamProgressUnsorted.filter(t => !t.isMe),
+    ];
     const acceptedProgress = teamProgress.filter(t => t.status === 'accepted');
     const allDone = acceptedProgress.length > 1 && acceptedProgress.every(t => t.count >= dbTotalPapers);
 
@@ -3397,6 +3423,7 @@ function AppMain({ currentUser, logout }) {
                       <div className="dash-team-info">
                         <span className="dash-team-email">
                           {t.displayName || t.email}
+                          {t.isMe && <span style={{ marginLeft: 4, fontSize: 11, color: '#0984e3', fontWeight: 600 }}>(You)</span>}
                           {t.status === 'pending' && <span style={{ marginLeft: 6, fontSize: 11, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>(pending)</span>}
                         </span>
                         <span className="dash-team-role">{displayRole(t.role)}</span>
