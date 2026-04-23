@@ -319,7 +319,7 @@ These features have been fixed multiple times. Any future change MUST verify the
 
 ### Real-Time Notifications
 - Firestore `onSnapshot` listener on `users/{userId}/notifications` provides real-time updates.
-- Bell icon badge shows total count: pending invites + unread general notifications.
+- Bell icon badge shows total count: pending invites + unread general notifications. Bell is visible on ALL views (home, screening, dashboard) via shared `notifBell` JSX variable.
 - Dropdown shows pending invites (with Accept/Decline) at top, then general notifications below with relative timestamps ("just now", "2 mins ago").
 - Unread notifications have blue highlight background. Clicking marks as read. "Mark all read" link at top.
 - Audio beep (Web Audio API, 800Hz 200ms) plays when new unread notification arrives — NOT on initial page load.

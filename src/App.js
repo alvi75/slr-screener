@@ -2952,6 +2952,69 @@ function AppMain({ currentUser, logout }) {
   const noCount = Object.values(decisions).filter((d) => d === 'No').length;
   const decidedCount = yesCount + noCount;
 
+  // ===== NOTIFICATION BELL (shared across all views) =====
+  const unreadGeneralCount = generalNotifications.filter(n => !n.read).length;
+  const totalBadge = pendingInvites.length + unreadGeneralCount;
+  const notifBell = (
+    <div className="notif-wrapper">
+      <button
+        className="notif-bell-btn"
+        onClick={() => setNotificationsOpen(v => !v)}
+        title={totalBadge > 0 ? `${totalBadge} notification${totalBadge > 1 ? 's' : ''}` : 'No notifications'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {totalBadge > 0 && <span className="notif-badge">{totalBadge}</span>}
+      </button>
+      {notificationsOpen && (
+        <div className="notif-dropdown">
+          <div className="notif-dropdown-header">
+            <span>Notifications</span>
+            {(unreadGeneralCount > 0) && (
+              <button className="notif-mark-all" onClick={() => { fsMarkAllNotificationsRead(userId).catch(() => {}); setGeneralNotifications(prev => prev.map(n => ({ ...n, read: true }))); }}>Mark all read</button>
+            )}
+          </div>
+          {pendingInvites.map(inv => (
+            <div key={`inv-${inv.projectId}`} className="notif-invite-card">
+              <div className="notif-invite-row">
+                {inv.ownerPhotoURL ? (
+                  <img src={inv.ownerPhotoURL} alt="" className="notif-owner-avatar" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
+                )}
+                <div className="notif-invite-text">
+                  <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{displayRole(inv.role)}</span>
+                </div>
+              </div>
+              <div className="notif-invite-actions">
+                <button className="notif-accept-btn" onClick={() => handleAcceptInvite(inv)}>Accept</button>
+                <button className="notif-decline-btn" onClick={() => handleDeclineInvite(inv)}>Decline</button>
+              </div>
+            </div>
+          ))}
+          {generalNotifications.map(n => (
+            <div
+              key={n.id}
+              className={`notif-general-item ${n.read ? '' : 'notif-unread'}`}
+              onClick={() => { if (!n.read) { fsMarkNotificationRead(userId, n.id).catch(() => {}); setGeneralNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x)); } }}
+            >
+              <div className="notif-general-icon">{n.type === 'invite_accepted' ? '✅' : n.type === 'invite_declined' ? '❌' : '🔔'}</div>
+              <div className="notif-general-body">
+                <div className="notif-general-msg">{n.message}</div>
+                <div className="notif-general-time">{relativeTime(n.createdMs)}</div>
+              </div>
+            </div>
+          ))}
+          {pendingInvites.length === 0 && generalNotifications.length === 0 && (
+            <div className="notif-empty">No notifications</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   // ===== ACCESS CONTROL =====
   if (urlProjectSlug && projectAccess === 'checking') {
     return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Checking access...</div>;
@@ -3017,6 +3080,7 @@ function AppMain({ currentUser, logout }) {
         <div className="home-topbar">
           <div className="home-brand-small">SLR Screener</div>
           <div className="header-user">
+            {notifBell}
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
             ) : (
@@ -3247,7 +3311,10 @@ function AppMain({ currentUser, logout }) {
         <div className="dash-header">
           <button className="conflict-back-btn" onClick={() => navigate(`/project/${projectId}`)}>&larr; Back to Screener</button>
           <h2>Dashboard — {projectName}</h2>
-          <button className="conflict-export-btn" onClick={exportResolved}>Export</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {notifBell}
+            <button className="conflict-export-btn" onClick={exportResolved}>Export</button>
+          </div>
         </div>
 
         {/* Phase Indicator */}
@@ -3568,71 +3635,7 @@ function AppMain({ currentUser, logout }) {
             {syncStatus === 'syncing' && <svg className="sync-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M12 12v3"/></svg>}
             {syncStatus === 'error' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="15" y1="13" x2="9" y2="17"/><line x1="9" y1="13" x2="15" y2="17"/></svg>}
           </span>
-          {(() => {
-            const unreadGeneralCount = generalNotifications.filter(n => !n.read).length;
-            const totalBadge = pendingInvites.length + unreadGeneralCount;
-            return (
-              <div className="notif-wrapper">
-                <button
-                  className="notif-bell-btn"
-                  onClick={() => setNotificationsOpen(v => !v)}
-                  title={totalBadge > 0 ? `${totalBadge} notification${totalBadge > 1 ? 's' : ''}` : 'No notifications'}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                  </svg>
-                  {totalBadge > 0 && <span className="notif-badge">{totalBadge}</span>}
-                </button>
-                {notificationsOpen && (
-                  <div className="notif-dropdown">
-                    <div className="notif-dropdown-header">
-                      <span>Notifications</span>
-                      {(unreadGeneralCount > 0) && (
-                        <button className="notif-mark-all" onClick={() => { fsMarkAllNotificationsRead(userId).catch(() => {}); setGeneralNotifications(prev => prev.map(n => ({ ...n, read: true }))); }}>Mark all read</button>
-                      )}
-                    </div>
-                    {/* Pending invites */}
-                    {pendingInvites.map(inv => (
-                      <div key={`inv-${inv.projectId}`} className="notif-invite-card">
-                        <div className="notif-invite-row">
-                          {inv.ownerPhotoURL ? (
-                            <img src={inv.ownerPhotoURL} alt="" className="notif-owner-avatar" referrerPolicy="no-referrer" />
-                          ) : (
-                            <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
-                          )}
-                          <div className="notif-invite-text">
-                            <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{displayRole(inv.role)}</span>
-                          </div>
-                        </div>
-                        <div className="notif-invite-actions">
-                          <button className="notif-accept-btn" onClick={() => handleAcceptInvite(inv)}>Accept</button>
-                          <button className="notif-decline-btn" onClick={() => handleDeclineInvite(inv)}>Decline</button>
-                        </div>
-                      </div>
-                    ))}
-                    {/* General notifications */}
-                    {generalNotifications.map(n => (
-                      <div
-                        key={n.id}
-                        className={`notif-general-item ${n.read ? '' : 'notif-unread'}`}
-                        onClick={() => { if (!n.read) { fsMarkNotificationRead(userId, n.id).catch(() => {}); setGeneralNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x)); } }}
-                      >
-                        <div className="notif-general-icon">{n.type === 'invite_accepted' ? '✅' : n.type === 'invite_declined' ? '❌' : '🔔'}</div>
-                        <div className="notif-general-body">
-                          <div className="notif-general-msg">{n.message}</div>
-                          <div className="notif-general-time">{relativeTime(n.createdMs)}</div>
-                        </div>
-                      </div>
-                    ))}
-                    {pendingInvites.length === 0 && generalNotifications.length === 0 && (
-                      <div className="notif-empty">No notifications</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {notifBell}
           <div className="header-user">
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />
