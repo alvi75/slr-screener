@@ -1525,8 +1525,8 @@ function AppMain({ currentUser, logout }) {
 
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false);
   const [projectName, setProjectName] = useState(() => {
-    try { return localStorage.getItem('slr-screener-project-name') || 'Model Sizes in SE Research 2025'; }
-    catch { return 'Model Sizes in SE Research 2025'; }
+    try { return localStorage.getItem('slr-screener-project-name') || ''; }
+    catch { return ''; }
   });
   const projectNameRef = useRef(projectName);
   projectNameRef.current = projectName;
@@ -1594,25 +1594,10 @@ function AppMain({ currentUser, logout }) {
           setProjectAccess('granted');
           return;
         }
-        // Check 3: Does the user have this project loaded locally?
-        // (covers offline access and projects not yet synced to Firestore)
-        const localProjectName = localStorage.getItem('slr-screener-project-name') || '';
-        const localSlug = localProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-        if (localSlug === urlProjectSlug) {
-          setProjectAccess('granted');
-          return;
-        }
         setProjectAccess('denied');
       } catch (err) {
         console.warn('[Access] Check failed:', err.message);
-        // If Firestore is unavailable, check local data as fallback
-        const localProjectName = localStorage.getItem('slr-screener-project-name') || '';
-        const localSlug = localProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-        if (localSlug === urlProjectSlug) {
-          setProjectAccess('granted');
-        } else {
-          setProjectAccess('denied');
-        }
+        setProjectAccess('denied');
       }
     })();
   }, [urlProjectSlug, userId, currentUser?.email]);
@@ -2138,7 +2123,7 @@ function AppMain({ currentUser, logout }) {
   // Firestore is source of truth — if it has data, it overwrites localStorage.
   const firestoreLoadedRef = useRef(false);
   useEffect(() => {
-    if (!userId || firestoreLoadedRef.current) return;
+    if (!userId || !projectId || firestoreLoadedRef.current) return;
     firestoreLoadedRef.current = true;
 
     (async () => {

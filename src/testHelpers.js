@@ -90,6 +90,36 @@ export function setupFetchMock() {
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
   });
   global.fetch = fetchMock;
+
+  // Re-set firestore mock implementations (factory jest.fn implementations may get cleared)
+  try {
+    const fs = require('./services/firestore');
+    if (fs.getProject && fs.getProject.mockImplementation) {
+      fs.getProject.mockImplementation(() => Promise.resolve({ id: 'test', name: 'Test' }));
+    }
+    if (fs.getUserProfile && fs.getUserProfile.mockImplementation) {
+      fs.getUserProfile.mockImplementation(() => Promise.resolve({ displayName: 'Test User' }));
+    }
+    if (fs.getSharedProjects && fs.getSharedProjects.mockImplementation) {
+      fs.getSharedProjects.mockImplementation(() => Promise.resolve([]));
+    }
+    if (fs.getDecisions && fs.getDecisions.mockImplementation) {
+      fs.getDecisions.mockImplementation(() => Promise.resolve({}));
+    }
+    if (fs.getAIScores && fs.getAIScores.mockImplementation) {
+      fs.getAIScores.mockImplementation(() => Promise.resolve({}));
+    }
+    if (fs.getCollaborators && fs.getCollaborators.mockImplementation) {
+      fs.getCollaborators.mockImplementation(() => Promise.resolve([]));
+    }
+    if (fs.getProjects && fs.getProjects.mockImplementation) {
+      fs.getProjects.mockImplementation(() => Promise.resolve([]));
+    }
+    if (fs.getAIDisagreements && fs.getAIDisagreements.mockImplementation) {
+      fs.getAIDisagreements.mockImplementation(() => Promise.resolve({}));
+    }
+  } catch { /* firestore not mocked in this test file */ }
+
   return fetchMock;
 }
 
