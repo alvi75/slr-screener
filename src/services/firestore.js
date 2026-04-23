@@ -368,18 +368,63 @@ export async function getSharedProjects(userEmail) {
   if (!userEmail) return [];
   const normalizedEmail = userEmail.toLowerCase();
   console.log('[Sharing] getSharedProjects querying for email:', normalizedEmail);
-  const q = query(
-    collectionGroup(db, 'collaborators'),
-    where('email', '==', normalizedEmail)
-  );
-  const snap = await getDocs(q);
-  const results = snap.docs.map(d => {
-    // d.ref.path is "projects/{projectId}/collaborators/{email}"
-    const projectId = d.ref.parent.parent.id;
-    return { projectId, ...d.data() };
-  });
-  console.log('[Sharing] getSharedProjects found:', results.length, 'results:', results.map(r => `${r.projectId}(${r.status})`));
-  return results;
+  try {
+    const q = query(
+      collectionGroup(db, 'collaborators'),
+      where('email', '==', normalizedEmail)
+    );
+    const snap = await getDocs(q);
+    console.log('[Sharing] collectionGroup query returned', snap.size, 'documents');
+    const results = snap.docs.map(d => {
+      const path = d.ref.path;
+      const projectId = d.ref.parent.parent.id;
+      const data = d.data();
+      console.log('[Sharing] Found collaborator doc:', path, 'status:', data.status, 'email:', data.email);
+      return { projectId, ...data };
+    });
+    console.log('[Sharing] getSharedProjects found:', results.length, 'results:', results.map(r => `${r.projectId}(${r.status})`));
+    return results;
+  } catch (err) {
+    console.error('[Sharing] getSharedProjects FAILED:', err.code, err.message, err);
+    throw err;
+  }
+}
+
+// Debug helper — call from browser console: window._debugSharedProjects('email@example.com')
+if (typeof window !== 'undefined') {
+  window._debugSharedProjects = async (email) => {
+    console.log('=== DEBUG: Querying collectionGroup collaborators for', email, '===');
+    try {
+      const q = query(
+        collectionGroup(db, 'collaborators'),
+        where('email', '==', email.toLowerCase())
+      );
+      const snap = await getDocs(q);
+      console.log('Query returned', snap.size, 'documents:');
+      snap.docs.forEach(d => {
+        console.log(' -', d.ref.path, JSON.stringify(d.data()));
+      });
+      return snap.docs.map(d => ({ path: d.ref.path, ...d.data() }));
+    } catch (err) {
+      console.error('Query FAILED:', err.code, err.message);
+      throw err;
+    }
+  };
+  window._debugCollaborators = async (projectId) => {
+    console.log('=== DEBUG: Listing collaborators for project', projectId, '===');
+    try {
+      const colRef = collection(db, 'projects', projectId, 'collaborators');
+      const snap = await getDocs(colRef);
+      console.log('Found', snap.size, 'collaborators:');
+      snap.docs.forEach(d => {
+        console.log(' -', d.id, JSON.stringify(d.data()));
+      });
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      console.error('Query FAILED:', err.code, err.message);
+      throw err;
+    }
+  };
 }
 
 // ─── AI Disagreements ───────────────────────────────────────

@@ -345,6 +345,14 @@ slr-screener/
 └── CLAUDE.md
 ```
 
+## Debug Helpers
+
+Browser console debug functions (available on `window` in dev/production):
+- `window._debugSharedProjects('email@example.com')` — directly queries Firestore `collectionGroup('collaborators')` for the given email. Bypasses all app logic. Returns array of `{ path, email, status, role, ... }`.
+- `window._debugCollaborators('project_slug')` — lists all collaborators for a project. Returns array of `{ id, email, status, role, ... }`.
+
+These help diagnose invite visibility issues. The `getSharedProjects` function also logs `[Sharing]` prefixed messages to the console at every step.
+
 ## Testing
 
 115 tests across 8 suites:

@@ -2182,7 +2182,8 @@ function AppMain({ currentUser, logout }) {
     if (!userId || !currentUser?.email) return;
     (async () => {
       try {
-        console.log('[Sharing] Current user:', currentUser.email, 'uid:', userId);
+        console.log('[Sharing] Current user email:', JSON.stringify(currentUser.email), 'uid:', userId);
+        console.log('[Sharing] Email type:', typeof currentUser.email, 'length:', currentUser.email?.length);
         console.log('[Sharing] Calling getSharedProjects...');
         const shared = await fsGetSharedProjects(currentUser.email);
         console.log('[Sharing] getSharedProjects returned:', shared.length, 'entries:', JSON.stringify(shared.map(s => ({ projectId: s.projectId, status: s.status, email: s.email }))));
