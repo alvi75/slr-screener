@@ -317,10 +317,12 @@ These features have been fixed multiple times. Any future change MUST verify the
 - After accepting: invitee's status changes to "accepted", project appears in their sidebar.
 
 ### Display Name Modal
-- Triggers for ALL users on login if no displayName in Firestore `users/{userId}/profile/main`.
+- Triggers for ALL users on login if `nameConfirmed` is missing or false in Firestore `users/{userId}/profile/main`.
+- Even if `displayName` exists (e.g., auto-saved from Google), modal shows unless `nameConfirmed: true`.
+- Clicking Save sets both `displayName` and `nameConfirmed: true` in Firestore.
 - NOT unique — just a friendly name for identification.
 - Blocking modal, no skip button, must enter at least 2 characters.
-- Pre-fills from Google displayName if available.
+- Pre-fills from Firestore displayName or Google displayName if available.
 - Title: "Welcome! 👋", subtitle: "What should we call you?"
 - Must appear before any app content (rendered before all views in App.js).
 

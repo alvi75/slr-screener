@@ -1616,14 +1616,14 @@ function AppMain({ currentUser, logout }) {
     (async () => {
       try {
         const profile = await fsGetUserProfile(userId);
-        if (profile?.displayName) {
-          // Display name exists in Firestore — use it, skip modal
+        if (profile?.displayName && profile?.nameConfirmed) {
+          // User previously confirmed their name — skip modal
           setDisplayName(profile.displayName);
           setShowDisplayNameModal(false);
         } else {
-          // No display name in Firestore — show blocking modal
-          // Pre-fill from Google displayName if available
-          setDisplayNameInput(currentUser?.displayName || '');
+          // No confirmed name — show modal, pre-fill from Firestore or Google
+          setDisplayNameInput(profile?.displayName || currentUser?.displayName || '');
+          if (profile?.displayName) setDisplayName(profile.displayName);
           setShowDisplayNameModal(true);
         }
       } catch (err) {
@@ -1641,7 +1641,7 @@ function AppMain({ currentUser, logout }) {
     setDisplayName(trimmed);
     setShowDisplayNameModal(false);
     try {
-      await fsSaveUserProfile(userId, { displayName: trimmed });
+      await fsSaveUserProfile(userId, { displayName: trimmed, nameConfirmed: true });
     } catch (err) {
       console.warn('[Profile] Failed to save display name:', err.message);
     }

@@ -98,7 +98,7 @@ export function setupFetchMock() {
       fs.getProject.mockImplementation(() => Promise.resolve({ id: 'test', name: 'Test' }));
     }
     if (fs.getUserProfile && fs.getUserProfile.mockImplementation) {
-      fs.getUserProfile.mockImplementation(() => Promise.resolve({ displayName: 'Test User' }));
+      fs.getUserProfile.mockImplementation(() => Promise.resolve({ displayName: 'Test User', nameConfirmed: true }));
     }
     if (fs.getSharedProjects && fs.getSharedProjects.mockImplementation) {
       fs.getSharedProjects.mockImplementation(() => Promise.resolve([]));
