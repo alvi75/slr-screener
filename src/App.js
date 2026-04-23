@@ -1417,7 +1417,7 @@ function AppMain({ currentUser, logout }) {
     if (path.startsWith('/project/') && path.endsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/project/') && path.endsWith('/conflicts')) return 'dashboard';
     if (path.startsWith('/project/')) return 'screener';
-    return 'home'; // fallback
+    return 'notfound';
   }, [location.pathname]);
 
   // Extract project slug from URL
@@ -2297,17 +2297,17 @@ function AppMain({ currentUser, logout }) {
   const urlIndexResolvedRef = useRef(false);
   useEffect(() => {
     if (urlIndexResolvedRef.current || papers.length === 0 || urlPaperIndex == null) return;
-    if (urlPaperIndex >= 0 && urlPaperIndex < papers.length) {
-      urlIndexResolvedRef.current = true;
-      // Find position within filtered indices
-      const pos = filteredIndices.indexOf(urlPaperIndex);
-      if (pos !== -1) {
-        setCurrentIndex(pos);
-      } else {
-        // Paper not in current filter — reset to All
-        setVenueFilter('All');
-        setCurrentIndex(urlPaperIndex);
-      }
+    urlIndexResolvedRef.current = true;
+    // Clamp out-of-bounds index to last paper
+    const clampedIndex = Math.min(Math.max(0, urlPaperIndex), papers.length - 1);
+    // Find position within filtered indices
+    const pos = filteredIndices.indexOf(clampedIndex);
+    if (pos !== -1) {
+      setCurrentIndex(pos);
+    } else {
+      // Paper not in current filter — reset to All
+      setVenueFilter('All');
+      setCurrentIndex(clampedIndex);
     }
   }, [papers.length, urlPaperIndex, filteredIndices]);
 
@@ -2826,6 +2826,48 @@ function AppMain({ currentUser, logout }) {
     return <AccessDenied />;
   }
 
+  // ===== BLOCKING DISPLAY NAME MODAL =====
+  // Must enter a display name before using any view
+  if (showDisplayNameModal) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="api-key-modal" style={{ position: 'relative' }}>
+          <h3>Enter Your Display Name</h3>
+          <p>This name will be shown to collaborators on shared projects.</p>
+          <input
+            className="api-key-input"
+            placeholder="Your name"
+            value={displayNameInput}
+            onChange={(e) => setDisplayNameInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && displayNameInput.trim()) saveDisplayName(displayNameInput); }}
+            autoFocus
+          />
+          <div className="edit-actions">
+            <button
+              className="save-btn"
+              onClick={() => saveDisplayName(displayNameInput)}
+              disabled={!displayNameInput.trim()}
+            >Save</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 404 NOT FOUND =====
+  if (appView === 'notfound') {
+    return (
+      <div className="app access-denied-view">
+        <div className="access-denied-card">
+          <div className="access-denied-icon">🔍</div>
+          <h2>Page Not Found</h2>
+          <p>This page doesn't exist. Check the URL or go back to the home page.</p>
+          <button className="save-btn" onClick={() => navigate('/home')}>Go to Home</button>
+        </div>
+      </div>
+    );
+  }
+
   // ===== HOME DASHBOARD VIEW =====
   if (appView === 'home') {
     const hasActiveProject = totalPapers > 0 && decidedCount < totalPapers;
@@ -2943,37 +2985,10 @@ function AppMain({ currentUser, logout }) {
         {/* If no projects and no data, show a hint */}
         {dashboardProjects.length === 0 && sharedProjects.length === 0 && totalPapers === 0 && (
           <div className="home-empty">
-            <p>No projects yet. Create a new project or explore the built-in demo dataset.</p>
+            <p>No projects yet. Create one to get started.</p>
+            <button className="save-btn" style={{ marginTop: 12 }} onClick={() => navigate('/setup')}>New Project</button>
           </div>
         )}
-      </div>
-    );
-  }
-
-  // ===== BLOCKING DISPLAY NAME MODAL =====
-  // Must enter a display name before using any view
-  if (showDisplayNameModal) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="api-key-modal" style={{ position: 'relative' }}>
-          <h3>Enter Your Display Name</h3>
-          <p>This name will be shown to collaborators on shared projects.</p>
-          <input
-            className="api-key-input"
-            placeholder="Your name"
-            value={displayNameInput}
-            onChange={(e) => setDisplayNameInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && displayNameInput.trim()) saveDisplayName(displayNameInput); }}
-            autoFocus
-          />
-          <div className="edit-actions">
-            <button
-              className="save-btn"
-              onClick={() => saveDisplayName(displayNameInput)}
-              disabled={!displayNameInput.trim()}
-            >Save</button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -2996,6 +3011,19 @@ function AppMain({ currentUser, logout }) {
   // ===== TEAM DASHBOARD VIEW =====
   if (appView === 'dashboard') {
     if (!conflictData) {
+      // If papers are empty too, there's nothing to load — show message
+      if (papers.length === 0) {
+        return (
+          <div className="app access-denied-view">
+            <div className="access-denied-card">
+              <div className="access-denied-icon">📊</div>
+              <h2>No Project Loaded</h2>
+              <p>There are no papers in this project, or the project could not be found.</p>
+              <button className="save-btn" onClick={() => navigate('/home')}>Go to Home</button>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="app screening-view" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ textAlign: 'center', color: '#636e72' }}>
@@ -3316,6 +3344,20 @@ function AppMain({ currentUser, logout }) {
   const scholarUrl = paper
     ? `https://scholar.google.com/scholar?q=${encodeURIComponent(paper.title)}`
     : '';
+
+  // ===== SCREENING VIEW: no papers loaded =====
+  if (papers.length === 0 && !loading) {
+    return (
+      <div className="app access-denied-view">
+        <div className="access-denied-card">
+          <div className="access-denied-icon">📄</div>
+          <h2>No Papers in This Project</h2>
+          <p>This project has no papers loaded. Go to Home to create or open a project.</p>
+          <button className="save-btn" onClick={() => navigate('/home')}>Go to Home</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app screening-view">
