@@ -1879,20 +1879,22 @@ function AppMain({ currentUser, logout }) {
 
   // ── Conflict Resolution helpers ──────────────────────────────
   const openTeamDashboard = useCallback(async (forcePhase) => {
-    if (!projectId) return;
+    // Use URL slug if available (correct for shared projects), fall back to derived projectId
+    const pid = urlProjectSlug || projectId;
+    if (!pid) return;
     setProjectMenuOpen(false);
     setProjectSidebarOpen(false);
     if (forcePhase) setDashboardPhase(forcePhase);
 
     // Navigate immediately so the user sees "Loading dashboard..."
     setDashboardTimedOut(false);
-    navigate(`/project/${projectId}/dashboard`);
+    navigate(`/project/${pid}/dashboard`);
     const dashTimeout = setTimeout(() => setDashboardTimedOut(true), 3000);
 
     try {
-      const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
+      const collabs = await fsGetCollaborators(pid).catch(() => []) || [];
       // Always fetch project meta to determine the real owner
-      const meta = await fsGetProjectMeta(projectId).catch(() => null);
+      const meta = await fsGetProjectMeta(pid).catch(() => null);
       if (!meta?.ownerId) {
         console.warn('[Dashboard] Project meta missing ownerId — cannot determine project owner');
       }
@@ -1906,7 +1908,7 @@ function AppMain({ currentUser, logout }) {
         if (!c.userId && c.email === currentUser?.email?.toLowerCase()) {
           c.userId = userId;
           // Backfill to Firestore so it's correct next time
-          fsAcceptInvite(projectId, c.email, userId).catch(() => {});
+          fsAcceptInvite(pid, c.email, userId).catch(() => {});
         }
       }
 
@@ -1929,6 +1931,7 @@ function AppMain({ currentUser, logout }) {
       if (!annotators.some(a => a.id === userId)) {
         annotators.push({ id: userId, email: currentUser?.email, role: projectRole || 'annotator', displayName: displayName, status: 'accepted' });
       }
+      console.log('[Dashboard] pid:', pid, 'projectId:', projectId, 'urlProjectSlug:', urlProjectSlug);
       console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({id: a.id, email: a.email, role: a.role}))));
       console.log('[Dashboard] currentUserId:', userId, 'ownerId:', ownerId);
 
@@ -1937,7 +1940,7 @@ function AppMain({ currentUser, logout }) {
       for (const a of annotators) {
         if (a.id) {
           try {
-            annotatorDecisions[a.id] = await fsGetDecisions(a.id, projectId);
+            annotatorDecisions[a.id] = await fsGetDecisions(a.id, pid);
           } catch (err) {
             console.warn(`[Dashboard] Failed to fetch decisions for ${a.email}:`, err.message);
             annotatorDecisions[a.id] = {};
@@ -1952,7 +1955,7 @@ function AppMain({ currentUser, logout }) {
         }
       }
 
-      const finalDecisions = await fsGetFinalDecisions(projectId);
+      const finalDecisions = await fsGetFinalDecisions(pid);
       const analysis = analyzeConflicts(annotatorDecisions);
 
       clearTimeout(dashTimeout);
@@ -1972,7 +1975,7 @@ function AppMain({ currentUser, logout }) {
         analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
       });
     }
-  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate, decisions, projectRole]);
+  }, [projectId, urlProjectSlug, userId, currentUser, projectOwnerId, displayName, navigate, decisions, projectRole]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -1984,7 +1987,7 @@ function AppMain({ currentUser, logout }) {
       dashboardAutoLoadRef.current = false;
       return;
     }
-    if (conflictData || dashboardAutoLoadRef.current || !projectId || !userId) return;
+    if (conflictData || dashboardAutoLoadRef.current || (!projectId && !urlProjectSlug) || !userId) return;
     dashboardAutoLoadRef.current = true;
     // Determine phase from URL
     const phase = location.pathname.endsWith('/conflicts') ? 'resolution' : 'screening';
@@ -1993,11 +1996,12 @@ function AppMain({ currentUser, logout }) {
     const fallbackTimeout = setTimeout(() => setDashboardTimedOut(true), 3000);
     // Call openTeamDashboard (it navigates, but we're already on the dashboard URL — that's fine)
     openTeamDashboard(phase).finally(() => clearTimeout(fallbackTimeout));
-  }, [appView, conflictData, projectId, userId, location.pathname, openTeamDashboard]);
+  }, [appView, conflictData, projectId, urlProjectSlug, userId, location.pathname, openTeamDashboard]);
 
   // Auto-refresh dashboard every 15 seconds while viewing it
   useEffect(() => {
-    if (appView !== 'dashboard' || !conflictData || !projectId) return;
+    const refreshPid = urlProjectSlug || projectId;
+    if (appView !== 'dashboard' || !conflictData || !refreshPid) return;
     const interval = setInterval(async () => {
       try {
         const { annotators } = conflictData;
@@ -2005,7 +2009,7 @@ function AppMain({ currentUser, logout }) {
         for (const a of annotators) {
           if (a.id) {
             try {
-              updatedDecisions[a.id] = await fsGetDecisions(a.id, projectId);
+              updatedDecisions[a.id] = await fsGetDecisions(a.id, refreshPid);
             } catch { updatedDecisions[a.id] = conflictData.annotatorDecisions[a.id] || {}; }
           }
         }
@@ -2014,7 +2018,7 @@ function AppMain({ currentUser, logout }) {
       } catch { /* ignore refresh errors */ }
     }, 15000);
     return () => clearInterval(interval);
-  }, [appView, conflictData, projectId]);
+  }, [appView, conflictData, projectId, urlProjectSlug]);
 
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
