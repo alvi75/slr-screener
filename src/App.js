@@ -2073,10 +2073,12 @@ function AppMain({ currentUser, logout }) {
     } catch (e) { /* ignore */ }
   }, [userId, navigate]);
 
-  // On mount: restore saved project or auto-load demo for first-time users.
+  // On mount: restore saved project from localStorage (if any).
+  // Demo data is NOT auto-loaded for new users — they see an empty home page.
   useEffect(() => {
     const savedIsDemo = localStorage.getItem('slr-screener-is-demo');
     if (savedIsDemo === '0') {
+      // User has an imported (non-demo) project — restore from localStorage
       try {
         const saved = localStorage.getItem(PAPERS_KEY);
         if (saved) {
@@ -2087,10 +2089,14 @@ function AppMain({ currentUser, logout }) {
             return;
           }
         }
-      } catch (e) { /* fall through to demo */ }
+      } catch (e) { /* fall through */ }
+    } else if (savedIsDemo === '1') {
+      // User previously had demo data loaded — restore it
+      loadDemoData(false);
+      return;
     }
-    // First visit or demo project — load demo data (don't navigate, respect initial appView)
-    loadDemoData(false);
+    // First visit or no saved data — show empty state, don't auto-load demo
+    setLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load dashboard projects list from Firestore
@@ -2169,14 +2175,16 @@ function AppMain({ currentUser, logout }) {
     if (!userId || !currentUser?.email) return;
     (async () => {
       try {
-        console.log('[Sharing] Fetching shared projects for:', currentUser.email);
+        console.log('[Sharing] Current user:', currentUser.email, 'uid:', userId);
+        console.log('[Sharing] Calling getSharedProjects...');
         const shared = await fsGetSharedProjects(currentUser.email);
-        console.log('[Sharing] getSharedProjects result:', shared.length, 'entries:', shared.map(s => `${s.projectId}(${s.status})`));
+        console.log('[Sharing] getSharedProjects returned:', shared.length, 'entries:', JSON.stringify(shared.map(s => ({ projectId: s.projectId, status: s.status, email: s.email }))));
         const enrichedAccepted = [];
         const enrichedPending = [];
         for (const s of shared) {
           try {
             const meta = await fsGetProjectMeta(s.projectId);
+            console.log('[Sharing] Project meta for', s.projectId, ':', meta ? `ownerId=${meta.ownerId}` : 'null');
             if (meta && meta.ownerId !== userId) {
               const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
               if (s.status === 'accepted') {
@@ -2185,7 +2193,9 @@ function AppMain({ currentUser, logout }) {
                 enrichedPending.push(enriched);
               }
             }
-          } catch { /* skip inaccessible projects */ }
+          } catch (metaErr) {
+            console.warn('[Sharing] Failed to fetch meta for', s.projectId, ':', metaErr.message);
+          }
         }
         console.log('[Sharing] Enriched:', enrichedAccepted.length, 'accepted,', enrichedPending.length, 'pending');
         setSharedProjects(enrichedAccepted);

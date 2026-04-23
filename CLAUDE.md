@@ -114,7 +114,7 @@ projects/{projectId}/
 
 ### Home Dashboard
 
-Modern landing page shown on first login (returning users go directly to screener):
+Modern landing page shown on every login. New users see an empty home page ("No projects yet") — demo data is NOT auto-loaded. Demo data only loads when explicitly selected from Recent Projects or restored from a previous session (`slr-screener-is-demo === '1'` in localStorage).
 
 - **Branding** — centered "SLR Screener" title with subtitle "What would you like to screen today?"
 - **User avatar + Sign Out** — top-right corner
