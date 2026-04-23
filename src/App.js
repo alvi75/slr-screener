@@ -478,6 +478,13 @@ function normalizePaper(raw) {
   };
 }
 
+function displayRole(role) {
+  if (role === 'annotator') return 'Collaborator';
+  if (role === 'viewer') return 'Viewer';
+  if (role === 'owner') return 'Owner';
+  return role;
+}
+
 function projectSlug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'project';
 }
@@ -2979,7 +2986,7 @@ function AppMain({ currentUser, logout }) {
                       <span className="shared-owner-avatar-placeholder">{(sp.ownerDisplayName || sp.ownerEmail || '?')[0].toUpperCase()}</span>
                     )}
                     <span>by {sp.ownerDisplayName || sp.ownerEmail}</span>
-                    <span className="shared-role-pill">{sp.role}</span>
+                    <span className="shared-role-pill">{displayRole(sp.role)}</span>
                   </div>
                 </div>
               ))}
@@ -3194,7 +3201,7 @@ function AppMain({ currentUser, logout }) {
                           {t.displayName || t.email}
                           {t.status === 'pending' && <span style={{ marginLeft: 6, fontSize: 11, color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>(pending)</span>}
                         </span>
-                        <span className="dash-team-role">{t.role}</span>
+                        <span className="dash-team-role">{displayRole(t.role)}</span>
                       </div>
                       {t.status === 'pending' ? (
                         <div style={{ fontSize: 12, color: '#b2bec3', fontStyle: 'italic', padding: '4px 0' }}>Waiting to accept invite...</div>
@@ -3238,7 +3245,7 @@ function AppMain({ currentUser, logout }) {
                 <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
                 <h3 style={{ color: '#2d3436', marginBottom: '8px' }}>Collaboration Required</h3>
                 <p style={{ maxWidth: '400px', margin: '0 auto 20px', lineHeight: '1.6' }}>
-                  Inter-annotator agreement requires at least two annotators. Share this project with a collaborator to enable conflict resolution.
+                  Inter-rater agreement requires at least two collaborators. Share this project with a collaborator to enable conflict resolution.
                 </p>
                 <button className="header-btn btn-dashboard" onClick={() => setShareModalOpen(true)} style={{ background: '#0984e3', color: 'white' }}>
                   Share Project
@@ -3454,7 +3461,7 @@ function AppMain({ currentUser, logout }) {
                           <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
                         )}
                         <div className="notif-invite-text">
-                          <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{inv.role}</span>
+                          <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{displayRole(inv.role)}</span>
                         </div>
                       </div>
                       <div className="notif-invite-actions">
@@ -4024,7 +4031,7 @@ function AppMain({ currentUser, logout }) {
                       <span className="project-shared-badge">Shared with me</span>
                     </span>
                     <span className="project-item-meta">
-                      by {sp.ownerDisplayName || sp.ownerEmail} · {sp.role}
+                      by {sp.ownerDisplayName || sp.ownerEmail} · {displayRole(sp.role)}
                     </span>
                   </div>
                 </div>
@@ -4068,7 +4075,7 @@ function AppMain({ currentUser, logout }) {
                   value={shareRole}
                   onChange={(e) => setShareRole(e.target.value)}
                 >
-                  <option value="annotator">Annotator</option>
+                  <option value="annotator">Collaborator</option>
                   <option value="viewer">Viewer</option>
                 </select>
                 <button
@@ -4101,7 +4108,7 @@ function AppMain({ currentUser, logout }) {
                       value={c.role}
                       onChange={(e) => handleRoleChange(c.email, e.target.value)}
                     >
-                      <option value="annotator">Annotator</option>
+                      <option value="annotator">Collaborator</option>
                       <option value="viewer">Viewer</option>
                     </select>
                     <span className={`share-status-badge ${c.status || 'pending'}`}>{c.status || 'pending'}</span>
@@ -4118,7 +4125,7 @@ function AppMain({ currentUser, logout }) {
               </div>
 
               <div className="share-info">
-                Collaborators with matching email will see this project when they sign in. Annotators' decisions are stored separately to prevent bias.
+                Collaborators with matching email will see this project when they sign in. Each collaborator's decisions are stored separately to prevent bias.
               </div>
             </div>
           </div>

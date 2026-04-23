@@ -240,7 +240,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 ### Project Sharing
 
 - **Share modal** — invite collaborators by email with role selection (Annotator or Viewer). Project meta stores `ownerDisplayName` and `ownerPhotoURL` alongside `ownerId`/`ownerEmail`. Always fetches fresh collaborator status from Firestore server (bypasses cache via `getDocsFromServer`) when opened (with loading indicator). Status badges: pending (yellow), accepted (green), declined (red).
-- **Roles** — Annotator: can screen papers (decisions stored independently under own userId); Viewer: read-only access
+- **Roles** — Collaborator (Firestore value: `annotator`): can screen papers (decisions stored independently under own userId); Viewer: read-only access. UI displays "Collaborator" everywhere; internal Firestore value remains `annotator`. Mapped via `displayRole()` helper function.
 - **Collaborator list** — shows email, role (editable), status badge (pending yellow, accepted green, declined red), remove button
 - **Auto-discovery** — on every app load, collectionGroup query finds all projects where user's email is a collaborator (case-insensitive). All collaborator emails normalized to lowercase in Firestore.
 - **Invitation flow** — pending invites shown via notification bell in header (not auto-accepted); collaborator explicitly accepts or declines. Invite metadata (projectName, ownerEmail, ownerDisplayName, ownerPhotoURL, ownerId) stored on the collaborator record for rich notification display.
