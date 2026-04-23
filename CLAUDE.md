@@ -288,11 +288,17 @@ Fully responsive layout across all screen sizes. No external CSS framework — p
 - **Touch-friendly** — all buttons `min-height: 44px` on mobile (Apple guideline), filter buttons padded for touch, swipe left/right on paper card for navigation
 - **Swipe support** — `touchstart`/`touchend` listeners with 60px horizontal threshold and dominant-axis check
 
-## CSS Rules — Do Not Break
+## CRITICAL CSS Rules — Do Not Break
 
-- `.paper-card` height: `calc(100vh - 300px)` with `min-height: 300px` and `max-height: 700px`. This was tested across 14"-32" screens. DO NOT remove or override this. If any feature changes the screening layout, verify the card height is unchanged on multiple screen sizes.
-- `.abstract-section`: `flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden`. This makes the abstract scroll inside the fixed card. DO NOT add a fixed height or max-height.
-- `.ai-reason`: `flex-shrink: 0`. Keeps the AI reasoning visible at the bottom of the card.
+These rules control the screening view layout across all screen sizes. They have been broken twice by other feature changes. DO NOT modify them without testing on multiple screen sizes. Any future feature (dashboard polish, score cards, bug reporter, etc.) must NOT override these rules.
+
+- `.app.screening-view`: `display: flex; flex-direction: column; height: 100svh; overflow: hidden`. This is the master layout container.
+- `.paper-card`: `flex: 1; min-height: 200px; max-height: 700px; display: flex; flex-direction: column; overflow: hidden`. It fills remaining space between header/filters and buttons. DO NOT set a fixed `height` or `calc()`.
+- `.decision-section` and `.navigation`: `flex-shrink: 0` so they are ALWAYS visible at the bottom.
+- `.abstract-section`: `flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden`. Abstract scrolls inside the fixed card.
+- `.ai-reason`: `flex-shrink: 0`. Stays visible at bottom of card.
+- On mobile (below 768px): layout switches to normal scrolling — `height: auto`, no fixed card height, no internal abstract scroll. User scrolls the page naturally.
+- These rules were tested on 7" tablet through 32" monitor. Any feature change that touches the screening view CSS MUST verify the layout is unchanged on small laptops (13-14") and large monitors (27-32").
 
 ## Project Structure
 
