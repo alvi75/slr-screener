@@ -1893,17 +1893,44 @@ function AppMain({ currentUser, logout }) {
       const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
       // Always fetch project meta to determine the real owner
       const meta = await fsGetProjectMeta(projectId).catch(() => null);
-      const ownerId = meta?.ownerId || projectOwnerId || userId;
-      const ownerEmail = meta?.ownerEmail || currentUser?.email;
+      if (!meta?.ownerId) {
+        console.warn('[Dashboard] Project meta missing ownerId — cannot determine project owner');
+      }
+      const ownerId = meta?.ownerId || projectOwnerId || null;
+      const ownerEmail = meta?.ownerEmail || '';
+
+      // Fix accepted collaborators with missing userId:
+      // If the current user's email matches a collaborator with no userId, backfill it
       const acceptedAnnotators = collabs.filter(c => c.role === 'annotator' && c.status === 'accepted');
+      for (const c of acceptedAnnotators) {
+        if (!c.userId && c.email === currentUser?.email?.toLowerCase()) {
+          c.userId = userId;
+          // Backfill to Firestore so it's correct next time
+          fsAcceptInvite(projectId, c.email, userId).catch(() => {});
+        }
+      }
+
       const pendingCollaborators = collabs.filter(c => c.status === 'pending');
-      const annotators = [
-        { id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '', status: 'accepted' },
-        ...acceptedAnnotators.filter(c => c.userId !== ownerId).map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' })),
-        ...pendingCollaborators.map(c => ({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' })),
-      ];
-      console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({id: a.id, email: a.email, role: a.role, displayName: a.displayName}))));
-      console.log('[Dashboard] currentUserId:', userId, 'ownerId:', ownerId, 'projectOwnerId:', projectOwnerId, 'meta?.ownerId:', meta?.ownerId);
+
+      // Build annotators array — owner first, then accepted (excluding owner), then pending
+      const annotators = [];
+      if (ownerId) {
+        annotators.push({ id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '', status: 'accepted' });
+      }
+      for (const c of acceptedAnnotators) {
+        if (c.userId && c.userId !== ownerId) {
+          annotators.push({ id: c.userId, email: c.email, role: 'annotator', displayName: '', status: 'accepted' });
+        }
+      }
+      for (const c of pendingCollaborators) {
+        annotators.push({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' });
+      }
+      // If current user isn't in the list yet (edge case), add them
+      if (!annotators.some(a => a.id === userId)) {
+        annotators.push({ id: userId, email: currentUser?.email, role: projectRole || 'annotator', displayName: displayName, status: 'accepted' });
+      }
+      console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({id: a.id, email: a.email, role: a.role}))));
+      console.log('[Dashboard] currentUserId:', userId, 'ownerId:', ownerId);
 
       // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
@@ -1945,7 +1972,7 @@ function AppMain({ currentUser, logout }) {
         analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
       });
     }
-  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate, decisions]);
+  }, [projectId, userId, currentUser, projectOwnerId, displayName, navigate, decisions, projectRole]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -3295,13 +3322,12 @@ function AppMain({ currentUser, logout }) {
     ];
 
     // Team progress (counts only — no per-paper decisions shown, bias protection)
-    const teamProgressUnsorted = annotators.map((a, i) => {
-      const aid = annotatorIds[i] || a.id;
-      const decs = aid ? (annotatorDecisions[aid] || {}) : {};
+    const teamProgressUnsorted = annotators.map((a) => {
+      const decs = a.id ? (annotatorDecisions[a.id] || {}) : {};
       const count = Object.keys(decs).length;
       const yesCount = Object.values(decs).filter(d => d === 'Yes').length;
       const noCount = Object.values(decs).filter(d => d === 'No').length;
-      const isMe = aid === userId;
+      const isMe = a.id === userId;
       const name = isMe ? displayName : (a.displayName || '');
       return { email: a.email, displayName: name, role: a.role, status: a.status || 'accepted', isMe, count, yesCount, noCount, pct: dbTotalPapers > 0 ? Math.round((count / dbTotalPapers) * 100) : 0 };
     });
