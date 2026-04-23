@@ -49,6 +49,10 @@ jest.mock('../services/firestore', () => ({
   saveUserProfile: jest.fn(() => Promise.resolve()),
   migrateDecisionsToSharedProject: jest.fn(() => Promise.resolve(0)),
   migrateAIScoresToSharedProject: jest.fn(() => Promise.resolve(0)),
+  saveNotification: jest.fn(() => Promise.resolve()),
+  markNotificationRead: jest.fn(() => Promise.resolve()),
+  markAllNotificationsRead: jest.fn(() => Promise.resolve()),
+  subscribeToNotifications: jest.fn(() => () => {}),
 }));
 
 // Mock xlsx to avoid issues in test environment

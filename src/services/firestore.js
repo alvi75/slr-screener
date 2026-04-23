@@ -1,5 +1,6 @@
 import {
   doc,
+  addDoc,
   collection,
   setDoc,
   getDoc,
@@ -12,6 +13,7 @@ import {
   orderBy,
   where,
   collectionGroup,
+  onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -575,4 +577,94 @@ export async function migrateAIScoresToSharedProject(oldProjectId, newProjectId,
     await saveAllAIScores(newProjectId, toMigrate);
   }
   return count;
+}
+
+// ─── Notifications ──────────────────────────────────────────
+
+/**
+ * Save a notification for a user.
+ * @param {string} userId - Recipient user ID
+ * @param {object} data - { type, message, fromUserName, fromUserEmail, projectId, projectName }
+ */
+export async function saveNotification(userId, data) {
+  const colRef = collection(db, 'users', userId, 'notifications');
+  await addDoc(colRef, { ...data, read: false, createdAt: serverTimestamp() });
+}
+
+/**
+ * Get all notifications for a user, ordered by creation date (newest first).
+ * Auto-deletes notifications older than 24 hours.
+ * @param {string} userId
+ * @returns {Promise<Array<{id, ...}>>}
+ */
+export async function getNotifications(userId) {
+  const colRef = collection(db, 'users', userId, 'notifications');
+  const q = query(colRef, orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  const now = Date.now();
+  const results = [];
+  const toDelete = [];
+  snap.docs.forEach(d => {
+    const data = d.data();
+    const createdMs = data.createdAt?.toMillis?.() || data.createdAt?.seconds * 1000 || 0;
+    if (now - createdMs > 24 * 60 * 60 * 1000) {
+      toDelete.push(d.ref);
+    } else {
+      results.push({ id: d.id, ...data, createdMs });
+    }
+  });
+  // Fire-and-forget cleanup of old notifications
+  if (toDelete.length > 0) {
+    const batch = writeBatch(db);
+    toDelete.forEach(ref => batch.delete(ref));
+    batch.commit().catch(() => {});
+  }
+  return results;
+}
+
+/**
+ * Mark a single notification as read.
+ */
+export async function markNotificationRead(userId, notificationId) {
+  const ref = doc(db, 'users', userId, 'notifications', notificationId);
+  await setDoc(ref, { read: true }, { merge: true });
+}
+
+/**
+ * Mark all notifications as read for a user.
+ */
+export async function markAllNotificationsRead(userId) {
+  const colRef = collection(db, 'users', userId, 'notifications');
+  const snap = await getDocs(colRef);
+  if (snap.size === 0) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach(d => {
+    if (!d.data().read) batch.set(d.ref, { read: true }, { merge: true });
+  });
+  await batch.commit();
+}
+
+/**
+ * Subscribe to real-time notifications for a user.
+ * @param {string} userId
+ * @param {function} callback - Called with array of notifications on every change
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeToNotifications(userId, callback) {
+  const colRef = collection(db, 'users', userId, 'notifications');
+  const q = query(colRef, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const now = Date.now();
+    const results = [];
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const createdMs = data.createdAt?.toMillis?.() || data.createdAt?.seconds * 1000 || 0;
+      if (now - createdMs <= 24 * 60 * 60 * 1000) {
+        results.push({ id: d.id, ...data, createdMs });
+      }
+    });
+    callback(results);
+  }, (err) => {
+    console.warn('[Notifications] Listener error:', err.message);
+  });
 }

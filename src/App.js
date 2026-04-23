@@ -31,6 +31,10 @@ import {
   saveUserProfile as fsSaveUserProfile,
   migrateDecisionsToSharedProject as fsMigrateDecisions,
   migrateAIScoresToSharedProject as fsMigrateAIScores,
+  saveNotification as fsSaveNotification,
+  markNotificationRead as fsMarkNotificationRead,
+  markAllNotificationsRead as fsMarkAllNotificationsRead,
+  subscribeToNotifications as fsSubscribeToNotifications,
 } from './services/firestore';
 import { analyzeConflicts, interpretKappa } from './utils/kappa';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -476,6 +480,15 @@ function normalizePaper(raw) {
     pdf_url: val(raw.pdf_url),
     pdf_source: val(raw.pdf_source),
   };
+}
+
+function relativeTime(ms) {
+  if (!ms) return '';
+  const diff = Date.now() - ms;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} min${Math.floor(diff / 60000) > 1 ? 's' : ''} ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)} hour${Math.floor(diff / 3600000) > 1 ? 's' : ''} ago`;
+  return `${Math.floor(diff / 86400000)} day${Math.floor(diff / 86400000) > 1 ? 's' : ''} ago`;
 }
 
 function displayRole(role) {
@@ -1554,7 +1567,9 @@ function AppMain({ currentUser, logout }) {
   const [shareError, setShareError] = useState('');
   const [sharedProjects, setSharedProjects] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]); // enriched invites with projectName, ownerEmail
+  const [generalNotifications, setGeneralNotifications] = useState([]); // real-time notifications
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const prevNotifCountRef = useRef(0); // track count for audio trigger
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
   const [projectOwnerId, setProjectOwnerId] = useState(null);
 
@@ -1791,21 +1806,45 @@ function AppMain({ currentUser, logout }) {
         setAppendResult({ added: migratedCount, skipped: migratedScores, total: migratedCount, message: `Migrated ${migratedCount} existing decision${migratedCount !== 1 ? 's' : ''}${migratedScores > 0 ? ` and ${migratedScores} AI score${migratedScores !== 1 ? 's' : ''}` : ''} to the shared project` });
       }
 
+      // Notify the project owner
+      if (invite.ownerId) {
+        fsSaveNotification(invite.ownerId, {
+          type: 'invite_accepted',
+          message: `${displayName || currentUser?.email} accepted your invite to "${invite.projectName}"`,
+          fromUserName: displayName || '',
+          fromUserEmail: currentUser?.email || '',
+          projectId: invite.projectId,
+          projectName: invite.projectName || '',
+        }).catch(() => {});
+      }
+
       // Navigate to the shared project
       navigate(`/project/${invite.projectId}`);
     } catch (err) {
       console.warn('[Sharing] Accept invite failed:', err.message);
     }
-  }, [currentUser, userId, navigate]);
+  }, [currentUser, userId, navigate, displayName]);
 
   const handleDeclineInvite = useCallback(async (invite) => {
     try {
       await fsDeclineInvite(invite.projectId, currentUser?.email);
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
+
+      // Notify the project owner
+      if (invite.ownerId) {
+        fsSaveNotification(invite.ownerId, {
+          type: 'invite_declined',
+          message: `${displayName || currentUser?.email} declined your invite to "${invite.projectName}"`,
+          fromUserName: displayName || '',
+          fromUserEmail: currentUser?.email || '',
+          projectId: invite.projectId,
+          projectName: invite.projectName || '',
+        }).catch(() => {});
+      }
     } catch (err) {
       console.warn('[Sharing] Decline invite failed:', err.message);
     }
-  }, [currentUser]);
+  }, [currentUser, displayName]);
 
   // Check if current project has collaborators (for Team badge)
   const hasCollaborators = (collaborators || []).length > 0;
@@ -2224,6 +2263,32 @@ function AppMain({ currentUser, logout }) {
       }
     })();
   }, [userId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Real-time notification listener ──────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = fsSubscribeToNotifications(userId, (notifs) => {
+      const unreadCount = notifs.filter(n => !n.read).length;
+      // Play beep only for NEW unread notifications (not on initial load)
+      if (prevNotifCountRef.current > 0 && unreadCount > prevNotifCountRef.current) {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 800;
+          gain.gain.value = 0.15;
+          osc.start();
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+          osc.stop(ctx.currentTime + 0.2);
+        } catch { /* audio not available */ }
+      }
+      prevNotifCountRef.current = unreadCount;
+      setGeneralNotifications(notifs);
+    });
+    return unsubscribe;
+  }, [userId]);
 
   // Auto-save decisions (localStorage + Firestore)
   const decisionsInitRef = useRef(true);
@@ -3445,48 +3510,71 @@ function AppMain({ currentUser, logout }) {
             {syncStatus === 'syncing' && <svg className="sync-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><path d="M12 12v3"/></svg>}
             {syncStatus === 'error' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="15" y1="13" x2="9" y2="17"/><line x1="9" y1="13" x2="15" y2="17"/></svg>}
           </span>
-          <div className="notif-wrapper">
-            <button
-              className="notif-bell-btn"
-              onClick={() => setNotificationsOpen(v => !v)}
-              title={pendingInvites.length > 0 ? `${pendingInvites.length} pending invite${pendingInvites.length > 1 ? 's' : ''}` : 'No pending invites'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              {pendingInvites.length > 0 && (
-                <span className="notif-badge">{pendingInvites.length}</span>
-              )}
-            </button>
-            {notificationsOpen && (
-              <div className="notif-dropdown">
-                <div className="notif-dropdown-header">Invitations</div>
-                {pendingInvites.length === 0 ? (
-                  <div className="notif-empty">No pending invitations</div>
-                ) : (
-                  pendingInvites.map(inv => (
-                    <div key={inv.projectId} className="notif-invite-card">
-                      <div className="notif-invite-row">
-                        {inv.ownerPhotoURL ? (
-                          <img src={inv.ownerPhotoURL} alt="" className="notif-owner-avatar" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
-                        )}
-                        <div className="notif-invite-text">
-                          <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{displayRole(inv.role)}</span>
+          {(() => {
+            const unreadGeneralCount = generalNotifications.filter(n => !n.read).length;
+            const totalBadge = pendingInvites.length + unreadGeneralCount;
+            return (
+              <div className="notif-wrapper">
+                <button
+                  className="notif-bell-btn"
+                  onClick={() => setNotificationsOpen(v => !v)}
+                  title={totalBadge > 0 ? `${totalBadge} notification${totalBadge > 1 ? 's' : ''}` : 'No notifications'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  </svg>
+                  {totalBadge > 0 && <span className="notif-badge">{totalBadge}</span>}
+                </button>
+                {notificationsOpen && (
+                  <div className="notif-dropdown">
+                    <div className="notif-dropdown-header">
+                      <span>Notifications</span>
+                      {(unreadGeneralCount > 0) && (
+                        <button className="notif-mark-all" onClick={() => { fsMarkAllNotificationsRead(userId).catch(() => {}); setGeneralNotifications(prev => prev.map(n => ({ ...n, read: true }))); }}>Mark all read</button>
+                      )}
+                    </div>
+                    {/* Pending invites */}
+                    {pendingInvites.map(inv => (
+                      <div key={`inv-${inv.projectId}`} className="notif-invite-card">
+                        <div className="notif-invite-row">
+                          {inv.ownerPhotoURL ? (
+                            <img src={inv.ownerPhotoURL} alt="" className="notif-owner-avatar" referrerPolicy="no-referrer" />
+                          ) : (
+                            <span className="notif-owner-avatar-placeholder">{(inv.ownerDisplayName || inv.ownerEmail || '?')[0].toUpperCase()}</span>
+                          )}
+                          <div className="notif-invite-text">
+                            <strong>{inv.ownerDisplayName || inv.ownerEmail}</strong> invited you to collaborate on <strong>"{inv.projectName}"</strong> as <span className="notif-role">{displayRole(inv.role)}</span>
+                          </div>
+                        </div>
+                        <div className="notif-invite-actions">
+                          <button className="notif-accept-btn" onClick={() => handleAcceptInvite(inv)}>Accept</button>
+                          <button className="notif-decline-btn" onClick={() => handleDeclineInvite(inv)}>Decline</button>
                         </div>
                       </div>
-                      <div className="notif-invite-actions">
-                        <button className="notif-accept-btn" onClick={() => { handleAcceptInvite(inv); }}>Accept</button>
-                        <button className="notif-decline-btn" onClick={() => { handleDeclineInvite(inv); }}>Decline</button>
+                    ))}
+                    {/* General notifications */}
+                    {generalNotifications.map(n => (
+                      <div
+                        key={n.id}
+                        className={`notif-general-item ${n.read ? '' : 'notif-unread'}`}
+                        onClick={() => { if (!n.read) { fsMarkNotificationRead(userId, n.id).catch(() => {}); setGeneralNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x)); } }}
+                      >
+                        <div className="notif-general-icon">{n.type === 'invite_accepted' ? '✅' : n.type === 'invite_declined' ? '❌' : '🔔'}</div>
+                        <div className="notif-general-body">
+                          <div className="notif-general-msg">{n.message}</div>
+                          <div className="notif-general-time">{relativeTime(n.createdMs)}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                    {pendingInvites.length === 0 && generalNotifications.length === 0 && (
+                      <div className="notif-empty">No notifications</div>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            );
+          })()}
           <div className="header-user">
             {currentUser.photoURL ? (
               <img src={currentUser.photoURL} alt="" className="header-avatar" referrerPolicy="no-referrer" />

@@ -315,6 +315,16 @@ These features have been fixed multiple times. Any future change MUST verify the
 - This requires: (1) Firestore collection group index on `collaborators.email`, (2) Firestore rule `match /{path=**}/collaborators/{email} { allow read: if request.auth != null; }`, (3) email stored lowercase.
 - DO NOT remove the collection group index or the security rule. DO NOT change the `collaborators` collection path.
 - After accepting: invitee's status changes to "accepted", project appears in their sidebar.
+- Accepting/declining creates a notification for the project owner at `users/{ownerId}/notifications/{auto-id}` with type, message, fromUserName, fromUserEmail, projectId, projectName, read, createdAt.
+
+### Real-Time Notifications
+- Firestore `onSnapshot` listener on `users/{userId}/notifications` provides real-time updates.
+- Bell icon badge shows total count: pending invites + unread general notifications.
+- Dropdown shows pending invites (with Accept/Decline) at top, then general notifications below with relative timestamps ("just now", "2 mins ago").
+- Unread notifications have blue highlight background. Clicking marks as read. "Mark all read" link at top.
+- Audio beep (Web Audio API, 800Hz 200ms) plays when new unread notification arrives — NOT on initial page load.
+- Notifications auto-delete after 24 hours.
+- Firestore rule allows any authenticated user to create notifications for other users (needed for cross-user accept/decline notifications).
 
 ### Display Name Modal
 - Triggers for ALL users on login if `nameConfirmed` is missing or false in Firestore `users/{userId}/profile/main`.
