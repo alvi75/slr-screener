@@ -1902,7 +1902,8 @@ function AppMain({ currentUser, logout }) {
         ...acceptedAnnotators.filter(c => c.userId !== ownerId).map(c => ({ id: c.userId || null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' })),
         ...pendingCollaborators.map(c => ({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' })),
       ];
-      console.log('[Dashboard] annotators:', annotators.map(a => `${a.email}(id=${a.id}, role=${a.role})`), 'currentUserId:', userId);
+      console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({id: a.id, email: a.email, role: a.role, displayName: a.displayName}))));
+      console.log('[Dashboard] currentUserId:', userId, 'ownerId:', ownerId, 'projectOwnerId:', projectOwnerId, 'meta?.ownerId:', meta?.ownerId);
 
       // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
