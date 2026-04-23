@@ -300,6 +300,30 @@ These rules control the screening view layout across all screen sizes. They have
 - On mobile (below 768px): layout switches to normal scrolling — `height: auto`, no fixed card height, no internal abstract scroll. User scrolls the page naturally.
 - These rules were tested on 7" tablet through 32" monitor. Any feature change that touches the screening view CSS MUST verify the layout is unchanged on small laptops (13-14") and large monitors (27-32").
 
+## CRITICAL Features — Do Not Break
+
+These features have been fixed multiple times. Any future change MUST verify they still work.
+
+### Post-Login Redirect
+- Users ALWAYS land on `/home` after login — never on a project page.
+- `LoginRedirect` component returns `<Navigate to="/home" replace />` with no `from` logic.
+- DO NOT add back location.state redirect logic.
+
+### Invite Notification Flow
+- Owner sends invite → saves to `projects/{projectId}/collaborators/{email}` in Firestore.
+- Invitee logs in → `getSharedProjects(email)` runs a `collectionGroup('collaborators')` query → returns pending invites → shows in bell icon with Accept/Decline.
+- This requires: (1) Firestore collection group index on `collaborators.email`, (2) Firestore rule `match /{path=**}/collaborators/{email} { allow read: if request.auth != null; }`, (3) email stored lowercase.
+- DO NOT remove the collection group index or the security rule. DO NOT change the `collaborators` collection path.
+- After accepting: invitee's status changes to "accepted", project appears in their sidebar.
+
+### Display Name Modal
+- Blocking modal on first login if no displayName in Firestore.
+- Triggers for ALL users (Google and email/password).
+- Must appear before any app content.
+
+### Screening Layout (see CSS Rules section)
+- Card height, abstract scroll, button visibility — all covered above.
+
 ## Project Structure
 
 ```
