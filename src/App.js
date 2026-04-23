@@ -1581,23 +1581,38 @@ function AppMain({ currentUser, logout }) {
 
     (async () => {
       try {
-        // Check 1: Is this the user's own project?
+        // Check 1: Is this the user's own project in Firestore?
         const ownProject = await fsGetProject(userId, urlProjectSlug);
         if (ownProject) {
           setProjectAccess('granted');
           return;
         }
         // Check 2: Is the user a collaborator with accepted status?
-        const shared = await fsGetSharedProjects(currentUser?.email);
+        const shared = await fsGetSharedProjects(currentUser?.email) || [];
         const match = shared.find(s => s.projectId === urlProjectSlug && s.status === 'accepted');
         if (match) {
           setProjectAccess('granted');
           return;
         }
+        // Check 3: Does the user have this project loaded locally?
+        // (covers offline access and projects not yet synced to Firestore)
+        const localProjectName = localStorage.getItem('slr-screener-project-name') || '';
+        const localSlug = localProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        if (localSlug === urlProjectSlug) {
+          setProjectAccess('granted');
+          return;
+        }
         setProjectAccess('denied');
       } catch (err) {
-        console.warn('[Access] Check failed, granting access:', err.message);
-        setProjectAccess('granted'); // fail open to avoid blocking on network errors
+        console.warn('[Access] Check failed:', err.message);
+        // If Firestore is unavailable, check local data as fallback
+        const localProjectName = localStorage.getItem('slr-screener-project-name') || '';
+        const localSlug = localProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        if (localSlug === urlProjectSlug) {
+          setProjectAccess('granted');
+        } else {
+          setProjectAccess('denied');
+        }
       }
     })();
   }, [urlProjectSlug, userId, currentUser?.email]);
@@ -1615,17 +1630,24 @@ function AppMain({ currentUser, logout }) {
         if (profile?.displayName) {
           setDisplayName(profile.displayName);
           setShowDisplayNameModal(false);
+        } else if (currentUser?.displayName) {
+          // Have Google displayName but not saved to Firestore yet — save it
+          setDisplayName(currentUser.displayName);
+          setShowDisplayNameModal(false);
+          fsSaveUserProfile(userId, { displayName: currentUser.displayName }).catch(() => {});
         } else {
-          // No display name stored — show blocking modal
-          const prefill = currentUser?.displayName || '';
-          setDisplayNameInput(prefill);
+          // No display name anywhere — show blocking modal
+          setDisplayNameInput('');
           setShowDisplayNameModal(true);
         }
       } catch (err) {
         console.warn('[Profile] Failed to load profile:', err.message);
-        // On error, still show modal if no name set
-        if (!displayName) {
-          setDisplayNameInput(currentUser?.displayName || '');
+        // On error: use currentUser.displayName if available, otherwise show modal
+        if (currentUser?.displayName) {
+          setDisplayName(currentUser.displayName);
+          setShowDisplayNameModal(false);
+        } else if (!displayName) {
+          setDisplayNameInput('');
           setShowDisplayNameModal(true);
         }
       }

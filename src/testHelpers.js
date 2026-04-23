@@ -77,6 +77,7 @@ export function setupFetchMock() {
   // Pre-set flags so the app loads demo data
   localStorage.setItem('slr-screener-has-data', '1');
   localStorage.setItem('slr-screener-is-demo', '1');
+  localStorage.setItem('slr-screener-project-name', 'Model Sizes in SE Research 2025');
 
   const fetchMock = jest.fn((url) => {
     if (typeof url === 'string' && url.includes('enriched_papers_2025.json')) {
