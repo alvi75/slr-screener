@@ -288,6 +288,12 @@ Fully responsive layout across all screen sizes. No external CSS framework — p
 - **Touch-friendly** — all buttons `min-height: 44px` on mobile (Apple guideline), filter buttons padded for touch, swipe left/right on paper card for navigation
 - **Swipe support** — `touchstart`/`touchend` listeners with 60px horizontal threshold and dominant-axis check
 
+## CSS Rules — Do Not Break
+
+- `.paper-card` height: `calc(100vh - 300px)` with `min-height: 300px` and `max-height: 700px`. This was tested across 14"-32" screens. DO NOT remove or override this. If any feature changes the screening layout, verify the card height is unchanged on multiple screen sizes.
+- `.abstract-section`: `flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden`. This makes the abstract scroll inside the fixed card. DO NOT add a fixed height or max-height.
+- `.ai-reason`: `flex-shrink: 0`. Keeps the AI reasoning visible at the bottom of the card.
+
 ## Project Structure
 
 ```

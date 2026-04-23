@@ -746,7 +746,14 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* Paper card */
+/* ═══════════════════════════════════════════════════════════
+   PAPER CARD HEIGHT — DO NOT MODIFY WITHOUT TESTING ALL SCREENS
+   calc(100vh - 300px) with min 300px, max 700px.
+   Tested on: 14" laptop (862px), 16" laptop (997px),
+   22-24" 1080p (980px), 27-32" monitors (1318px).
+   Abstract scrolls inside. Card size is consistent.
+   If you change ANYTHING here, verify on all screen sizes.
+   ═══════════════════════════════════════════════════════════ */
 .paper-card {
   background: white;
   border-radius: 12px;
