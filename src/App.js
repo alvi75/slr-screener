@@ -1617,35 +1617,27 @@ function AppMain({ currentUser, logout }) {
       try {
         const profile = await fsGetUserProfile(userId);
         if (profile?.displayName) {
+          // Display name exists in Firestore — use it, skip modal
           setDisplayName(profile.displayName);
           setShowDisplayNameModal(false);
-        } else if (currentUser?.displayName) {
-          // Have Google displayName but not saved to Firestore yet — save it
-          setDisplayName(currentUser.displayName);
-          setShowDisplayNameModal(false);
-          fsSaveUserProfile(userId, { displayName: currentUser.displayName }).catch(() => {});
         } else {
-          // No display name anywhere — show blocking modal
-          setDisplayNameInput('');
+          // No display name in Firestore — show blocking modal
+          // Pre-fill from Google displayName if available
+          setDisplayNameInput(currentUser?.displayName || '');
           setShowDisplayNameModal(true);
         }
       } catch (err) {
         console.warn('[Profile] Failed to load profile:', err.message);
-        // On error: use currentUser.displayName if available, otherwise show modal
-        if (currentUser?.displayName) {
-          setDisplayName(currentUser.displayName);
-          setShowDisplayNameModal(false);
-        } else if (!displayName) {
-          setDisplayNameInput('');
-          setShowDisplayNameModal(true);
-        }
+        // On error: show modal so user can set their name
+        setDisplayNameInput(currentUser?.displayName || '');
+        setShowDisplayNameModal(true);
       }
     })();
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDisplayName = useCallback(async (name) => {
     const trimmed = name.trim();
-    if (!trimmed || !userId) return;
+    if (!trimmed || trimmed.length < 2 || !userId) return;
     setDisplayName(trimmed);
     setShowDisplayNameModal(false);
     try {
@@ -2842,23 +2834,30 @@ function AppMain({ currentUser, logout }) {
   // Must enter a display name before using any view
   if (showDisplayNameModal) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="api-key-modal" style={{ position: 'relative' }}>
-          <h3>Enter Your Display Name</h3>
-          <p>This name will be shown to collaborators on shared projects.</p>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="api-key-modal" style={{ position: 'relative', maxWidth: 420 }}>
+          <h3 style={{ fontSize: 22, marginBottom: 4 }}>Welcome! <span role="img" aria-label="wave">👋</span></h3>
+          <p style={{ color: '#636e72', marginBottom: 16 }}>What should we call you?</p>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#2d3436', marginBottom: 6 }}>
+            Display Name <span style={{ color: '#d63031' }}>*</span>
+          </label>
           <input
             className="api-key-input"
-            placeholder="Your name"
+            placeholder="e.g., Alvi, Zahidul Haque, Sarah"
             value={displayNameInput}
             onChange={(e) => setDisplayNameInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && displayNameInput.trim()) saveDisplayName(displayNameInput); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && displayNameInput.trim().length >= 2) saveDisplayName(displayNameInput); }}
             autoFocus
           />
-          <div className="edit-actions">
+          {displayNameInput.trim().length > 0 && displayNameInput.trim().length < 2 && (
+            <div style={{ fontSize: 12, color: '#d63031', marginTop: 4 }}>Name must be at least 2 characters</div>
+          )}
+          <div className="edit-actions" style={{ marginTop: 16 }}>
             <button
               className="save-btn"
+              style={{ width: '100%', padding: '12px 0', fontSize: 15 }}
               onClick={() => saveDisplayName(displayNameInput)}
-              disabled={!displayNameInput.trim()}
+              disabled={displayNameInput.trim().length < 2}
             >Save</button>
           </div>
         </div>

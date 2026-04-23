@@ -317,9 +317,12 @@ These features have been fixed multiple times. Any future change MUST verify the
 - After accepting: invitee's status changes to "accepted", project appears in their sidebar.
 
 ### Display Name Modal
-- Blocking modal on first login if no displayName in Firestore.
-- Triggers for ALL users (Google and email/password).
-- Must appear before any app content.
+- Triggers for ALL users on login if no displayName in Firestore `users/{userId}/profile/main`.
+- NOT unique — just a friendly name for identification.
+- Blocking modal, no skip button, must enter at least 2 characters.
+- Pre-fills from Google displayName if available.
+- Title: "Welcome! 👋", subtitle: "What should we call you?"
+- Must appear before any app content (rendered before all views in App.js).
 
 ### Screening Layout (see CSS Rules section)
 - Card height, abstract scroll, button visibility — all covered above.
