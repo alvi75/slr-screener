@@ -339,6 +339,18 @@ These features have been fixed multiple times. Any future change MUST verify the
 ### Screening Layout (see CSS Rules section)
 - Card height, abstract scroll, button visibility — all covered above.
 
+### No Infinite Spinners Rule
+No page in the app should ever show a loading spinner for more than 3-5 seconds. Every loading state has a timeout that shows fallback UI (cached data, error message, or navigation buttons). This applies to:
+- **Auth loading** (AuthGate): 5s timeout → redirect to login
+- **Access check**: 3s timeout → deny access
+- **Dashboard loading**: 3s timeout → show "Dashboard Loading Timed Out" with Back to Screener / Go to Home buttons
+- **Papers loading**: 3s timeout → stop loading, show empty state or fallback
+- **Display name modal**: shows immediately on auth, Firestore error shows modal with empty input
+- **Home**: project list loads in background, page renders immediately with empty state
+- **Setup, Access Denied, Page Not Found, Login**: render immediately, no loading states
+
+Uses `LoadingTimeout` helper component and `setTimeout` patterns. If adding a new page or feature with async data loading, always include a timeout fallback.
+
 ## Project Structure
 
 ```

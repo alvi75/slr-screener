@@ -482,6 +482,15 @@ function normalizePaper(raw) {
   };
 }
 
+// Helper component: fires onTimeout after N seconds (prevents infinite spinners)
+function LoadingTimeout({ seconds = 3, onTimeout }) {
+  useEffect(() => {
+    const t = setTimeout(onTimeout, seconds * 1000);
+    return () => clearTimeout(t);
+  }, [seconds, onTimeout]);
+  return null;
+}
+
 function relativeTime(ms) {
   if (!ms) return '';
   const diff = Date.now() - ms;
@@ -1393,11 +1402,18 @@ function AccessDenied() {
 function AuthGate({ children }) {
   const { currentUser, loading: authLoading } = useAuth();
   const location = useLocation();
+  const [authTimedOut, setAuthTimedOut] = useState(false);
 
-  if (authLoading) {
+  useEffect(() => {
+    if (!authLoading) return;
+    const t = setTimeout(() => setAuthTimedOut(true), 5000);
+    return () => clearTimeout(t);
+  }, [authLoading]);
+
+  if (authLoading && !authTimedOut) {
     return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading...</div>;
   }
-  if (!currentUser) {
+  if ((authLoading && authTimedOut) || !currentUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   if (!currentUser.emailVerified && currentUser.providerData?.[0]?.providerId === 'password') {
@@ -1575,6 +1591,7 @@ function AppMain({ currentUser, logout }) {
 
   // ── Conflict Resolution ───────────────────────────────────────
   const [conflictData, setConflictData] = useState(null); // { annotatorDecisions, annotators, finalDecisions, analysis }
+  const [dashboardTimedOut, setDashboardTimedOut] = useState(false);
   const [conflictTab, setConflictTab] = useState('conflicts');
   const [conflictSearch, setConflictSearch] = useState('');
   const [conflictVenueFilter, setConflictVenueFilter] = useState('All');
@@ -1591,10 +1608,16 @@ function AppMain({ currentUser, logout }) {
   useEffect(() => {
     if (!urlProjectSlug || !userId) {
       setProjectAccess('granted'); // non-project routes are always accessible
+
       return;
     }
     // Skip re-check if slug hasn't changed
     if (accessCheckRef.current === urlProjectSlug) return;
+    // 3 second timeout — deny if check takes too long
+    const accessTimeout = setTimeout(() => {
+
+      setProjectAccess('denied');
+    }, 3000);
     accessCheckRef.current = urlProjectSlug;
     setProjectAccess('checking');
 
@@ -1603,6 +1626,7 @@ function AppMain({ currentUser, logout }) {
         // Check 1: Is this the user's own project in Firestore?
         const ownProject = await fsGetProject(userId, urlProjectSlug);
         if (ownProject) {
+          clearTimeout(accessTimeout);
           setProjectAccess('granted');
           return;
         }
@@ -1610,15 +1634,19 @@ function AppMain({ currentUser, logout }) {
         const shared = await fsGetSharedProjects(currentUser?.email) || [];
         const match = shared.find(s => s.projectId === urlProjectSlug && s.status === 'accepted');
         if (match) {
+          clearTimeout(accessTimeout);
           setProjectAccess('granted');
           return;
         }
+        clearTimeout(accessTimeout);
         setProjectAccess('denied');
       } catch (err) {
+        clearTimeout(accessTimeout);
         console.warn('[Access] Check failed:', err.message);
         setProjectAccess('denied');
       }
     })();
+    return () => clearTimeout(accessTimeout);
   }, [urlProjectSlug, userId, currentUser?.email]);
 
   // ── Display name ──────────────────────────────────────────
@@ -1857,7 +1885,9 @@ function AppMain({ currentUser, logout }) {
     if (forcePhase) setDashboardPhase(forcePhase);
 
     // Navigate immediately so the user sees "Loading dashboard..."
+    setDashboardTimedOut(false);
     navigate(`/project/${projectId}/dashboard`);
+    const dashTimeout = setTimeout(() => setDashboardTimedOut(true), 3000);
 
     try {
       const collabs = await fsGetCollaborators(projectId).catch(() => []) || [];
@@ -1899,12 +1929,14 @@ function AppMain({ currentUser, logout }) {
       const finalDecisions = await fsGetFinalDecisions(projectId);
       const analysis = analyzeConflicts(annotatorDecisions);
 
+      clearTimeout(dashTimeout);
       setConflictData({ annotatorDecisions, annotators, finalDecisions, analysis });
       setConflictTab('conflicts');
       setConflictSearch('');
       setConflictVenueFilter('All');
       setConflictStatusFilter('all');
     } catch (err) {
+      clearTimeout(dashTimeout);
       console.warn('[Dashboard] Failed to load team data:', err.message);
       // Set minimal conflictData so dashboard renders instead of spinning forever
       setConflictData({
@@ -3099,15 +3131,18 @@ function AppMain({ currentUser, logout }) {
   // ===== TEAM DASHBOARD VIEW =====
   if (appView === 'dashboard') {
     if (!conflictData) {
-      // If papers are empty too, there's nothing to load — show message
-      if (papers.length === 0) {
+      // If papers are empty or timed out, show fallback
+      if (papers.length === 0 || dashboardTimedOut) {
         return (
           <div className="app access-denied-view">
             <div className="access-denied-card">
               <div className="access-denied-icon">📊</div>
-              <h2>No Project Loaded</h2>
-              <p>There are no papers in this project, or the project could not be found.</p>
-              <button className="save-btn" onClick={() => navigate('/home')}>Go to Home</button>
+              <h2>{dashboardTimedOut ? 'Dashboard Loading Timed Out' : 'No Project Loaded'}</h2>
+              <p>{dashboardTimedOut ? 'Could not load dashboard data. Check your connection and try again.' : 'There are no papers in this project, or the project could not be found.'}</p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button className="save-btn" onClick={() => navigate(`/project/${projectId}`)}>Back to Screener</button>
+                <button className="cancel-btn" onClick={() => navigate('/home')}>Go to Home</button>
+              </div>
             </div>
           </div>
         );
@@ -3426,7 +3461,12 @@ function AppMain({ currentUser, logout }) {
   }
 
   if (loading) {
-    return <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>Loading papers...</div>;
+    return (
+      <div className="app" style={{ textAlign: 'center', paddingTop: 100 }}>
+        <div>Loading papers...</div>
+        <LoadingTimeout seconds={3} onTimeout={() => setLoading(false)} />
+      </div>
+    );
   }
 
   const abstract = paper ? getAbstract(globalIndex) : '';
