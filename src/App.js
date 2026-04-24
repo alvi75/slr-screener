@@ -1878,9 +1878,9 @@ function AppMain({ currentUser, logout }) {
   const hasCollaborators = (collaborators || []).length > 0;
 
   // ── Conflict Resolution helpers ──────────────────────────────
-  const openTeamDashboard = useCallback(async (forcePhase) => {
-    // Use URL slug if available (correct for shared projects), fall back to derived projectId
-    const pid = urlProjectSlug || projectId;
+  const openTeamDashboard = useCallback(async (forcePhase, overrideProjectId) => {
+    // Use explicit override first, then URL slug, then derived projectId
+    const pid = overrideProjectId || urlProjectSlug || projectId;
     if (!pid) return;
     setProjectMenuOpen(false);
     setProjectSidebarOpen(false);
@@ -3211,7 +3211,7 @@ function AppMain({ currentUser, logout }) {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(myDecisions));
                     const scores = await fsGetAIScores(sp.projectId);
                     setAiScores(scores);
-                    openTeamDashboard('screening');
+                    openTeamDashboard('screening', sp.projectId);
                   } catch (err) {
                     console.warn('[Sharing] Failed to load shared project:', err.message);
                   }
@@ -4236,7 +4236,7 @@ function AppMain({ currentUser, logout }) {
                       const scores = await fsGetAIScores(sp.projectId);
                       setAiScores(scores);
                       // Open team dashboard for shared projects
-                      openTeamDashboard('screening');
+                      openTeamDashboard('screening', sp.projectId);
                     } catch (err) {
                       console.warn('[Sharing] Failed to load shared project:', err.message);
                     }
