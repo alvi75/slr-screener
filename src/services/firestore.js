@@ -344,7 +344,11 @@ export async function acceptInvite(projectId, email, userId) {
   const path = `projects/${projectId}/collaborators/${normalizedEmail}`;
   console.log('[Sharing] acceptInvite writing status=accepted to', path);
   const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
-  const data = { status: 'accepted', acceptedAt: serverTimestamp(), userId: userId || '' };
+  if (!userId) {
+    console.warn('[Sharing] acceptInvite called without userId for', email);
+  }
+  const data = { status: 'accepted', acceptedAt: serverTimestamp() };
+  if (userId) data.userId = userId;
   await setDoc(ref, data, { merge: true });
   console.log('[Sharing] acceptInvite completed for', path);
 }
