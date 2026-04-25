@@ -1587,7 +1587,7 @@ function AppMain({ currentUser, logout }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const prevNotifCountRef = useRef(0); // track count for audio trigger
   const [projectRole, setProjectRole] = useState('owner'); // 'owner' | 'annotator' | 'viewer'
-  const [projectOwnerId, setProjectOwnerId] = useState(null);
+  // projectOwnerId removed — ownerId always read from Firestore meta
 
   // ── Conflict Resolution ───────────────────────────────────────
   const [conflictData, setConflictData] = useState(null); // { annotatorDecisions, annotators, finalDecisions, analysis }
@@ -1893,50 +1893,41 @@ function AppMain({ currentUser, logout }) {
 
     try {
       const collabs = await fsGetCollaborators(pid).catch(() => []) || [];
-      const meta = await fsGetProjectMeta(pid).catch(() => null);
+      let meta = await fsGetProjectMeta(pid).catch(() => null);
 
-      // === DUMP RAW DATA FOR DEBUGGING ===
-      console.log('[Dashboard] RAW meta:', JSON.stringify(meta ? { ownerId: meta.ownerId, ownerEmail: meta.ownerEmail } : null));
-      console.log('[Dashboard] RAW collabs:', JSON.stringify(collabs.map(c => ({ email: c.email, status: c.status, role: c.role, userId: c.userId, ownerId: c.ownerId, invitedBy: c.invitedBy }))));
-      console.log('[Dashboard] currentUser:', userId, currentUser?.email);
-
-      // === DETERMINE OWNER ===
-      // Try every source: meta, collaborator records, state
-      let ownerId = null;
-      let ownerEmail = '';
-      let ownerSource = 'none';
-
-      if (meta?.ownerId) {
-        ownerId = meta.ownerId;
-        ownerEmail = meta.ownerEmail || '';
-        ownerSource = 'meta';
-      } else {
-        // Fall back to collaborator record fields
+      // === REPAIR: if meta has no ownerId, fix it from collaborator records ===
+      if (!meta?.ownerId) {
+        let repairedOwnerId = null;
+        let repairedOwnerEmail = '';
         for (const c of collabs) {
-          if (c.ownerId) { ownerId = c.ownerId; ownerEmail = c.ownerEmail || ''; ownerSource = 'collab.ownerId'; break; }
-          if (c.invitedBy) { ownerId = c.invitedBy; ownerEmail = c.ownerEmail || ''; ownerSource = 'collab.invitedBy'; break; }
+          if (c.invitedBy) { repairedOwnerId = c.invitedBy; repairedOwnerEmail = c.ownerEmail || ''; break; }
+          if (c.ownerId) { repairedOwnerId = c.ownerId; repairedOwnerEmail = c.ownerEmail || ''; break; }
+        }
+        if (repairedOwnerId) {
+          console.log('[Dashboard] Repairing missing meta.ownerId →', repairedOwnerId);
+          await fsSaveProjectMeta(pid, { ownerId: repairedOwnerId, ownerEmail: repairedOwnerEmail }).catch(() => {});
+          meta = { ...(meta || {}), ownerId: repairedOwnerId, ownerEmail: repairedOwnerEmail };
         }
       }
-      if (!ownerId && projectOwnerId) {
-        ownerId = projectOwnerId;
-        ownerSource = 'state.projectOwnerId';
-      }
-      console.log('[Dashboard] ownerId:', ownerId, 'from:', ownerSource);
 
-      // === BACKFILL MISSING userId FOR CURRENT USER ===
+      // ownerId comes ONLY from meta — never from userId
+      const ownerId = meta?.ownerId || null;
+      const ownerEmail = meta?.ownerEmail || '';
+      console.log('[Dashboard] pid:', pid, 'ownerId:', ownerId, 'currentUserId:', userId);
+
+      // === BACKFILL missing userId for current user's collaborator record ===
       for (const c of collabs) {
         if (c.status === 'accepted' && !c.userId && c.email === currentUser?.email?.toLowerCase()) {
           c.userId = userId;
           fsAcceptInvite(pid, c.email, userId).catch(() => {});
-          console.log('[Dashboard] Backfilled userId for', c.email, '→', userId);
         }
       }
 
-      // === BUILD ANNOTATORS ARRAY ===
+      // === BUILD ANNOTATORS ===
       const annotators = [];
       const addedIds = new Set();
 
-      // 1) Owner entry
+      // Owner (always first if known)
       if (ownerId) {
         annotators.push({
           id: ownerId,
@@ -1948,36 +1939,40 @@ function AppMain({ currentUser, logout }) {
         addedIds.add(ownerId);
       }
 
-      // 2) Accepted collaborators (anyone with role 'annotator' + status 'accepted')
+      // Accepted collaborators
       for (const c of collabs) {
         if (c.status !== 'accepted') continue;
         const cid = c.userId || null;
-        // Skip if this is the owner (already added)
-        if (cid && addedIds.has(cid)) continue;
+        if (cid && addedIds.has(cid)) continue; // skip owner duplicate
         if (cid) {
           annotators.push({ id: cid, email: c.email, role: 'annotator', displayName: '', status: 'accepted' });
           addedIds.add(cid);
         } else if (!addedIds.has(c.email)) {
-          // No userId yet — show with email, can't fetch decisions
           annotators.push({ id: null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' });
           addedIds.add(c.email);
         }
       }
 
-      // 3) Pending collaborators
+      // Pending
       for (const c of collabs) {
-        if (c.status !== 'pending') continue;
-        annotators.push({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' });
+        if (c.status === 'pending') {
+          annotators.push({ id: null, email: c.email, role: 'annotator', displayName: '', status: 'pending' });
+        }
       }
 
-      // 4) Ensure current user is in the list
+      // Safety: ensure current user is present
       if (!addedIds.has(userId)) {
-        const myRole = (ownerId && ownerId === userId) ? 'owner' : 'annotator';
-        annotators.push({ id: userId, email: currentUser?.email, role: myRole, displayName: displayName, status: 'accepted' });
+        annotators.push({
+          id: userId,
+          email: currentUser?.email,
+          role: (ownerId === userId) ? 'owner' : 'annotator',
+          displayName: displayName,
+          status: 'accepted',
+        });
         addedIds.add(userId);
       }
 
-      console.log('[Dashboard] FINAL annotators:', JSON.stringify(annotators.map(a => ({ id: a.id?.slice(-6), email: a.email, role: a.role }))));
+      console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({ email: a.email, role: a.role, id: a.id ? a.id.slice(-6) : null }))));
 
       // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
@@ -2019,7 +2014,7 @@ function AppMain({ currentUser, logout }) {
         analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
       });
     }
-  }, [projectId, urlProjectSlug, userId, currentUser, projectOwnerId, displayName, navigate, decisions]);
+  }, [projectId, urlProjectSlug, userId, currentUser, displayName, navigate, decisions]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -2147,7 +2142,6 @@ function AppMain({ currentUser, logout }) {
         syncProjectToFirestore(userId, demoId, { name: 'Model Sizes in SE Research 2025', isDemo: true, createdAt: Date.now(), paperCount: data.papers.length });
         try { fsSaveProjectMeta(demoId, { ownerId: userId, ownerEmail: currentUser?.email, ownerDisplayName: displayName || currentUser?.displayName || '', ownerPhotoURL: currentUser?.photoURL || '', projectName: 'Model Sizes in SE Research 2025' })?.catch(() => {}); } catch (e) { /* ignore */ }
         setProjectRole('owner');
-        setProjectOwnerId(null);
       });
   }, [userId, currentUser, navigate, displayName]);
 
@@ -2192,7 +2186,6 @@ function AppMain({ currentUser, logout }) {
     firestoreSync(() => fsSaveProject(userId, newProjectId, { name, isDemo: false, createdAt: Date.now(), paperCount: importedPapers.length }));
     try { fsSaveProjectMeta(newProjectId, { ownerId: userId, ownerEmail: currentUser?.email, ownerDisplayName: displayName || currentUser?.displayName || '', ownerPhotoURL: currentUser?.photoURL || '', projectName: name })?.catch(() => {}); } catch (e) { /* ignore */ }
     setProjectRole('owner');
-    setProjectOwnerId(null);
     navigate(`/project/${projectSlug(name)}`);
   }, [userId, currentUser, firestoreSync, navigate, displayName]);
 
@@ -2239,7 +2232,6 @@ function AppMain({ currentUser, logout }) {
     localStorage.setItem('slr-screener-project-name', proj.name || proj.id);
     localStorage.setItem('slr-screener-is-demo', '0');
     setProjectRole('owner');
-    setProjectOwnerId(null);
     try {
       const saved = localStorage.getItem(PAPERS_KEY);
       if (saved) {
@@ -3239,7 +3231,6 @@ function AppMain({ currentUser, logout }) {
               {sharedProjects.map(sp => (
                 <div key={sp.projectId} className="home-project-card" onClick={async () => {
                   setProjectRole(sp.role);
-                  setProjectOwnerId(sp.ownerId);
                   setProjectName(sp.projectName);
                   setIsDemo(false);
                   localStorage.setItem('slr-screener-project-name', sp.projectName);
@@ -4260,8 +4251,7 @@ function AppMain({ currentUser, logout }) {
                     setProjectSidebarOpen(false);
                     setProjectMenuOpen(false);
                     setProjectRole(sp.role);
-                    setProjectOwnerId(sp.ownerId);
-                    setProjectName(sp.projectName);
+                      setProjectName(sp.projectName);
                     setIsDemo(false);
                     localStorage.setItem('slr-screener-project-name', sp.projectName);
                     localStorage.setItem('slr-screener-is-demo', '0');
