@@ -1895,24 +1895,29 @@ function AppMain({ currentUser, logout }) {
       const collabs = await fsGetCollaborators(pid).catch(() => []) || [];
       let meta = await fsGetProjectMeta(pid).catch(() => null);
 
-      // === REPAIR: if meta has no ownerId, fix it from collaborator records ===
-      if (!meta?.ownerId) {
-        let repairedOwnerId = null;
-        let repairedOwnerEmail = '';
-        for (const c of collabs) {
-          if (c.invitedBy) { repairedOwnerId = c.invitedBy; repairedOwnerEmail = c.ownerEmail || ''; break; }
-          if (c.ownerId) { repairedOwnerId = c.ownerId; repairedOwnerEmail = c.ownerEmail || ''; break; }
-        }
-        if (repairedOwnerId) {
-          console.log('[Dashboard] Repairing missing meta.ownerId →', repairedOwnerId);
-          await fsSaveProjectMeta(pid, { ownerId: repairedOwnerId, ownerEmail: repairedOwnerEmail }).catch(() => {});
-          meta = { ...(meta || {}), ownerId: repairedOwnerId, ownerEmail: repairedOwnerEmail };
+      // === DETERMINE OWNER from invitedBy (most reliable source) ===
+      // The invitedBy field on collaborator records is set when the owner creates
+      // the invite — it's ALWAYS the owner's UID and never changes.
+      let trueOwnerId = null;
+      let trueOwnerEmail = '';
+      for (const c of collabs) {
+        if (c.invitedBy) {
+          trueOwnerId = c.invitedBy;
+          trueOwnerEmail = c.ownerEmail || '';
+          break;
         }
       }
+      console.log('[Dashboard] invitedBy from collab records:', trueOwnerId);
 
-      // ownerId comes ONLY from meta — never from userId
-      const ownerId = meta?.ownerId || null;
-      const ownerEmail = meta?.ownerEmail || '';
+      // Use invitedBy as the authoritative owner. Fall back to meta only if no collabs.
+      let ownerId = trueOwnerId || meta?.ownerId || null;
+      let ownerEmail = trueOwnerEmail || meta?.ownerEmail || '';
+
+      // Repair meta if it's wrong or missing (only write if we have a reliable source)
+      if (trueOwnerId && meta?.ownerId !== trueOwnerId) {
+        console.log('[Dashboard] Repairing meta.ownerId:', meta?.ownerId, '→', trueOwnerId);
+        fsSaveProjectMeta(pid, { ownerId: trueOwnerId, ownerEmail: trueOwnerEmail }).catch(() => {});
+      }
       console.log('[Dashboard] pid:', pid, 'ownerId:', ownerId, 'currentUserId:', userId);
 
       // === BACKFILL missing userId for current user's collaborator record ===
