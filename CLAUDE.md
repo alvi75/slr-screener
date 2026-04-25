@@ -313,6 +313,7 @@ These features have been fixed multiple times. Any future change MUST verify the
 - Owner sends invite → saves to `projects/{projectId}/collaborators/{email}` in Firestore.
 - Invitee logs in → `getSharedProjects(email)` runs a `collectionGroup('collaborators')` query → returns pending invites → shows in bell icon with Accept/Decline.
 - This requires: (1) Firestore collection group index on `collaborators.email`, (2) Firestore rule `match /{path=**}/collaborators/{email} { allow read: if request.auth != null; }`, (3) email stored lowercase.
+- **Firestore rules for cross-user reads**: `users/{userId}/profile/{docId}` and `users/{userId}/projects/{projectId}/decisions/{paperId}` allow read by any authenticated user. This is required for the team dashboard to fetch display names and decision counts for other team members. DO NOT restrict these back to owner-only.
 - DO NOT remove the collection group index or the security rule. DO NOT change the `collaborators` collection path.
 - After accepting: invitee's status changes to "accepted", project appears in their sidebar.
 - Accepting/declining creates a notification for the project owner at `users/{ownerId}/notifications/{auto-id}` with type, message, fromUserName, fromUserEmail, projectId, projectName, read, createdAt.

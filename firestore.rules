@@ -4,8 +4,15 @@ service cloud.firestore {
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // Allow any authenticated user to read other users' profiles (display names)
+    match /users/{userId}/profile/{docId} {
+      allow read: if request.auth != null;
+    }
+    // Allow any authenticated user to read other users' decisions (for team dashboard)
+    match /users/{userId}/projects/{projectId}/decisions/{paperId} {
+      allow read: if request.auth != null;
+    }
     // Allow any authenticated user to create notifications for other users
-    // (e.g., when accepting/declining invites, the invitee notifies the owner)
     match /users/{userId}/notifications/{notifId} {
       allow create: if request.auth != null;
     }

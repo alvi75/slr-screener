@@ -1993,8 +1993,15 @@ function AppMain({ currentUser, logout }) {
           if (!a.displayName) {
             try {
               const profile = await fsGetUserProfile(a.id);
-              if (profile?.displayName) a.displayName = profile.displayName;
-            } catch { /* ignore */ }
+              if (profile?.displayName) {
+                a.displayName = profile.displayName;
+                console.log('[Dashboard] Fetched displayName for', a.email, '→', profile.displayName);
+              } else {
+                console.log('[Dashboard] No displayName in profile for', a.email, '(id:', a.id?.slice(-6), ')');
+              }
+            } catch (profileErr) {
+              console.warn('[Dashboard] Failed to fetch profile for', a.email, ':', profileErr.message);
+            }
           }
         }
       }
