@@ -123,6 +123,24 @@ export async function getDecisions(userId, projectId) {
 }
 
 /**
+ * Subscribe to real-time decision changes for a user's project.
+ * @param {string} userId
+ * @param {string} projectId
+ * @param {function} callback - Called with { paperId: decision } map on every change
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeToDecisions(userId, projectId, callback) {
+  const colRef = collection(db, 'users', userId, 'projects', projectId, 'decisions');
+  return onSnapshot(colRef, (snap) => {
+    const decisions = {};
+    snap.docs.forEach(d => { decisions[d.id] = d.data().decision; });
+    callback(decisions);
+  }, (err) => {
+    console.warn('[Firestore] Decision listener error for', userId, ':', err.message);
+  });
+}
+
+/**
  * Save all decisions for a project at once (batch write).
  * Useful for initial sync from localStorage.
  * @param {string} userId

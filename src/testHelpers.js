@@ -121,6 +121,9 @@ export function setupFetchMock() {
     if (fs.subscribeToNotifications && fs.subscribeToNotifications.mockImplementation) {
       fs.subscribeToNotifications.mockImplementation(() => () => {});
     }
+    if (fs.subscribeToDecisions && fs.subscribeToDecisions.mockImplementation) {
+      fs.subscribeToDecisions.mockImplementation(() => () => {});
+    }
   } catch { /* firestore not mocked in this test file */ }
 
   return fetchMock;

@@ -29,6 +29,7 @@ import {
   deleteAIDisagreement as fsDeleteAIDisagreement,
   getUserProfile as fsGetUserProfile,
   saveUserProfile as fsSaveUserProfile,
+  subscribeToDecisions as fsSubscribeToDecisions,
   migrateDecisionsToSharedProject as fsMigrateDecisions,
   migrateAIScoresToSharedProject as fsMigrateAIScores,
   saveNotification as fsSaveNotification,
@@ -2049,27 +2050,40 @@ function AppMain({ currentUser, logout }) {
     openTeamDashboard(phase).finally(() => clearTimeout(fallbackTimeout));
   }, [appView, conflictData, projectId, urlProjectSlug, userId, location.pathname, openTeamDashboard]);
 
-  // Auto-refresh dashboard every 15 seconds while viewing it
+  // Real-time dashboard: onSnapshot listeners for each annotator's decisions
   useEffect(() => {
     const refreshPid = urlProjectSlug || projectId;
     if (appView !== 'dashboard' || !conflictData || !refreshPid) return;
-    const interval = setInterval(async () => {
-      try {
-        const { annotators } = conflictData;
-        const updatedDecisions = {};
-        for (const a of annotators) {
-          if (a.id) {
-            try {
-              updatedDecisions[a.id] = await fsGetDecisions(a.id, refreshPid);
-            } catch { updatedDecisions[a.id] = conflictData.annotatorDecisions[a.id] || {}; }
-          }
-        }
-        const analysis = analyzeConflicts(updatedDecisions);
-        setConflictData(prev => prev ? { ...prev, annotatorDecisions: updatedDecisions, analysis } : prev);
-      } catch { /* ignore refresh errors */ }
+
+    const { annotators } = conflictData;
+    const liveDecisions = { ...conflictData.annotatorDecisions };
+    const unsubscribes = [];
+
+    // Set up a listener for each annotator with a known id
+    for (const a of annotators) {
+      if (!a.id) continue;
+      const unsub = fsSubscribeToDecisions(a.id, refreshPid, (decs) => {
+        liveDecisions[a.id] = decs;
+        // Update decisions in state instantly (counts update on next render)
+        setConflictData(prev => prev ? { ...prev, annotatorDecisions: { ...liveDecisions } } : prev);
+      });
+      unsubscribes.push(unsub);
+    }
+
+    // Recompute kappa/conflict analysis every 15 seconds (computed, not a direct read)
+    const analysisInterval = setInterval(() => {
+      setConflictData(prev => {
+        if (!prev) return prev;
+        const analysis = analyzeConflicts(prev.annotatorDecisions);
+        return { ...prev, analysis };
+      });
     }, 15000);
-    return () => clearInterval(interval);
-  }, [appView, conflictData, projectId, urlProjectSlug]);
+
+    return () => {
+      unsubscribes.forEach(u => u());
+      clearInterval(analysisInterval);
+    };
+  }, [appView, conflictData?.annotators, projectId, urlProjectSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
