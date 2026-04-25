@@ -1699,11 +1699,12 @@ function AppMain({ currentUser, logout }) {
     });
   }, [userId]);
 
-  // Derive a stable project ID from the project name
+  // Derive a stable project ID — prefer URL slug (always correct for shared projects)
   const projectId = useMemo(() => {
+    if (urlProjectSlug) return urlProjectSlug;
     const raw = localStorage.getItem('slr-screener-project-name') || projectName;
     return projectSlug(raw);
-  }, [projectName]);
+  }, [projectName, urlProjectSlug]);
 
   // Helper: fire-and-forget Firestore write with sync indicator
   const firestoreSync = useCallback((promiseFn) => {
