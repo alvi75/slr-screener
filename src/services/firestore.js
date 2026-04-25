@@ -107,6 +107,23 @@ export async function deleteDecision(userId, projectId, paperId) {
 }
 
 /**
+ * Delete all decisions for a project (used when clearing/resetting).
+ * @param {string} userId
+ * @param {string} projectId
+ * @returns {Promise<void>}
+ */
+export async function deleteAllDecisions(userId, projectId) {
+  const colRef = collection(db, 'users', userId, 'projects', projectId, 'decisions');
+  const snap = await getDocs(colRef);
+  if (snap.size === 0) return;
+  for (let i = 0; i < snap.docs.length; i += 500) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 500).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+/**
  * Get all decisions for a project as { paperId: decision } map.
  * @param {string} userId
  * @param {string} projectId

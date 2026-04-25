@@ -51,6 +51,7 @@ jest.mock('../services/firestore', () => ({
   markAllNotificationsRead: jest.fn(() => Promise.resolve()),
   subscribeToNotifications: jest.fn(() => () => {}),
   subscribeToDecisions: jest.fn(() => () => {}),
+  deleteAllDecisions: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('xlsx', () => ({

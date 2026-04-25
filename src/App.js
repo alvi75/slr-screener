@@ -30,6 +30,7 @@ import {
   getUserProfile as fsGetUserProfile,
   saveUserProfile as fsSaveUserProfile,
   subscribeToDecisions as fsSubscribeToDecisions,
+  deleteAllDecisions as fsDeleteAllDecisions,
   migrateDecisionsToSharedProject as fsMigrateDecisions,
   migrateAIScoresToSharedProject as fsMigrateAIScores,
   saveNotification as fsSaveNotification,
@@ -2859,9 +2860,11 @@ function AppMain({ currentUser, logout }) {
     setCurrentIndex(0);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(INDEX_KEY);
-    // Clear decisions in Firestore too
-    firestoreSync(() => syncDecisionsToFirestore(userId, projectId, {}));
-  }, [userId, projectId, firestoreSync]);
+    // Delete all decision documents from Firestore
+    fsDeleteAllDecisions(userId, projectId).catch(err => {
+      console.warn('[Decisions] Failed to clear Firestore decisions:', err.message);
+    });
+  }, [userId, projectId]);
 
   // Check if proxy server is available
   const checkProxy = useCallback(async () => {
