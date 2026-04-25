@@ -2052,31 +2052,36 @@ function AppMain({ currentUser, logout }) {
   }, [appView, conflictData, projectId, urlProjectSlug, userId, location.pathname, openTeamDashboard]);
 
   // Real-time dashboard: onSnapshot listeners for each annotator's decisions
+  // Uses a stable key (sorted annotator IDs) so listeners aren't torn down on every decision update
+  const dashboardAnnotatorIds = useMemo(() => {
+    if (!conflictData?.annotators) return '';
+    return conflictData.annotators.filter(a => a.id).map(a => a.id).sort().join(',');
+  }, [conflictData?.annotators]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const refreshPid = urlProjectSlug || projectId;
-    if (appView !== 'dashboard' || !conflictData || !refreshPid) return;
+    if (appView !== 'dashboard' || !dashboardAnnotatorIds || !refreshPid) return;
 
-    const { annotators } = conflictData;
-    const liveDecisions = { ...conflictData.annotatorDecisions };
+    const ids = dashboardAnnotatorIds.split(',').filter(Boolean);
     const unsubscribes = [];
 
-    // Set up a listener for each annotator with a known id
-    for (const a of annotators) {
-      if (!a.id) continue;
-      const unsub = fsSubscribeToDecisions(a.id, refreshPid, (decs) => {
-        liveDecisions[a.id] = decs;
-        // Update decisions in state instantly (counts update on next render)
-        setConflictData(prev => prev ? { ...prev, annotatorDecisions: { ...liveDecisions } } : prev);
+    for (const aid of ids) {
+      const unsub = fsSubscribeToDecisions(aid, refreshPid, (decs) => {
+        // Use functional update to always get latest state — no stale closure
+        setConflictData(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev.annotatorDecisions, [aid]: decs };
+          return { ...prev, annotatorDecisions: updated };
+        });
       });
       unsubscribes.push(unsub);
     }
 
-    // Recompute kappa/conflict analysis every 15 seconds (computed, not a direct read)
+    // Recompute kappa/conflict analysis every 15 seconds
     const analysisInterval = setInterval(() => {
       setConflictData(prev => {
         if (!prev) return prev;
-        const analysis = analyzeConflicts(prev.annotatorDecisions);
-        return { ...prev, analysis };
+        return { ...prev, analysis: analyzeConflicts(prev.annotatorDecisions) };
       });
     }, 15000);
 
@@ -2084,7 +2089,7 @@ function AppMain({ currentUser, logout }) {
       unsubscribes.forEach(u => u());
       clearInterval(analysisInterval);
     };
-  }, [appView, conflictData?.annotators, projectId, urlProjectSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [appView, dashboardAnnotatorIds, projectId, urlProjectSlug]);
 
   const handleFinalDecision = useCallback(async (paperId, decision, comment) => {
     if (!projectId) return;
