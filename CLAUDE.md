@@ -288,69 +288,71 @@ Fully responsive layout across all screen sizes. No external CSS framework — p
 - **Touch-friendly** — all buttons `min-height: 44px` on mobile (Apple guideline), filter buttons padded for touch, swipe left/right on paper card for navigation
 - **Swipe support** — `touchstart`/`touchend` listeners with 60px horizontal threshold and dominant-axis check
 
-## CRITICAL CSS Rules — Do Not Break
+## CRITICAL — Do Not Break Rules
 
-These rules control the screening view layout across all screen sizes. They have been broken twice by other feature changes. DO NOT modify them without testing on multiple screen sizes. Any future feature (dashboard polish, score cards, bug reporter, etc.) must NOT override these rules.
+These features have been fixed multiple times. Any future change MUST verify they still work. Breaking any of these requires fixing before committing.
 
-- `.app.screening-view`: `display: flex; flex-direction: column; height: 100svh; overflow: hidden`. This is the master layout container.
-- `.paper-card`: `flex: 1; min-height: 200px; max-height: 700px; display: flex; flex-direction: column; overflow: hidden`. It fills remaining space between header/filters and buttons. DO NOT set a fixed `height` or `calc()`.
-- `.decision-section` and `.navigation`: `flex-shrink: 0` so they are ALWAYS visible at the bottom.
-- `.abstract-section`: `flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden`. Abstract scrolls inside the fixed card.
-- `.ai-reason`: `flex-shrink: 0`. Stays visible at bottom of card.
-- On mobile (below 768px): layout switches to normal scrolling — `height: auto`, no fixed card height, no internal abstract scroll. User scrolls the page naturally.
-- These rules were tested on 7" tablet through 32" monitor. Any feature change that touches the screening view CSS MUST verify the layout is unchanged on small laptops (13-14") and large monitors (27-32").
+### Decision Persistence
+- Decisions are stored in THREE layers: React state, localStorage, and Firestore.
+- When decisions are saved: all three must be updated.
+- When decisions are cleared/reset: all three must be wiped (state, localStorage key, AND Firestore documents via `deleteAllDecisions`).
+- On page reload: localStorage loads first, then Firestore overwrites.
+- Each user's decisions are isolated at `users/{userId}/projects/{projectId}/decisions`.
 
-## CRITICAL Features — Do Not Break
+### Dashboard Team Progress
+- Owner's ownerId comes from `invitedBy` field on collaborator records (most reliable), then `projects/{projectId}` Firestore meta document. No fallback to `userId`.
+- Each team member's card shows ONLY their own decisions fetched by their own UID.
+- "(You)" label appears only on the current user's card — never on anyone else's.
+- Current user's card always appears first in the list.
+- Display names are fetched from `users/{uid}/profile/main` — never show email if a display name exists.
+- Real-time updates via `onSnapshot` listeners on each annotator's decisions path. Listeners stabilized via `dashboardAnnotatorIds` useMemo to prevent teardown on every decision update.
+- Listeners must handle: additions, deletions, and empty collections.
+- Kappa/conflict analysis recomputed every 15 seconds via `setInterval`.
 
-These features have been fixed multiple times. Any future change MUST verify they still work.
+### Screening Layout (CSS)
+- `.app.screening-view`: flex column, height 100svh, overflow hidden.
+- `.paper-card`: flex 1, min-height 200px, max-height 700px. DO NOT set fixed height or calc().
+- `.abstract-section`: flex 1, min-height 0, overflow-y auto, overflow-x hidden.
+- `.decision-section` and `.navigation`: flex-shrink 0, always visible at bottom.
+- `.ai-reason`: flex-shrink 0.
+- Mobile (below 768px): normal scrolling, no fixed heights.
+- Tested on 7" tablet through 32" monitor.
 
 ### Post-Login Redirect
 - Users ALWAYS land on `/home` after login — never on a project page.
-- `LoginRedirect` component returns `<Navigate to="/home" replace />` with no `from` logic.
-- DO NOT add back location.state redirect logic.
+- No `location.state` redirect logic in `LoginRedirect`.
 
-### Invite Notification Flow
-- Owner sends invite → saves to `projects/{projectId}/collaborators/{email}` in Firestore.
-- Invitee logs in → `getSharedProjects(email)` runs a `collectionGroup('collaborators')` query → returns pending invites → shows in bell icon with Accept/Decline.
-- This requires: (1) Firestore collection group index on `collaborators.email`, (2) Firestore rule `match /{path=**}/collaborators/{email} { allow read: if request.auth != null; }`, (3) email stored lowercase.
-- **Firestore rules for cross-user reads**: `users/{userId}/profile/{docId}` and `users/{userId}/projects/{projectId}/decisions/{paperId}` allow read by any authenticated user. This is required for the team dashboard to fetch display names and decision counts for other team members. DO NOT restrict these back to owner-only.
-- DO NOT remove the collection group index or the security rule. DO NOT change the `collaborators` collection path.
-- After accepting: invitee's status changes to "accepted", project appears in their sidebar.
-- Accepting/declining creates a notification for the project owner at `users/{ownerId}/notifications/{auto-id}` with type, message, fromUserName, fromUserEmail, projectId, projectName, read, createdAt.
-
-### Real-Time Notifications
-- Firestore `onSnapshot` listener on `users/{userId}/notifications` provides real-time updates.
-- Bell icon badge shows total count: pending invites + unread general notifications. Bell is visible on ALL views (home, screening, dashboard) via shared `notifBell` JSX variable.
-- Dropdown shows pending invites (with Accept/Decline) at top, then general notifications below with relative timestamps ("just now", "2 mins ago").
-- Unread notifications have blue highlight background. Clicking marks as read. "Mark all read" link at top.
-- Audio beep (Web Audio API, 800Hz 200ms) plays when new unread notification arrives — NOT on initial page load.
-- Notifications auto-delete after 24 hours.
-- Firestore rule allows any authenticated user to create notifications for other users (needed for cross-user accept/decline notifications).
+### Invite and Notification Flow
+- Invites stored at `projects/{projectId}/collaborators/{email}`.
+- Requires Firestore collection group index on `collaborators.email`.
+- Requires Firestore rule: `match /{path=**}/collaborators/{email} { allow read: if request.auth != null; }`.
+- **Cross-user Firestore rules**: `users/{userId}/profile/{docId}` and `users/{userId}/projects/{projectId}/decisions/{paperId}` allow read by any authenticated user. Required for team dashboard. DO NOT restrict back to owner-only.
+- Real-time notifications via `onSnapshot` on `users/{userId}/notifications`.
+- Audio beep (800Hz, 200ms) on new notifications, not on page load.
+- Accept/decline creates notification for the owner.
+- Bell icon visible on ALL views (home, screening, dashboard).
 
 ### Display Name Modal
-- Triggers for ALL users on login if `nameConfirmed` is missing or false in Firestore `users/{userId}/profile/main`.
-- Even if `displayName` exists (e.g., auto-saved from Google), modal shows unless `nameConfirmed: true`.
-- Clicking Save sets both `displayName` and `nameConfirmed: true` in Firestore.
-- NOT unique — just a friendly name for identification.
-- Blocking modal, no skip button, must enter at least 2 characters.
-- Pre-fills from Firestore displayName or Google displayName if available.
-- Title: "Welcome! 👋", subtitle: "What should we call you?"
-- Must appear before any app content (rendered before all views in App.js).
+- Blocking modal on first login if `nameConfirmed` is not true in Firestore profile.
+- Triggers for ALL users regardless of auth provider.
+- Centered on screen via `.dn-modal-overlay` CSS with `!important` overrides.
+- Pre-fills from Firestore or Google displayName. Min 2 characters, no skip button.
 
-### Screening Layout (see CSS Rules section)
-- Card height, abstract scroll, button visibility — all covered above.
+### No Infinite Spinners
+- Every loading state has a timeout (3-5 seconds).
+- Auth: 5s → redirect to login. Access check: 3s → deny. Dashboard: 3s → fallback UI. Papers: 3s ��� empty state.
+- Dashboard auto-loads via `useEffect` when `appView === 'dashboard'` and `conflictData === null`.
+- No page should ever spin forever.
 
-### No Infinite Spinners Rule
-No page in the app should ever show a loading spinner for more than 3-5 seconds. Every loading state has a timeout that shows fallback UI (cached data, error message, or navigation buttons). This applies to:
-- **Auth loading** (AuthGate): 5s timeout → redirect to login
-- **Access check**: 3s timeout → deny access
-- **Dashboard loading**: auto-calls `openTeamDashboard` when landing on dashboard URL directly (bookmark, refresh, direct nav). 3s timeout → show "Dashboard Loading Timed Out" with Back to Screener / Go to Home buttons. Uses `dashboardAutoLoadRef` guard to prevent re-calling in a loop.
-- **Papers loading**: 3s timeout → stop loading, show empty state or fallback
-- **Display name modal**: shows immediately on auth, Firestore error shows modal with empty input
-- **Home**: project list loads in background, page renders immediately with empty state
-- **Setup, Access Denied, Page Not Found, Login**: render immediately, no loading states
+### Auto-Advance on Decision
+- Clicking Yes/No advances to next paper automatically for new decisions.
+- `projectId` must be correct (derived from `urlProjectSlug` first, then localStorage/projectName) for collaborators.
+- Decisions sync to `users/{userId}/projects/{projectId}/decisions` — wrong projectId = decisions lost.
 
-Uses `LoadingTimeout` helper component and `setTimeout` patterns. If adding a new page or feature with async data loading, always include a timeout fallback.
+### AI Disagreement Banner
+- Non-blocking inline banner below Yes/No buttons, not a modal.
+- Shows whenever current paper has a decision that disagrees with AI suggestion.
+- Derived from `decisions[globalIndex]` vs `aiScores[globalIndex].suggestion` — no state variable.
 
 ## Project Structure
 
