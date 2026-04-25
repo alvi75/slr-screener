@@ -2460,6 +2460,7 @@ function AppMain({ currentUser, logout }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(decisions));
     // Skip Firestore sync on initial mount (already loaded from there)
     if (decisionsInitRef.current) { decisionsInitRef.current = false; return; }
+    console.log('[Decision] Auto-save firing. userId:', userId, 'projectId:', projectId, 'count:', Object.keys(decisions).length);
     firestoreSync(() => syncDecisionsToFirestore(userId, projectId, decisions));
   }, [decisions]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2578,8 +2579,12 @@ function AppMain({ currentUser, logout }) {
 
   const applyDecision = useCallback((d, idx) => {
     const gIdx = idx !== undefined ? idx : globalIndex;
-    if (gIdx === undefined) return;
+    if (gIdx === undefined) { console.warn('[Decision] gIdx is undefined, aborting'); return; }
     const prevDecision = decisions[gIdx] || null;
+
+    console.log('[Decision] userId:', userId, 'projectId:', projectId, 'paperIndex:', gIdx, 'decision:', d, 'prevDecision:', prevDecision);
+    console.log('[Decision] Firestore sync path: users/' + userId + '/projects/' + projectId + '/decisions');
+    console.log('[Decision] papers.length:', papers.length, 'filteredIndices.length:', filteredIndices.length, 'currentIndex:', currentIndex);
 
     setDecisions((prev) => ({ ...prev, [gIdx]: d }));
 
@@ -2588,7 +2593,6 @@ function AppMain({ currentUser, logout }) {
     if (aiData && aiData.suggestion) {
       const aiSug = aiData.suggestion.charAt(0).toUpperCase() + aiData.suggestion.slice(1);
       if (d === aiSug) {
-        // Agreement — remove any existing disagreement
         setAiDisagreements((prev) => {
           const next = { ...prev };
           delete next[gIdx];
@@ -2600,12 +2604,17 @@ function AppMain({ currentUser, logout }) {
 
     // Only auto-advance if this is a NEW decision (no previous decision)
     if (!prevDecision) {
+      console.log('[Decision] Auto-advancing (new decision)');
       setCurrentIndex((prev) => {
         const maxIdx = filteredIndices.length - 1;
-        return prev < maxIdx ? prev + 1 : prev;
+        const next = prev < maxIdx ? prev + 1 : prev;
+        console.log('[Decision] currentIndex:', prev, '→', next, 'maxIdx:', maxIdx);
+        return next;
       });
+    } else {
+      console.log('[Decision] NOT auto-advancing (changing existing decision)');
     }
-  }, [globalIndex, decisions, filteredIndices.length, aiScores, userId, projectId]);
+  }, [globalIndex, decisions, filteredIndices.length, aiScores, userId, projectId, papers.length, currentIndex]);
 
   const makeDecision = useCallback((d) => {
     if (globalIndex === undefined) return;
