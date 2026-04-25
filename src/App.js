@@ -1895,65 +1895,89 @@ function AppMain({ currentUser, logout }) {
       const collabs = await fsGetCollaborators(pid).catch(() => []) || [];
       const meta = await fsGetProjectMeta(pid).catch(() => null);
 
-      // Determine the real owner ID from multiple sources
-      const collabWithOwner = collabs.find(c => c.ownerId || c.invitedBy);
-      const ownerId = meta?.ownerId
-        || collabWithOwner?.ownerId
-        || collabWithOwner?.invitedBy
-        || projectOwnerId
-        || null;
-      const ownerEmail = meta?.ownerEmail || collabWithOwner?.ownerEmail || '';
-      console.log('[Dashboard] pid:', pid, 'ownerId:', ownerId, 'from:', meta?.ownerId ? 'meta' : collabWithOwner?.ownerId ? 'collab.ownerId' : collabWithOwner?.invitedBy ? 'collab.invitedBy' : projectOwnerId ? 'state' : 'null');
+      // === DUMP RAW DATA FOR DEBUGGING ===
+      console.log('[Dashboard] RAW meta:', JSON.stringify(meta ? { ownerId: meta.ownerId, ownerEmail: meta.ownerEmail } : null));
+      console.log('[Dashboard] RAW collabs:', JSON.stringify(collabs.map(c => ({ email: c.email, status: c.status, role: c.role, userId: c.userId, ownerId: c.ownerId, invitedBy: c.invitedBy }))));
+      console.log('[Dashboard] currentUser:', userId, currentUser?.email);
 
-      // Backfill missing userId for accepted collaborators
-      const accepted = collabs.filter(c => c.status === 'accepted' && c.role === 'annotator');
-      for (const c of accepted) {
-        // Treat empty string as missing
-        if (!c.userId && c.email === currentUser?.email?.toLowerCase()) {
-          c.userId = userId;
-          fsAcceptInvite(pid, c.email, userId).catch(() => {});
-          console.log('[Dashboard] Backfilled userId for', c.email);
+      // === DETERMINE OWNER ===
+      // Try every source: meta, collaborator records, state
+      let ownerId = null;
+      let ownerEmail = '';
+      let ownerSource = 'none';
+
+      if (meta?.ownerId) {
+        ownerId = meta.ownerId;
+        ownerEmail = meta.ownerEmail || '';
+        ownerSource = 'meta';
+      } else {
+        // Fall back to collaborator record fields
+        for (const c of collabs) {
+          if (c.ownerId) { ownerId = c.ownerId; ownerEmail = c.ownerEmail || ''; ownerSource = 'collab.ownerId'; break; }
+          if (c.invitedBy) { ownerId = c.invitedBy; ownerEmail = c.ownerEmail || ''; ownerSource = 'collab.invitedBy'; break; }
         }
       }
-      const pending = collabs.filter(c => c.status === 'pending');
+      if (!ownerId && projectOwnerId) {
+        ownerId = projectOwnerId;
+        ownerSource = 'state.projectOwnerId';
+      }
+      console.log('[Dashboard] ownerId:', ownerId, 'from:', ownerSource);
 
-      // Build annotators: owner first, then accepted collaborators, then pending
+      // === BACKFILL MISSING userId FOR CURRENT USER ===
+      for (const c of collabs) {
+        if (c.status === 'accepted' && !c.userId && c.email === currentUser?.email?.toLowerCase()) {
+          c.userId = userId;
+          fsAcceptInvite(pid, c.email, userId).catch(() => {});
+          console.log('[Dashboard] Backfilled userId for', c.email, '→', userId);
+        }
+      }
+
+      // === BUILD ANNOTATORS ARRAY ===
       const annotators = [];
       const addedIds = new Set();
 
-      // Add owner
+      // 1) Owner entry
       if (ownerId) {
-        annotators.push({ id: ownerId, email: ownerEmail, role: 'owner', displayName: ownerId === userId ? displayName : '', status: 'accepted' });
+        annotators.push({
+          id: ownerId,
+          email: ownerEmail || (ownerId === userId ? currentUser?.email : ''),
+          role: 'owner',
+          displayName: ownerId === userId ? displayName : '',
+          status: 'accepted',
+        });
         addedIds.add(ownerId);
       }
 
-      // Add accepted collaborators
-      for (const c of accepted) {
+      // 2) Accepted collaborators (anyone with role 'annotator' + status 'accepted')
+      for (const c of collabs) {
+        if (c.status !== 'accepted') continue;
         const cid = c.userId || null;
-        if (cid && !addedIds.has(cid)) {
+        // Skip if this is the owner (already added)
+        if (cid && addedIds.has(cid)) continue;
+        if (cid) {
           annotators.push({ id: cid, email: c.email, role: 'annotator', displayName: '', status: 'accepted' });
           addedIds.add(cid);
-        } else if (!cid && !addedIds.has(c.email)) {
-          // Collaborator with missing userId — show with email, no decisions fetchable
-          annotators.push({ id: null, email: c.email, role: 'annotator', displayName: c.ownerDisplayName ? '' : '', status: 'accepted' });
+        } else if (!addedIds.has(c.email)) {
+          // No userId yet — show with email, can't fetch decisions
+          annotators.push({ id: null, email: c.email, role: 'annotator', displayName: '', status: 'accepted' });
           addedIds.add(c.email);
         }
       }
 
-      // Add pending
-      for (const c of pending) {
+      // 3) Pending collaborators
+      for (const c of collabs) {
+        if (c.status !== 'pending') continue;
         annotators.push({ id: null, email: c.email, role: c.role || 'annotator', displayName: '', status: 'pending' });
       }
 
-      // Ensure current user is in the list
+      // 4) Ensure current user is in the list
       if (!addedIds.has(userId)) {
-        const myRole = ownerId === userId ? 'owner' : (projectRole || 'annotator');
+        const myRole = (ownerId && ownerId === userId) ? 'owner' : 'annotator';
         annotators.push({ id: userId, email: currentUser?.email, role: myRole, displayName: displayName, status: 'accepted' });
         addedIds.add(userId);
       }
 
-      console.log('[Dashboard] annotators:', JSON.stringify(annotators.map(a => ({id: a.id, email: a.email, role: a.role}))));
-      console.log('[Dashboard] currentUserId:', userId);
+      console.log('[Dashboard] FINAL annotators:', JSON.stringify(annotators.map(a => ({ id: a.id?.slice(-6), email: a.email, role: a.role }))));
 
       // Fetch decisions and display names for all annotators with known userIds
       const annotatorDecisions = {};
@@ -1995,7 +2019,7 @@ function AppMain({ currentUser, logout }) {
         analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
       });
     }
-  }, [projectId, urlProjectSlug, userId, currentUser, projectOwnerId, displayName, navigate, decisions, projectRole]);
+  }, [projectId, urlProjectSlug, userId, currentUser, projectOwnerId, displayName, navigate, decisions]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
