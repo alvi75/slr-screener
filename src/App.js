@@ -145,6 +145,12 @@ function applyPatterns(text, keyOffset) {
   return result.length > 0 ? result : [text];
 }
 
+// Strip DBLP disambiguation numbers from author names (e.g., "Tao Chen 0001" → "Tao Chen")
+function cleanAuthors(authorStr) {
+  if (!authorStr || authorStr === 'not_found') return authorStr;
+  return authorStr.replace(/\s+\d{4}(?=\s*,|\s*$)/g, '');
+}
+
 function cleanAbstractText(text) {
   let s = text;
   // Remove HTML/XML tags
@@ -1020,7 +1026,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
                       return (
                         <div key={i} className="preview-row">
                           <span>{p.title.slice(0, 40)}{p.title.length > 40 ? '...' : ''}</span>
-                          <span>{(p.author && p.author !== 'not_found') ? p.author.slice(0, 25) : '—'}</span>
+                          <span>{(p.author && p.author !== 'not_found') ? cleanAuthors(p.author).slice(0, 25) : '—'}</span>
                           <span>{venue}</span>
                           <span>{(p.abstract && p.abstract !== 'not_found') ? p.abstract.slice(0, 30) + '...' : '—'}</span>
                         </div>
@@ -1100,7 +1106,7 @@ function SetupView({ onImport, onLoadDemo, apiKey, setApiKey, appendMode, onAppe
                     </div>
                     {entry.author && (
                       <div className="manual-authors-display">
-                        <span className="manual-label-sm">Authors:</span> {entry.author}
+                        <span className="manual-label-sm">Authors:</span> {cleanAuthors(entry.author)}
                       </div>
                     )}
                     <textarea
@@ -2149,7 +2155,7 @@ function AppMain({ currentUser, logout }) {
       const annotatorCols = annotatorIds.map(aid => escapeCSV(annotatorDecisions[aid]?.[paperId] || ''));
       const fd = finalDecisions[paperId];
       return [
-        escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author), escapeCSV(p.conf),
+        escapeCSV(cleanAbstractText(p.title)), escapeCSV(cleanAuthors(p.author)), escapeCSV(p.conf),
         escapeCSV(p.abstract), escapeCSV(p.doi),
         ...annotatorCols,
         escapeCSV(fd?.decision || ''), escapeCSV(fd?.comment || ''),
@@ -2747,7 +2753,7 @@ function AppMain({ currentUser, logout }) {
       const score = aiScores[i];
       const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
-        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author),
+        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(cleanAuthors(p.author)),
         escapeCSV(decisions[i] || ''),
         escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
         ...critCols,
@@ -2779,7 +2785,7 @@ function AppMain({ currentUser, logout }) {
         return {
           conf: p.conf || 'not_found',
           title: p.title || 'not_found',
-          author: p.author || 'not_found',
+          author: cleanAuthors(p.author) || 'not_found',
           abstract: abs || 'not_found',
           doi: p.doi || 'not_found',
           doi_url: p.doi_url || 'not_found',
@@ -2817,7 +2823,7 @@ function AppMain({ currentUser, logout }) {
       const score = aiScores[i];
       const critCols = critSlugs.map(s => escapeCSV(score?.criteria?.[s] ?? ''));
       return [
-        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(p.author),
+        escapeCSV(p.conf), escapeCSV(cleanAbstractText(p.title)), escapeCSV(cleanAuthors(p.author)),
         escapeCSV(decisions[i] || ''),
         escapeCSV(getScoreValue(score) ?? ''), escapeCSV(score?.suggestion ?? ''), escapeCSV(score?.reason ?? ''),
         ...critCols,
@@ -3930,7 +3936,7 @@ function AppMain({ currentUser, logout }) {
               )}
             </div>
             <div className="paper-title" dangerouslySetInnerHTML={{ __html: cleanTitle(paper.title) }} />
-            <div className="paper-authors">{paper.author}</div>
+            <div className="paper-authors">{cleanAuthors(paper.author)}</div>
 
             {/* Links */}
             <div className="paper-links">
