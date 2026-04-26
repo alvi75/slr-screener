@@ -2411,7 +2411,14 @@ function AppMain({ currentUser, logout }) {
     })();
   }, [userId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch shared projects and pending invites on every load (not gated by firestoreLoadedRef)
+  // Fetch shared projects and pending invites — runs on load and re-fetches when bell opens
+  const [inviteRefreshTrigger, setInviteRefreshTrigger] = useState(0);
+  useEffect(() => {
+    if (!userId || !currentUser?.email) return;
+    // Re-fetch periodically (every 60s) to catch new invites
+    const interval = setInterval(() => setInviteRefreshTrigger(v => v + 1), 60000);
+    return () => clearInterval(interval);
+  }, [userId, currentUser?.email]);
   useEffect(() => {
     if (!userId || !currentUser?.email) return;
     (async () => {
@@ -2446,7 +2453,7 @@ function AppMain({ currentUser, logout }) {
         console.warn('[Sharing] Failed to load shared projects:', err.message, err);
       }
     })();
-  }, [userId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, currentUser, inviteRefreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-time notification listener ──────────────────────
   useEffect(() => {
@@ -3104,7 +3111,7 @@ function AppMain({ currentUser, logout }) {
     <div className="notif-wrapper">
       <button
         className="notif-bell-btn"
-        onClick={() => setNotificationsOpen(v => !v)}
+        onClick={() => { setNotificationsOpen(v => !v); setInviteRefreshTrigger(v => v + 1); }}
         title={totalBadge > 0 ? `${totalBadge} notification${totalBadge > 1 ? 's' : ''}` : 'No notifications'}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

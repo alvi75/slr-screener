@@ -413,7 +413,13 @@ export async function getSharedProjects(userEmail) {
       collectionGroup(db, 'collaborators'),
       where('email', '==', normalizedEmail)
     );
-    const snap = await getDocs(q);
+    // Use getDocsFromServer to bypass cache — ensures fresh data after remove + re-invite
+    let snap;
+    try {
+      snap = await getDocsFromServer(q);
+    } catch {
+      snap = await getDocs(q); // fallback to cache if offline
+    }
     console.log('[Sharing] collectionGroup query returned', snap.size, 'documents');
     const results = snap.docs.map(d => {
       const path = d.ref.path;
