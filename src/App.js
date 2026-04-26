@@ -1796,48 +1796,30 @@ function AppMain({ currentUser, logout }) {
     }
   }, [projectId, loadCollaborators]);
 
-  const handleAcceptInvite = useCallback(async (invite) => {
-    try {
-      console.log('[Sharing] Accepting invite for project:', invite.projectId, 'email:', currentUser?.email);
-      await fsAcceptInvite(invite.projectId, currentUser?.email, userId);
-      console.log('[Sharing] Invite accepted successfully');
+  // Merge modal state for accept-invite flow
+  const [mergeModal, setMergeModal] = useState(null); // { invite, matchingProject, decisionCount, meta }
 
-      // Migrate existing decisions and AI scores from user's own matching project
+  const completeAcceptInvite = useCallback(async (invite, doMerge, matchingProject, meta) => {
+    try {
+      await fsAcceptInvite(invite.projectId, currentUser?.email, userId);
+
       let migratedCount = 0;
       let migratedScores = 0;
-      try {
-        const userProjects = await fsGetProjects(userId);
-        const matchingProject = userProjects.find(p => p.id === invite.projectId && p.id !== invite.projectId)
-          || userProjects.find(p => p.id === invite.projectId)
-          || userProjects.find(p => {
-            // Match by slug: user may have the same project under their own account
-            const slug = p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') : '';
-            return slug === invite.projectId && p.id !== invite.projectId;
-          });
-
-        if (matchingProject && matchingProject.id !== invite.projectId) {
-          // Get shared project paper count for bounds checking
-          const meta = await fsGetProjectMeta(invite.projectId).catch(() => null);
-          const maxPaperIndex = meta?.paperCount || undefined;
-
-          migratedCount = await fsMigrateDecisions(userId, matchingProject.id, invite.projectId, maxPaperIndex);
-          migratedScores = await fsMigrateAIScores(matchingProject.id, invite.projectId, maxPaperIndex);
-          console.log(`[Sharing] Migrated ${migratedCount} decisions and ${migratedScores} AI scores from ${matchingProject.id}`);
-        }
-      } catch (err) {
-        console.warn('[Sharing] Migration failed (non-blocking):', err.message);
+      if (doMerge && matchingProject) {
+        const maxPaperIndex = meta?.paperCount || undefined;
+        migratedCount = await fsMigrateDecisions(userId, matchingProject.id, invite.projectId, maxPaperIndex);
+        migratedScores = await fsMigrateAIScores(matchingProject.id, invite.projectId, maxPaperIndex);
       }
 
       setPendingInvites(prev => prev.filter(p => p.projectId !== invite.projectId));
       setSharedProjects(prev => [...prev, { ...invite, status: 'accepted' }]);
       setNotificationsOpen(false);
+      setMergeModal(null);
 
-      // Show migration result if any decisions were migrated
       if (migratedCount > 0) {
-        setAppendResult({ added: migratedCount, skipped: migratedScores, total: migratedCount, message: `Migrated ${migratedCount} existing decision${migratedCount !== 1 ? 's' : ''}${migratedScores > 0 ? ` and ${migratedScores} AI score${migratedScores !== 1 ? 's' : ''}` : ''} to the shared project` });
+        setAppendResult({ message: `Merged ${migratedCount} annotation${migratedCount !== 1 ? 's' : ''}${migratedScores > 0 ? ` and ${migratedScores} AI score${migratedScores !== 1 ? 's' : ''}` : ''} into the shared project.` });
       }
 
-      // Notify the project owner
       if (invite.ownerId) {
         fsSaveNotification(invite.ownerId, {
           type: 'invite_accepted',
@@ -1849,12 +1831,44 @@ function AppMain({ currentUser, logout }) {
         }).catch(() => {});
       }
 
-      // Navigate to the shared project
       navigate(`/project/${invite.projectId}`);
     } catch (err) {
       console.warn('[Sharing] Accept invite failed:', err.message);
+      setMergeModal(null);
     }
   }, [currentUser, userId, navigate, displayName]);
+
+  const handleAcceptInvite = useCallback(async (invite) => {
+    try {
+      // Check for existing matching project with decisions
+      const userProjects = await fsGetProjects(userId).catch(() => []);
+      let matchingProject = null;
+      for (const p of userProjects) {
+        const slug = p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') : '';
+        if (p.id === invite.projectId || slug === invite.projectId) {
+          const decs = await fsGetDecisions(userId, p.id).catch(() => ({}));
+          const count = Object.keys(decs).length;
+          if (count > 0) {
+            matchingProject = { ...p, decisionCount: count };
+            break;
+          }
+        }
+      }
+
+      if (matchingProject) {
+        // Show merge dialog
+        const meta = await fsGetProjectMeta(invite.projectId).catch(() => null);
+        setMergeModal({ invite, matchingProject, decisionCount: matchingProject.decisionCount, meta });
+      } else {
+        // No matching project — accept normally
+        completeAcceptInvite(invite, false, null, null);
+      }
+    } catch (err) {
+      console.warn('[Sharing] Accept check failed:', err.message);
+      // Fall back to accepting without merge
+      completeAcceptInvite(invite, false, null, null);
+    }
+  }, [userId, completeAcceptInvite]);
 
   const handleDeclineInvite = useCallback(async (invite) => {
     try {
@@ -3145,6 +3159,33 @@ function AppMain({ currentUser, logout }) {
       )}
     </div>
   );
+
+  // ===== MERGE ANNOTATIONS MODAL =====
+  if (mergeModal) {
+    const { invite, matchingProject, decisionCount } = mergeModal;
+    return (
+      <div className="dn-modal-overlay">
+        <div className="dn-modal-card">
+          <h3 className="dn-modal-title">Existing Annotations Found</h3>
+          <p className="dn-modal-subtitle">
+            You have <strong>{decisionCount}</strong> existing annotation{decisionCount !== 1 ? 's' : ''} on similar papers.
+            Would you like to bring them into this shared project?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+            <button
+              className="dn-modal-save"
+              onClick={() => completeAcceptInvite(invite, true, matchingProject, mergeModal.meta)}
+            >Yes, merge my annotations</button>
+            <button
+              className="dn-modal-save"
+              style={{ background: '#636e72' }}
+              onClick={() => completeAcceptInvite(invite, false, null, null)}
+            >No, start fresh</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ===== ACCESS CONTROL =====
   if (urlProjectSlug && projectAccess === 'checking') {
