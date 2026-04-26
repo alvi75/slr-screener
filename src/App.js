@@ -2469,6 +2469,18 @@ function AppMain({ currentUser, logout }) {
     return unsubscribe;
   }, [userId]);
 
+  // Auto-mark notifications as read 2s after opening dropdown
+  useEffect(() => {
+    if (!notificationsOpen || !userId) return;
+    const hasUnread = generalNotifications.some(n => !n.read);
+    if (!hasUnread) return;
+    const timer = setTimeout(() => {
+      fsMarkAllNotificationsRead(userId).catch(() => {});
+      setGeneralNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [notificationsOpen, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-save decisions (localStorage + Firestore)
   const decisionsInitRef = useRef(true);
   useEffect(() => {
@@ -3138,7 +3150,13 @@ function AppMain({ currentUser, logout }) {
             <div
               key={n.id}
               className={`notif-general-item ${n.read ? '' : 'notif-unread'}`}
-              onClick={() => { if (!n.read) { fsMarkNotificationRead(userId, n.id).catch(() => {}); setGeneralNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x)); } }}
+              onClick={() => {
+                if (!n.read) {
+                  // Optimistic local update + Firestore write
+                  setGeneralNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+                  fsMarkNotificationRead(userId, n.id).catch(() => {});
+                }
+              }}
             >
               <div className="notif-general-icon">{n.type === 'invite_accepted' ? '✅' : n.type === 'invite_declined' ? '❌' : '🔔'}</div>
               <div className="notif-general-body">
