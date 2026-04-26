@@ -436,6 +436,31 @@ export async function getSharedProjects(userEmail) {
   }
 }
 
+/**
+ * Subscribe to real-time changes on shared projects (invites) for a user.
+ * Uses collectionGroup onSnapshot — fires instantly when an invite is created, accepted, or removed.
+ * @param {string} userEmail
+ * @param {function} callback - Called with array of { projectId, email, status, role, ... }
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeToSharedProjects(userEmail, callback) {
+  if (!userEmail) { callback([]); return () => {}; }
+  const normalizedEmail = userEmail.toLowerCase();
+  const q = query(
+    collectionGroup(db, 'collaborators'),
+    where('email', '==', normalizedEmail)
+  );
+  return onSnapshot(q, (snap) => {
+    const results = snap.docs.map(d => {
+      const projectId = d.ref.parent.parent.id;
+      return { projectId, ...d.data() };
+    });
+    callback(results);
+  }, (err) => {
+    console.warn('[Sharing] Shared projects listener error:', err.message);
+  });
+}
+
 // Debug helper — call from browser console: window._debugSharedProjects('email@example.com')
 if (typeof window !== 'undefined') {
   window._debugSharedProjects = async (email) => {

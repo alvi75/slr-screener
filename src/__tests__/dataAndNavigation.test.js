@@ -53,6 +53,7 @@ jest.mock('../services/firestore', () => ({
   markNotificationRead: jest.fn(() => Promise.resolve()),
   markAllNotificationsRead: jest.fn(() => Promise.resolve()),
   subscribeToNotifications: jest.fn(() => () => {}),
+  subscribeToSharedProjects: jest.fn((_e, cb) => { if(cb) cb([]); return () => {}; }),
   subscribeToDecisions: jest.fn(() => () => {}),
   deleteAllDecisions: jest.fn(() => Promise.resolve()),
 }));

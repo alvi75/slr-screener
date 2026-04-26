@@ -124,6 +124,9 @@ export function setupFetchMock() {
     if (fs.subscribeToDecisions && fs.subscribeToDecisions.mockImplementation) {
       fs.subscribeToDecisions.mockImplementation(() => () => {});
     }
+    if (fs.subscribeToSharedProjects && fs.subscribeToSharedProjects.mockImplementation) {
+      fs.subscribeToSharedProjects.mockImplementation((_email, cb) => { cb([]); return () => {}; });
+    }
     if (fs.deleteAllDecisions && fs.deleteAllDecisions.mockImplementation) {
       fs.deleteAllDecisions.mockImplementation(() => Promise.resolve());
     }

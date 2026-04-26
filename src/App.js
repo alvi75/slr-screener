@@ -30,6 +30,7 @@ import {
   getUserProfile as fsGetUserProfile,
   saveUserProfile as fsSaveUserProfile,
   subscribeToDecisions as fsSubscribeToDecisions,
+  subscribeToSharedProjects as fsSubscribeToSharedProjects,
   deleteAllDecisions as fsDeleteAllDecisions,
   migrateDecisionsToSharedProject as fsMigrateDecisions,
   migrateAIScoresToSharedProject as fsMigrateAIScores,
@@ -2411,49 +2412,30 @@ function AppMain({ currentUser, logout }) {
     })();
   }, [userId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch shared projects and pending invites — runs on load and re-fetches when bell opens
-  const [inviteRefreshTrigger, setInviteRefreshTrigger] = useState(0);
+  // Real-time shared projects and pending invites via onSnapshot
   useEffect(() => {
     if (!userId || !currentUser?.email) return;
-    // Re-fetch periodically (every 60s) to catch new invites
-    const interval = setInterval(() => setInviteRefreshTrigger(v => v + 1), 60000);
-    return () => clearInterval(interval);
-  }, [userId, currentUser?.email]);
-  useEffect(() => {
-    if (!userId || !currentUser?.email) return;
-    (async () => {
-      try {
-        console.log('[Sharing] Current user email:', JSON.stringify(currentUser.email), 'uid:', userId);
-        console.log('[Sharing] Email type:', typeof currentUser.email, 'length:', currentUser.email?.length);
-        console.log('[Sharing] Calling getSharedProjects...');
-        const shared = await fsGetSharedProjects(currentUser.email);
-        console.log('[Sharing] getSharedProjects returned:', shared.length, 'entries:', JSON.stringify(shared.map(s => ({ projectId: s.projectId, status: s.status, email: s.email }))));
-        const enrichedAccepted = [];
-        const enrichedPending = [];
-        for (const s of shared) {
-          try {
-            const meta = await fsGetProjectMeta(s.projectId);
-            console.log('[Sharing] Project meta for', s.projectId, ':', meta ? `ownerId=${meta.ownerId}` : 'null');
-            if (meta && meta.ownerId !== userId) {
-              const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
-              if (s.status === 'accepted') {
-                enrichedAccepted.push(enriched);
-              } else if (s.status === 'pending') {
-                enrichedPending.push(enriched);
-              }
+    const unsubscribe = fsSubscribeToSharedProjects(currentUser.email, async (shared) => {
+      const enrichedAccepted = [];
+      const enrichedPending = [];
+      for (const s of shared) {
+        try {
+          const meta = await fsGetProjectMeta(s.projectId);
+          if (meta && meta.ownerId !== userId) {
+            const enriched = { ...s, projectName: meta.projectName || s.projectId, ownerEmail: meta.ownerEmail, ownerDisplayName: meta.ownerDisplayName || '', ownerPhotoURL: meta.ownerPhotoURL || '', ownerId: meta.ownerId };
+            if (s.status === 'accepted') {
+              enrichedAccepted.push(enriched);
+            } else if (s.status === 'pending') {
+              enrichedPending.push(enriched);
             }
-          } catch (metaErr) {
-            console.warn('[Sharing] Failed to fetch meta for', s.projectId, ':', metaErr.message);
           }
-        }
-        console.log('[Sharing] Enriched:', enrichedAccepted.length, 'accepted,', enrichedPending.length, 'pending');
-        setSharedProjects(enrichedAccepted);
-        setPendingInvites(enrichedPending);
-      } catch (err) {
-        console.warn('[Sharing] Failed to load shared projects:', err.message, err);
+        } catch { /* skip inaccessible projects */ }
       }
-    })();
-  }, [userId, currentUser, inviteRefreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+      setSharedProjects(enrichedAccepted);
+      setPendingInvites(enrichedPending);
+    });
+    return unsubscribe;
+  }, [userId, currentUser?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-time notification listener ──────────────────────
   useEffect(() => {
@@ -3111,7 +3093,7 @@ function AppMain({ currentUser, logout }) {
     <div className="notif-wrapper">
       <button
         className="notif-bell-btn"
-        onClick={() => { setNotificationsOpen(v => !v); setInviteRefreshTrigger(v => v + 1); }}
+        onClick={() => setNotificationsOpen(v => !v)}
         title={totalBadge > 0 ? `${totalBadge} notification${totalBadge > 1 ? 's' : ''}` : 'No notifications'}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
