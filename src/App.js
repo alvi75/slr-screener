@@ -1770,91 +1770,51 @@ function AppMain({ currentUser, logout }) {
     if (email === currentUser?.email?.toLowerCase()) { setShareError('You cannot invite yourself.'); return; }
     if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
 
+    // Optimistic insert — show the new collaborator in the list with status
+    // "pending" the instant the user clicks Send. Reverted only if the Firestore
+    // write rejects.
+    const prevCollabs = collaborators;
+    const optimisticRow = { email, role: shareRole, status: 'pending', invitedBy: userId };
+    setCollaborators([...(collaborators || []), optimisticRow]);
     setShareLoading(true);
-    const TIMEOUT = Symbol('timeout');
-    const raceTimeout = (p, ms) => {
-      let timer;
-      const t = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), ms); });
-      return Promise.race([p, t]).finally(() => clearTimeout(timer));
-    };
+
+    // Project meta is needed for collectionGroup discovery but is idempotent and
+    // not the source of truth for the invite — fire-and-forget.
+    fsSaveProjectMeta(projectId, {
+      ownerId: userId,
+      ownerEmail: currentUser?.email,
+      ownerDisplayName: displayName || currentUser?.displayName || '',
+      ownerPhotoURL: currentUser?.photoURL || '',
+      projectName,
+    }).catch(err => console.warn('[Sharing] saveProjectMeta failed:', err?.message || err));
 
     try {
-      // ── Phase 1: save the collaborator document (source of truth) ─────────────
-      // Race the writes against a 10s timeout. setDoc requires a server ACK that
-      // can be delayed by network conditions even though the write itself
-      // succeeded — so on timeout we read the doc back to verify before failing.
-      const writes = Promise.all([
-        fsSaveProjectMeta(projectId, {
-          ownerId: userId,
-          ownerEmail: currentUser?.email,
-          ownerDisplayName: displayName || currentUser?.displayName || '',
-          ownerPhotoURL: currentUser?.photoURL || '',
-          projectName,
-        }),
-        fsAddCollaborator(projectId, email, shareRole, userId, {
-          projectName,
-          ownerEmail: currentUser?.email,
-          ownerDisplayName: displayName || currentUser?.displayName || '',
-          ownerPhotoURL: currentUser?.photoURL || '',
-          ownerId: userId,
-        }),
-      ]);
-
-      let saved = false;
-      try {
-        const result = await raceTimeout(writes, 10000);
-        saved = result !== TIMEOUT;
-      } catch (writeErr) {
-        // Firestore actually rejected — surface and bail.
-        setShareError('Failed to send invite: ' + (writeErr?.message || String(writeErr)));
-        console.error('[Sharing] Invite write rejected:', writeErr);
-        return;
-      }
-
-      // ACK didn't come back in time — verify by reading the doc back. The write
-      // is durable in Firestore even when the client never gets the ACK, so a
-      // verification read tells us whether it actually landed.
-      if (!saved) {
-        try {
-          const collabs = await raceTimeout(fsGetCollaborators(projectId), 5000);
-          if (collabs !== TIMEOUT && Array.isArray(collabs) && collabs.some(c => c.email === email)) {
-            saved = true;
-            console.log('[Sharing] Invite ACK was slow but doc verified saved for', email);
-          }
-        } catch { /* verification unavailable; treat as failed */ }
-      }
-
-      if (!saved) {
-        setShareError('Invite timed out, please try again');
-        console.warn('[Sharing] Invite timed out and could not verify write for', email);
-        return;
-      }
-
-      // Show success the instant the collaborator doc is confirmed saved — do NOT
-      // wait for the notification step below.
+      // Single source-of-truth write. No timeout wrapper — let Firestore complete
+      // naturally. If it rejects, we show the real error.
+      await fsAddCollaborator(projectId, email, shareRole, userId, {
+        projectName,
+        ownerEmail: currentUser?.email,
+        ownerDisplayName: displayName || currentUser?.displayName || '',
+        ownerPhotoURL: currentUser?.photoURL || '',
+        ownerId: userId,
+      });
       setShareEmail('');
       setShareSuccess('Invite sent!');
       setTimeout(() => setShareSuccess(''), 4000);
+      // Background refresh — never await, never gate the success message.
       loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
-
-      // ── Phase 2: notification — separate, non-blocking, 3s timeout ────────────
-      // The invitee receives the pending invite through their own collectionGroup
-      // onSnapshot listener on /collaborators when they sign in, so a per-user
-      // notification write is best-effort. If the invitee has no account yet
-      // there is no userId to address; if any userId lookup or write stalls past
-      // 3s we skip silently — the success message has already been shown.
-      (async () => {
-        try {
-          // No notification write is needed today (collectionGroup listener
-          // surfaces the invite on the invitee's next sign-in). This block is
-          // structured as a separate non-blocking step so future notification
-          // logic can be slotted in here without ever gating "Invite sent!".
-          const notifyStep = Promise.resolve();
-          await raceTimeout(notifyStep, 3000);
-        } catch (err) {
-          console.warn('[Sharing] Notification step skipped:', err?.message || err);
-        }
-      })();
+      // Notification step is fire-and-forget. Today the invitee receives the
+      // invite via their own collectionGroup listener on /collaborators, so this
+      // is a placeholder for future per-user notification logic — it must never
+      // be awaited here.
+      Promise.resolve()
+        .then(() => { /* slot any notification write in here */ })
+        .catch(() => {});
+    } catch (err) {
+      // Revert optimistic insert and surface the real error.
+      setCollaborators(prevCollabs);
+      setShareError('Failed to send invite: ' + (err?.message || String(err)));
+      console.error('[Sharing] Invite failed:', err);
     } finally {
       setShareLoading(false);
     }
@@ -1862,30 +1822,20 @@ function AppMain({ currentUser, logout }) {
 
   const handleRemoveCollaborator = useCallback(async (email) => {
     setShareError('');
-    // Optimistic UI: drop the row immediately so the user sees feedback even if the
-    // server round-trip is slow. If the delete fails we restore from a fresh fetch.
+    // Optimistic remove — drop the row immediately. Reverted only if the Firestore
+    // delete rejects.
     const prev = collaborators;
     setCollaborators((collaborators || []).filter(c => c.email !== email));
-    const TIMEOUT = Symbol('timeout');
-    let timer;
-    const timeoutPromise = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), 10000); });
     try {
-      const result = await Promise.race([fsRemoveCollaborator(projectId, email), timeoutPromise]);
-      if (result === TIMEOUT) {
-        setCollaborators(prev);
-        setShareError('Remove timed out, please try again');
-        console.warn('[Sharing] Remove timed out after 10s for', email);
-        return;
-      }
-      // Refresh in the background to pick up server truth without blocking the UI.
+      // Single source-of-truth delete. No timeout wrapper — let Firestore complete
+      // naturally. If it rejects, we show the real error.
+      await fsRemoveCollaborator(projectId, email);
+      // Background refresh — never await, never gate the UI.
       loadCollaborators().catch(err => console.warn('[Sharing] Refresh after remove failed:', err?.message || err));
     } catch (err) {
-      const msg = err?.message || String(err);
       setCollaborators(prev);
-      setShareError('Failed to remove collaborator: ' + msg);
+      setShareError('Failed to remove collaborator: ' + (err?.message || String(err)));
       console.error('[Sharing] Remove failed:', err);
-    } finally {
-      clearTimeout(timer);
     }
   }, [projectId, loadCollaborators, collaborators]);
 
