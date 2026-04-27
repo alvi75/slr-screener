@@ -1738,20 +1738,26 @@ function AppMain({ currentUser, logout }) {
     setCollabsLoading(true);
     try {
       const collabs = await fsGetCollaborators(projectId);
-      // Fetch display names for accepted collaborators with known userIds
-      for (const c of collabs) {
+      // Fetch display names for accepted collaborators in parallel with a per-call
+      // timeout so a single stuck profile read can't block the whole list.
+      const withTimeout = (p, ms) => Promise.race([
+        p,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('profile fetch timeout')), ms)),
+      ]);
+      await Promise.all(collabs.map(async (c) => {
         if (c.userId && c.status === 'accepted') {
           try {
-            const profile = await fsGetUserProfile(c.userId);
+            const profile = await withTimeout(fsGetUserProfile(c.userId), 5000);
             if (profile?.displayName) c.displayName = profile.displayName;
-          } catch { /* ignore */ }
+          } catch { /* fall back to email */ }
         }
-      }
+      }));
       setCollaborators(collabs);
     } catch (err) {
       console.warn('[Sharing] Failed to load collaborators:', err.message);
+    } finally {
+      setCollabsLoading(false);
     }
-    setCollabsLoading(false);
   }, [projectId]);
 
   const handleSendInvite = useCallback(async () => {
@@ -1763,29 +1769,43 @@ function AppMain({ currentUser, logout }) {
     if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
 
     setShareLoading(true);
+    // 15s safety net: if Firestore writes hang (offline persistence pending, network stall,
+    // permission edge case that doesn't reject), surface an error instead of pinning the
+    // button on "Sending..." forever.
+    const withTimeout = (p, ms, label) => Promise.race([
+      p,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+    ]);
     try {
-      // Ensure project meta exists at top-level for collaborator lookup
-      await fsSaveProjectMeta(projectId, {
-        ownerId: userId,
-        ownerEmail: currentUser?.email,
-        ownerDisplayName: displayName || currentUser?.displayName || '',
-        ownerPhotoURL: currentUser?.photoURL || '',
-        projectName,
-      });
-      await fsAddCollaborator(projectId, email, shareRole, userId, {
-        projectName,
-        ownerEmail: currentUser?.email,
-        ownerDisplayName: displayName || currentUser?.displayName || '',
-        ownerPhotoURL: currentUser?.photoURL || '',
-        ownerId: userId,
-      });
+      // Ensure project meta exists at top-level for collaborator lookup, then add the
+      // collaborator doc. Run in parallel — they target different docs and don't depend
+      // on each other.
+      await withTimeout(Promise.all([
+        fsSaveProjectMeta(projectId, {
+          ownerId: userId,
+          ownerEmail: currentUser?.email,
+          ownerDisplayName: displayName || currentUser?.displayName || '',
+          ownerPhotoURL: currentUser?.photoURL || '',
+          projectName,
+        }),
+        fsAddCollaborator(projectId, email, shareRole, userId, {
+          projectName,
+          ownerEmail: currentUser?.email,
+          ownerDisplayName: displayName || currentUser?.displayName || '',
+          ownerPhotoURL: currentUser?.photoURL || '',
+          ownerId: userId,
+        }),
+      ]), 15000, 'Invite write');
       setShareEmail('');
-      await loadCollaborators();
+      // Refresh in the background — its profile fetches must not gate the invite button.
+      loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
     } catch (err) {
-      setShareError('Failed to send invite: ' + err.message);
-      console.warn('[Sharing] Invite failed:', err.message);
+      const msg = err?.message || String(err);
+      setShareError('Failed to send invite: ' + msg);
+      console.error('[Sharing] Invite failed:', err);
+    } finally {
+      setShareLoading(false);
     }
-    setShareLoading(false);
   }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators, displayName]);
 
   const handleRemoveCollaborator = useCallback(async (email) => {

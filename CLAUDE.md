@@ -336,6 +336,8 @@ These features have been fixed multiple times. Any future change MUST verify the
 - Audio beep (800Hz, 200ms) on new notifications, not on page load.
 - Accept/decline creates notification for the owner.
 - Bell icon visible on ALL views (home, screening, dashboard).
+- **Send Invite must never hang the button**: `handleSendInvite` uses `try/finally` so `setShareLoading(false)` always runs, wraps the Firestore writes (`saveProjectMeta` + `addCollaborator`) in a 15s `Promise.race` timeout, and fires `loadCollaborators()` without awaiting (that helper has its own loading state and per-profile timeouts). Awaiting `loadCollaborators` in the invite path is unsafe — its sequential profile reads can stall the button on "Sending..." when the project already has accepted collaborators.
+- `loadCollaborators` fetches accepted-collaborator profiles in parallel via `Promise.all` with a 5s per-call timeout — never sequentially. A single slow profile read must not block the others.
 
 ### Display Name Modal
 - Blocking modal on first login if `nameConfirmed` is not true in Firestore profile.
