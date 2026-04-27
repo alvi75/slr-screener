@@ -75,7 +75,11 @@ beforeEach(() => {
   mockBatchCommit.mockImplementation(() => Promise.resolve());
   mockDocFn.mockImplementation((_db, ...segments) => ({ _path: segments.join('/') }));
   mockCollectionFn.mockImplementation((_db, ...segments) => ({ _path: segments.join('/') }));
+  // Default getDoc to a non-existent snapshot so addCollaborator's existence
+  // check doesn't reject in tests that don't care about that branch.
+  mockGetDoc.mockImplementation(() => Promise.resolve({ exists: () => false, data: () => null }));
   jest.spyOn(console, 'warn').mockImplementation(() => {});
+  jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(() => {

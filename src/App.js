@@ -1585,6 +1585,7 @@ function AppMain({ currentUser, logout }) {
   const [appendResult, setAppendResult] = useState(null); // { added, skipped, total }
   const [sortByScore, setSortByScore] = useState(false);
   const scoringAbortRef = useRef(false);
+  const inviteInFlightRef = useRef(false);
 
   // ── Project Sharing ───────────────────────────────────────────
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -1733,6 +1734,33 @@ function AppMain({ currentUser, logout }) {
   }, [userId]);
 
   // ── Sharing helpers ─────────────────────────────────────────────
+  // Dedupe a collaborator list by lowercased email. Keeps the strongest entry
+  // per email (accepted > pending; tiebreak: most recent invitedAt). Defensive
+  // fallback for any caller that didn't go through the deduped getCollaborators.
+  const dedupeCollabsByEmail = useCallback((list) => {
+    if (!Array.isArray(list)) return [];
+    const groups = new Map();
+    for (const c of list) {
+      const key = (c?.email || '').toLowerCase();
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ ...c, email: key });
+    }
+    const statusRank = (s) => (s === 'accepted' ? 2 : s === 'pending' ? 1 : 0);
+    const out = [];
+    for (const group of groups.values()) {
+      if (group.length === 1) { out.push(group[0]); continue; }
+      const ranked = group.slice().sort((a, b) => {
+        const r = statusRank(b.status) - statusRank(a.status);
+        if (r !== 0) return r;
+        const ta = a.invitedAt?.toMillis?.() || 0;
+        const tb = b.invitedAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      out.push(ranked[0]);
+    }
+    return out;
+  }, []);
   const [collabsLoading, setCollabsLoading] = useState(false);
   const loadCollaborators = useCallback(async () => {
     if (!projectId) return;
@@ -1753,29 +1781,40 @@ function AppMain({ currentUser, logout }) {
           } catch { /* fall back to email */ }
         }
       }));
-      setCollaborators(collabs);
+      setCollaborators(dedupeCollabsByEmail(collabs));
     } catch (err) {
       console.warn('[Sharing] Failed to load collaborators:', err.message);
     } finally {
       setCollabsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, dedupeCollabsByEmail]);
 
   const handleSendInvite = useCallback(async () => {
+    // Block reentry: a rapid double-click would otherwise fire two writes before
+    // setShareLoading propagates through React's commit phase.
+    if (inviteInFlightRef.current) return;
     setShareError('');
     setShareSuccess('');
     const email = shareEmail.trim().toLowerCase();
     if (!email) { setShareError('Please enter an email address.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setShareError('Please enter a valid email.'); return; }
     if (email === currentUser?.email?.toLowerCase()) { setShareError('You cannot invite yourself.'); return; }
-    if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
+    // Case-insensitive duplicate check against the local list.
+    if ((collaborators || []).some(c => (c.email || '').toLowerCase() === email)) {
+      setShareError('This person has already been invited');
+      return;
+    }
 
+    inviteInFlightRef.current = true;
     // Optimistic insert — show the new collaborator in the list with status
     // "pending" the instant the user clicks Send. Reverted only if the Firestore
     // write rejects.
     const prevCollabs = collaborators;
     const optimisticRow = { email, role: shareRole, status: 'pending', invitedBy: userId };
     setCollaborators([...(collaborators || []), optimisticRow]);
+    // Clear the email field immediately so even if React hasn't flushed the
+    // optimistic insert yet, a second click can't re-send the same address.
+    setShareEmail('');
     setShareLoading(true);
 
     // Project meta is needed for collectionGroup discovery but is idempotent and
@@ -1789,8 +1828,10 @@ function AppMain({ currentUser, logout }) {
     }).catch(err => console.warn('[Sharing] saveProjectMeta failed:', err?.message || err));
 
     try {
-      // Single source-of-truth write. No timeout wrapper — let Firestore complete
-      // naturally. If it rejects, we show the real error.
+      // Single source-of-truth write. fsAddCollaborator now reads first and
+      // throws { code: 'already-invited' } if a collaborator doc with the
+      // lowercased email already exists, so we never silently overwrite an
+      // accepted collaborator with a fresh "pending" record.
       await fsAddCollaborator(projectId, email, shareRole, userId, {
         projectName,
         ownerEmail: currentUser?.email,
@@ -1798,7 +1839,6 @@ function AppMain({ currentUser, logout }) {
         ownerPhotoURL: currentUser?.photoURL || '',
         ownerId: userId,
       });
-      setShareEmail('');
       setShareSuccess('Invite sent!');
       setTimeout(() => setShareSuccess(''), 4000);
       // Background refresh — never await, never gate the success message.
@@ -1813,23 +1853,29 @@ function AppMain({ currentUser, logout }) {
     } catch (err) {
       // Revert optimistic insert and surface the real error.
       setCollaborators(prevCollabs);
-      setShareError('Failed to send invite: ' + (err?.message || String(err)));
+      if (err?.code === 'already-invited') {
+        setShareError('This person has already been invited');
+      } else {
+        setShareError('Failed to send invite: ' + (err?.message || String(err)));
+      }
       console.error('[Sharing] Invite failed:', err);
     } finally {
+      inviteInFlightRef.current = false;
       setShareLoading(false);
     }
   }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators, displayName]);
 
   const handleRemoveCollaborator = useCallback(async (email) => {
     setShareError('');
-    // Optimistic remove — drop the row immediately. Reverted only if the Firestore
-    // delete rejects.
+    const target = (email || '').toLowerCase();
+    // Optimistic remove — drop the row immediately (case-insensitive match).
+    // Reverted only if the Firestore delete rejects.
     const prev = collaborators;
-    setCollaborators((collaborators || []).filter(c => c.email !== email));
+    setCollaborators((collaborators || []).filter(c => (c.email || '').toLowerCase() !== target));
     try {
       // Single source-of-truth delete. No timeout wrapper — let Firestore complete
       // naturally. If it rejects, we show the real error.
-      await fsRemoveCollaborator(projectId, email);
+      await fsRemoveCollaborator(projectId, target);
       // Background refresh — never await, never gate the UI.
       loadCollaborators().catch(err => console.warn('[Sharing] Refresh after remove failed:', err?.message || err));
     } catch (err) {
@@ -1961,7 +2007,8 @@ function AppMain({ currentUser, logout }) {
     const dashTimeout = setTimeout(() => setDashboardTimedOut(true), 3000);
 
     try {
-      const collabs = await fsGetCollaborators(pid).catch(() => []) || [];
+      const collabsRaw = await fsGetCollaborators(pid).catch(() => []) || [];
+      const collabs = dedupeCollabsByEmail(collabsRaw);
       let meta = await fsGetProjectMeta(pid).catch(() => null);
 
       // === DETERMINE OWNER from invitedBy (most reliable source) ===
@@ -2095,7 +2142,7 @@ function AppMain({ currentUser, logout }) {
         analysis: { conflicts: [], agreed: [], screened: [], agreementRate: 0, kappa: 0, kappaType: 'none' }
       });
     }
-  }, [projectId, urlProjectSlug, userId, currentUser, displayName, navigate, decisions]);
+  }, [projectId, urlProjectSlug, userId, currentUser, displayName, navigate, decisions, dedupeCollabsByEmail]);
 
   // Alias for backwards compat with menu items
   const openConflictDashboard = useCallback(() => openTeamDashboard('resolution'), [openTeamDashboard]);
@@ -2455,7 +2502,7 @@ function AppMain({ currentUser, logout }) {
 
         // Fetch collaborators for current project (for Team badge)
         const collabs = await fsGetCollaborators(projectId);
-        setCollaborators(collabs);
+        setCollaborators(dedupeCollabsByEmail(collabs));
 
       } catch (err) {
         console.warn('[Firestore] Initial load failed, using localStorage only:', err.message);

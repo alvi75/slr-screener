@@ -329,6 +329,14 @@ export async function getProjectMeta(projectId) {
 export async function addCollaborator(projectId, email, role, invitedByUserId, inviteData = {}) {
   const normalizedEmail = email.toLowerCase();
   const ref = doc(db, 'projects', projectId, 'collaborators', normalizedEmail);
+  // Reject duplicate invites server-side. Without this, setDoc would overwrite
+  // an existing accepted collaborator and reset their status to "pending".
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    const err = new Error('This person has already been invited');
+    err.code = 'already-invited';
+    throw err;
+  }
   await setDoc(ref, {
     email: normalizedEmail,
     role,
@@ -366,7 +374,11 @@ export async function updateCollaboratorRole(projectId, email, newRole) {
 }
 
 /**
- * Get all collaborators for a project.
+ * Get all collaborators for a project, deduped by lowercased email.
+ * If two docs share the same email modulo case (e.g. "Foo@x.com" and
+ * "foo@x.com" from older code that didn't normalize), keep the strongest
+ * record (accepted > pending; tiebreak by most recent invitedAt) and
+ * delete the weaker docs server-side as a fire-and-forget cleanup.
  * @param {string} projectId
  * @returns {Promise<Array<{email, role, status, invitedBy, invitedAt}>>}
  */
@@ -380,7 +392,51 @@ export async function getCollaborators(projectId) {
     // Fallback to cache if offline
     snap = await getDocs(colRef);
   }
-  const results = snap.docs.map(d => ({ email: d.id, ...d.data() }));
+  const all = snap.docs.map(d => ({ docId: d.id, ...d.data() }));
+
+  // Group by lowercased email
+  const groups = new Map();
+  for (const c of all) {
+    const key = (c.email || c.docId || '').toLowerCase();
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+
+  const kept = [];
+  const toDelete = [];
+  const statusRank = (s) => (s === 'accepted' ? 2 : s === 'pending' ? 1 : 0);
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      kept.push(group[0]);
+    } else {
+      const ranked = group.slice().sort((a, b) => {
+        const r = statusRank(b.status) - statusRank(a.status);
+        if (r !== 0) return r;
+        const ta = a.invitedAt?.toMillis?.() || 0;
+        const tb = b.invitedAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      kept.push(ranked[0]);
+      toDelete.push(...ranked.slice(1));
+    }
+  }
+
+  // Background cleanup of case-divergent duplicates — never blocks the read.
+  if (toDelete.length > 0) {
+    console.log('[Sharing] Cleaning up', toDelete.length, 'duplicate collaborator docs in', projectId);
+    Promise.all(toDelete.map(c =>
+      deleteDoc(doc(db, 'projects', projectId, 'collaborators', c.docId))
+        .catch(err => console.warn('[Sharing] Duplicate cleanup failed for', c.docId, ':', err?.message || err))
+    ));
+  }
+
+  // Always return lowercase-normalized email so consumers can compare safely.
+  const results = kept.map(c => {
+    // eslint-disable-next-line no-unused-vars
+    const { docId, ...rest } = c;
+    return { ...rest, email: ((rest.email || docId) || '').toLowerCase() };
+  });
   console.log('[Sharing] getCollaborators for', projectId, ':', results.map(c => `${c.email}=${c.status}`));
   return results;
 }
