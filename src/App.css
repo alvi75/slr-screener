@@ -658,6 +658,12 @@
   font-size: 12px;
   margin-bottom: 12px;
 }
+.share-success {
+  color: #00b894;
+  font-size: 12px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
 .share-collaborator-list {
   margin-top: 16px;
   border: 1px solid #eee;

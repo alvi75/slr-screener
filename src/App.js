@@ -1593,6 +1593,7 @@ function AppMain({ currentUser, logout }) {
   const [collaborators, setCollaborators] = useState([]);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState('');
+  const [shareSuccess, setShareSuccess] = useState('');
   const [sharedProjects, setSharedProjects] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]); // enriched invites with projectName, ownerEmail
   const [generalNotifications, setGeneralNotifications] = useState([]); // real-time notifications
@@ -1762,6 +1763,7 @@ function AppMain({ currentUser, logout }) {
 
   const handleSendInvite = useCallback(async () => {
     setShareError('');
+    setShareSuccess('');
     const email = shareEmail.trim().toLowerCase();
     if (!email) { setShareError('Please enter an email address.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setShareError('Please enter a valid email.'); return; }
@@ -1769,18 +1771,18 @@ function AppMain({ currentUser, logout }) {
     if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
 
     setShareLoading(true);
-    // 10s safety net: if Firestore writes hang (offline persistence pending, network stall,
-    // permission edge case that doesn't reject), surface an error instead of pinning the
-    // button on "Sending..." forever. We do NOT call fsSaveNotification from this path —
-    // notifications are delivered to the invitee via their own collectionGroup listener
-    // on /collaborators, so we never block on a userId we may not have yet.
     const TIMEOUT = Symbol('timeout');
-    let timer;
-    const timeoutPromise = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), 10000); });
+    const raceTimeout = (p, ms) => {
+      let timer;
+      const t = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), ms); });
+      return Promise.race([p, t]).finally(() => clearTimeout(timer));
+    };
+
     try {
-      // Ensure project meta exists at top-level for collaborator lookup, then add the
-      // collaborator doc. Run in parallel — they target different docs and don't depend
-      // on each other.
+      // ── Phase 1: save the collaborator document (source of truth) ─────────────
+      // Race the writes against a 10s timeout. setDoc requires a server ACK that
+      // can be delayed by network conditions even though the write itself
+      // succeeded — so on timeout we read the doc back to verify before failing.
       const writes = Promise.all([
         fsSaveProjectMeta(projectId, {
           ownerId: userId,
@@ -1797,21 +1799,63 @@ function AppMain({ currentUser, logout }) {
           ownerId: userId,
         }),
       ]);
-      const result = await Promise.race([writes, timeoutPromise]);
-      if (result === TIMEOUT) {
-        setShareError('Invite timed out, please try again');
-        console.warn('[Sharing] Invite write timed out after 10s for', email);
-      } else {
-        setShareEmail('');
-        // Refresh in the background — its profile fetches must not gate the invite button.
-        loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
+
+      let saved = false;
+      try {
+        const result = await raceTimeout(writes, 10000);
+        saved = result !== TIMEOUT;
+      } catch (writeErr) {
+        // Firestore actually rejected — surface and bail.
+        setShareError('Failed to send invite: ' + (writeErr?.message || String(writeErr)));
+        console.error('[Sharing] Invite write rejected:', writeErr);
+        return;
       }
-    } catch (err) {
-      const msg = err?.message || String(err);
-      setShareError('Failed to send invite: ' + msg);
-      console.error('[Sharing] Invite failed:', err);
+
+      // ACK didn't come back in time — verify by reading the doc back. The write
+      // is durable in Firestore even when the client never gets the ACK, so a
+      // verification read tells us whether it actually landed.
+      if (!saved) {
+        try {
+          const collabs = await raceTimeout(fsGetCollaborators(projectId), 5000);
+          if (collabs !== TIMEOUT && Array.isArray(collabs) && collabs.some(c => c.email === email)) {
+            saved = true;
+            console.log('[Sharing] Invite ACK was slow but doc verified saved for', email);
+          }
+        } catch { /* verification unavailable; treat as failed */ }
+      }
+
+      if (!saved) {
+        setShareError('Invite timed out, please try again');
+        console.warn('[Sharing] Invite timed out and could not verify write for', email);
+        return;
+      }
+
+      // Show success the instant the collaborator doc is confirmed saved — do NOT
+      // wait for the notification step below.
+      setShareEmail('');
+      setShareSuccess('Invite sent!');
+      setTimeout(() => setShareSuccess(''), 4000);
+      loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
+
+      // ── Phase 2: notification — separate, non-blocking, 3s timeout ────────────
+      // The invitee receives the pending invite through their own collectionGroup
+      // onSnapshot listener on /collaborators when they sign in, so a per-user
+      // notification write is best-effort. If the invitee has no account yet
+      // there is no userId to address; if any userId lookup or write stalls past
+      // 3s we skip silently — the success message has already been shown.
+      (async () => {
+        try {
+          // No notification write is needed today (collectionGroup listener
+          // surfaces the invite on the invitee's next sign-in). This block is
+          // structured as a separate non-blocking step so future notification
+          // logic can be slotted in here without ever gating "Invite sent!".
+          const notifyStep = Promise.resolve();
+          await raceTimeout(notifyStep, 3000);
+        } catch (err) {
+          console.warn('[Sharing] Notification step skipped:', err?.message || err);
+        }
+      })();
     } finally {
-      clearTimeout(timer);
       setShareLoading(false);
     }
   }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators, displayName]);
@@ -4501,7 +4545,7 @@ function AppMain({ currentUser, logout }) {
                   className="share-email-input"
                   placeholder="Email address"
                   value={shareEmail}
-                  onChange={(e) => { setShareEmail(e.target.value); setShareError(''); }}
+                  onChange={(e) => { setShareEmail(e.target.value); setShareError(''); setShareSuccess(''); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSendInvite(); }}
                 />
                 <select
@@ -4521,6 +4565,7 @@ function AppMain({ currentUser, logout }) {
                 </button>
               </div>
               {shareError && <div className="share-error">{shareError}</div>}
+              {shareSuccess && <div className="share-success">{shareSuccess}</div>}
 
               <div className="share-collaborator-list">
                 {/* Owner row */}
