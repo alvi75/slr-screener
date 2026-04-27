@@ -92,7 +92,7 @@ projects/{projectId}/
 
 - **Project CRUD**: `saveProject`, `getProjects`, `getProject`, `deleteProject`
 - **Decisions**: `saveDecision`, `deleteDecision`, `getDecisions`, `saveAllDecisions`
-- **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`
+- **AI Scores**: `saveAIScore`, `saveAllAIScores`, `getAIScores`, `deleteAllAIScores`
 - **Sharing**: `saveProjectMeta`, `getProjectMeta`, `addCollaborator`, `removeCollaborator`, `updateCollaboratorRole`, `getCollaborators`, `acceptInvite`, `declineInvite`, `getSharedProjects`
 - **Final Decisions**: `saveFinalDecision`, `getFinalDecisions`, `deleteFinalDecision`
 - **AI Disagreements**: `saveAIDisagreement`, `getAIDisagreements`, `deleteAIDisagreement`
@@ -192,7 +192,7 @@ Three merged categories, toggleable via "Highlights" button or `H` key:
 - **Score helpers** — `isValidScore()`, `getScoreValue()`, `scoreColorClass()`, `formatScoreDisplay()`, `scoreCriteriaLines()`. Old 0–100 format scores (no `.criteria`) are treated as non-existent and shown as "AI: ?"
 - **Model selector** — Claude Haiku 4.5, Sonnet 4.6, Opus 4.6 (configurable in AI Insights sidebar)
 - **Research goal** — customizable prompt that drives scoring relevance
-- **Batch scoring** — batched in groups of 5 with `Promise.allSettled`, stoppable mid-run
+- **Batch scoring** — scores ALL unscored papers (no batch size cap). 5 concurrent workers pull from a shared queue; each worker retries 429/5xx errors with exponential backoff (1s, 2s, 4s, 8s, 16s, 32s, max 6 attempts). Individual paper failures are logged and skipped — never abort the whole batch. Stoppable mid-run via `scoringAbortRef`. Visible "Scoring X of Y…" label above the progress bar updates in real-time, with a `(N failed)` suffix when errors occur.
 - **Per-paper rescoring** — separate ↻ button next to AI badge to rescore individual papers
 - **AI score badge** — color-coded (green ≥4.0, yellow/orange 2.5–3.9, red <2.5); click to toggle popover with per-criterion scores and reason
 - **AI suggestion glow** — decision buttons get subtle purple glow when matching AI suggestion
@@ -298,6 +298,11 @@ These features have been fixed multiple times. Any future change MUST verify the
 - When decisions are cleared/reset: all three must be wiped (state, localStorage key, AND Firestore documents via `deleteAllDecisions`).
 - On page reload: localStorage loads first, then Firestore overwrites.
 - Each user's decisions are isolated at `users/{userId}/projects/{projectId}/decisions`.
+
+### AI Score Persistence
+- AI scores are stored in THREE layers: React state (`aiScores`), localStorage (`SCORES_KEY`), and Firestore (`projects/{projectId}/aiScores/{paperId}`).
+- "Reset All Scores" must wipe all three: `setAiScores({})`, `localStorage.removeItem(SCORES_KEY)`, AND `deleteAllAIScores(projectId)`. Calling `syncAIScoresToFirestore(projectId, {})` is NOT enough — it short-circuits on empty maps and leaves Firestore docs intact, so they reappear on reload.
+- After reset and reload, every paper shows "AI: ?".
 
 ### Dashboard Team Progress
 - Owner's ownerId comes from `invitedBy` field on collaborator records (most reliable), then `projects/{projectId}` Firestore meta document. No fallback to `userId`.

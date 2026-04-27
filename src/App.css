@@ -1441,6 +1441,17 @@
 
 
 /* Scoring progress bar */
+.scoring-progress-label {
+  font-size: 12px;
+  color: #6c5ce7;
+  font-weight: 600;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+.scoring-progress-errors {
+  color: #d63031;
+  font-weight: 500;
+}
 .scoring-progress-track {
   height: 3px;
   background: #dfe6e9;

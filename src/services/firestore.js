@@ -214,6 +214,22 @@ export async function saveAllAIScores(projectId, scores) {
 }
 
 /**
+ * Delete all AI scores for a project (used when clearing/resetting).
+ * @param {string} projectId
+ * @returns {Promise<void>}
+ */
+export async function deleteAllAIScores(projectId) {
+  const colRef = collection(db, 'projects', projectId, 'aiScores');
+  const snap = await getDocs(colRef);
+  if (snap.size === 0) return;
+  for (let i = 0; i < snap.docs.length; i += 500) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 500).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+/**
  * Get all AI scores for a project as { paperId: scoreData } map.
  * @param {string} projectId
  * @returns {Promise<object>}

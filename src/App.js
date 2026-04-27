@@ -32,6 +32,7 @@ import {
   subscribeToDecisions as fsSubscribeToDecisions,
   subscribeToSharedProjects as fsSubscribeToSharedProjects,
   deleteAllDecisions as fsDeleteAllDecisions,
+  deleteAllAIScores as fsDeleteAllAIScores,
   migrateDecisionsToSharedProject as fsMigrateDecisions,
   migrateAIScoresToSharedProject as fsMigrateAIScores,
   saveNotification as fsSaveNotification,
@@ -402,8 +403,10 @@ async function scoreOneAbstract(apiKey, title, abstract, model, goal) {
     }),
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
+    const errBody = await res.text();
+    const e = new Error(`API ${res.status}: ${errBody}`);
+    e.status = res.status;
+    throw e;
   }
   const data = await res.json();
   const text = data.content?.[0]?.text || '';
@@ -2898,7 +2901,7 @@ function AppMain({ currentUser, logout }) {
     }
   }, []);
 
-  // AI scoring — batch process unscored papers
+  // AI scoring — score every unscored paper with per-paper retry + exponential backoff.
   const startScoring = useCallback(async () => {
     if (!apiKey) { setShowApiKeyModal(true); return; }
     setScoringError(null);
@@ -2924,30 +2927,54 @@ function AppMain({ currentUser, logout }) {
     let errors = 0;
     setScoringProgress({ done: 0, total, errors: 0 });
 
-    // Process in batches of 5
-    for (let b = 0; b < unscored.length; b += 5) {
-      if (scoringAbortRef.current) break;
-      const batch = unscored.slice(b, b + 5);
-      const results = await Promise.allSettled(
-        batch.map(async (idx) => {
-          const abs = cleanAbstractText(getAbstract(idx));
-          const result = await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal);
-          return { idx, result };
-        })
-      );
-      const newScores = {};
-      for (const r of results) {
-        if (r.status === 'fulfilled') {
-          newScores[r.value.idx] = r.value.result;
-        } else {
-          errors++;
-          console.error('[SLR] Scoring error:', r.reason);
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // Score one paper with retries: up to 6 attempts on 429/5xx with 1s, 2s, 4s, 8s, 16s, 32s backoff.
+    const scoreWithRetry = async (idx) => {
+      const abs = cleanAbstractText(getAbstract(idx));
+      const MAX_ATTEMPTS = 6;
+      let lastErr = null;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        if (scoringAbortRef.current) throw new Error('aborted');
+        try {
+          return await scoreOneAbstract(apiKey, papers[idx].title, abs, scoringModel, researchGoal);
+        } catch (err) {
+          lastErr = err;
+          const status = err && err.status;
+          const retriable = status === 429 || (status >= 500 && status < 600);
+          if (!retriable || attempt === MAX_ATTEMPTS - 1) throw err;
+          const delay = 1000 * Math.pow(2, attempt);
+          console.warn(`[SLR] Paper ${idx} attempt ${attempt + 1} failed (${status}); retrying in ${delay}ms`);
+          await sleep(delay);
         }
       }
-      done += batch.length;
-      setAiScores(prev => ({ ...prev, ...newScores }));
-      setScoringProgress({ done, total, errors });
-    }
+      throw lastErr;
+    };
+
+    // Concurrency: 5 in-flight requests, refilled as each completes. Continues past failures.
+    const CONCURRENCY = 5;
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        if (scoringAbortRef.current) return;
+        const myIdx = cursor++;
+        if (myIdx >= unscored.length) return;
+        const paperIdx = unscored[myIdx];
+        try {
+          const result = await scoreWithRetry(paperIdx);
+          setAiScores(prev => ({ ...prev, [paperIdx]: result }));
+        } catch (err) {
+          if (err && err.message === 'aborted') return;
+          errors++;
+          console.error(`[SLR] Scoring failed for paper ${paperIdx}:`, err);
+        }
+        done++;
+        setScoringProgress({ done, total, errors });
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, unscored.length) }, worker));
+
     // Show checkmark briefly then clear
     setScoringProgress(null);
     setScoringStopping(false);
@@ -3003,9 +3030,12 @@ function AppMain({ currentUser, logout }) {
     if (window.confirm('This will delete all AI scores. Are you sure?')) {
       setAiScores({});
       localStorage.removeItem(SCORES_KEY);
-      firestoreSync(() => syncAIScoresToFirestore(projectId, {}));
+      // Delete all AI score documents from Firestore
+      fsDeleteAllAIScores(projectId).catch(err => {
+        console.warn('[AI Scores] Failed to clear Firestore scores:', err.message);
+      });
     }
-  }, [projectId, firestoreSync]);
+  }, [projectId]);
 
   const clearErrorScores = useCallback(() => {
     const cleaned = {};
@@ -3838,9 +3868,15 @@ function AppMain({ currentUser, logout }) {
 
       {/* Scoring progress bar */}
       {scoringProgress && (
-        <div className="scoring-progress-track">
-          <div className="scoring-progress-fill" style={{ width: `${(scoringProgress.done / scoringProgress.total) * 100}%` }} />
-        </div>
+        <>
+          <div className="scoring-progress-label">
+            Scoring {scoringProgress.done} of {scoringProgress.total}…
+            {scoringProgress.errors > 0 && <span className="scoring-progress-errors"> ({scoringProgress.errors} failed)</span>}
+          </div>
+          <div className="scoring-progress-track">
+            <div className="scoring-progress-fill" style={{ width: `${(scoringProgress.done / scoringProgress.total) * 100}%` }} />
+          </div>
+        </>
       )}
       {scoringError && (
         <div className="scoring-error-banner">
