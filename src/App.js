@@ -1769,18 +1769,19 @@ function AppMain({ currentUser, logout }) {
     if ((collaborators || []).some(c => c.email === email)) { setShareError('This person is already invited.'); return; }
 
     setShareLoading(true);
-    // 15s safety net: if Firestore writes hang (offline persistence pending, network stall,
+    // 10s safety net: if Firestore writes hang (offline persistence pending, network stall,
     // permission edge case that doesn't reject), surface an error instead of pinning the
-    // button on "Sending..." forever.
-    const withTimeout = (p, ms, label) => Promise.race([
-      p,
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
-    ]);
+    // button on "Sending..." forever. We do NOT call fsSaveNotification from this path —
+    // notifications are delivered to the invitee via their own collectionGroup listener
+    // on /collaborators, so we never block on a userId we may not have yet.
+    const TIMEOUT = Symbol('timeout');
+    let timer;
+    const timeoutPromise = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), 10000); });
     try {
       // Ensure project meta exists at top-level for collaborator lookup, then add the
       // collaborator doc. Run in parallel — they target different docs and don't depend
       // on each other.
-      await withTimeout(Promise.all([
+      const writes = Promise.all([
         fsSaveProjectMeta(projectId, {
           ownerId: userId,
           ownerEmail: currentUser?.email,
@@ -1795,27 +1796,54 @@ function AppMain({ currentUser, logout }) {
           ownerPhotoURL: currentUser?.photoURL || '',
           ownerId: userId,
         }),
-      ]), 15000, 'Invite write');
-      setShareEmail('');
-      // Refresh in the background — its profile fetches must not gate the invite button.
-      loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
+      ]);
+      const result = await Promise.race([writes, timeoutPromise]);
+      if (result === TIMEOUT) {
+        setShareError('Invite timed out, please try again');
+        console.warn('[Sharing] Invite write timed out after 10s for', email);
+      } else {
+        setShareEmail('');
+        // Refresh in the background — its profile fetches must not gate the invite button.
+        loadCollaborators().catch(err => console.warn('[Sharing] Refresh after invite failed:', err?.message || err));
+      }
     } catch (err) {
       const msg = err?.message || String(err);
       setShareError('Failed to send invite: ' + msg);
       console.error('[Sharing] Invite failed:', err);
     } finally {
+      clearTimeout(timer);
       setShareLoading(false);
     }
   }, [shareEmail, shareRole, projectId, userId, currentUser, projectName, collaborators, loadCollaborators, displayName]);
 
   const handleRemoveCollaborator = useCallback(async (email) => {
+    setShareError('');
+    // Optimistic UI: drop the row immediately so the user sees feedback even if the
+    // server round-trip is slow. If the delete fails we restore from a fresh fetch.
+    const prev = collaborators;
+    setCollaborators((collaborators || []).filter(c => c.email !== email));
+    const TIMEOUT = Symbol('timeout');
+    let timer;
+    const timeoutPromise = new Promise(resolve => { timer = setTimeout(() => resolve(TIMEOUT), 10000); });
     try {
-      await fsRemoveCollaborator(projectId, email);
-      await loadCollaborators();
+      const result = await Promise.race([fsRemoveCollaborator(projectId, email), timeoutPromise]);
+      if (result === TIMEOUT) {
+        setCollaborators(prev);
+        setShareError('Remove timed out, please try again');
+        console.warn('[Sharing] Remove timed out after 10s for', email);
+        return;
+      }
+      // Refresh in the background to pick up server truth without blocking the UI.
+      loadCollaborators().catch(err => console.warn('[Sharing] Refresh after remove failed:', err?.message || err));
     } catch (err) {
-      console.warn('[Sharing] Remove failed:', err.message);
+      const msg = err?.message || String(err);
+      setCollaborators(prev);
+      setShareError('Failed to remove collaborator: ' + msg);
+      console.error('[Sharing] Remove failed:', err);
+    } finally {
+      clearTimeout(timer);
     }
-  }, [projectId, loadCollaborators]);
+  }, [projectId, loadCollaborators, collaborators]);
 
   const handleRoleChange = useCallback(async (email, newRole) => {
     try {
